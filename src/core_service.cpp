@@ -42,18 +42,20 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
               {"storage_error", ""},       {"network", Json::object()},
               {"session", session_},       {"last_flush_ms", 0},
               {"mouse_clicks_session", 0}, {"keyboard_presses_session", 0},
-              {"version", "0.2.0-rc1"}};
+              {"version", "0.2.0-rc2"}};
 }
 CoreService::~CoreService() { stop(); }
 void CoreService::start() {
     enabled_.store(config_.value("capture_on_launch", false));
+    capture_window_.start.store(capture_clock());
+    capture_window_.stop.store(enabled_.load() ? 0 : capture_clock());
     worker_thread_ = std::thread([this] { worker(); });
     input_thread_ = std::thread([this] {
         try {
             RawInputHost host({0, 1440, true, this});
             host.run();
         } catch (const std::exception &e) {
-            enabled_.store(false);
+            disable_capture();
             std::lock_guard lock(mutex_);
             state_["input_error"] = e.what();
         }
@@ -72,7 +74,7 @@ void CoreService::stop() {
         return;
     }
     stopping_.store(true);
-    enabled_.store(false);
+    disable_capture();
     if (auto window = input_window_.load())
         PostMessageW(window, WM_CLOSE, 0, 0);
     if (input_thread_.joinable())
@@ -97,6 +99,8 @@ void CoreService::retry_final_flush() {
     try {
         DatabaseManager db(data_ / "monitor.db");
         db.save(session_, rows, events);
+        MonthlyTrafficStore monthly(data_ / "network-months");
+        monthly.recover(db);
         std::lock_guard lock(mutex_);
         unsaved_rows_ = Json::array();
         unsaved_events_ = Json::array();
@@ -133,11 +137,11 @@ void CoreService::on_input_metrics(std::uint64_t mouse, std::uint64_t keyboard,
         state_["keyboard_packets"] = keyboard;
         state_["raw_read_errors"] = errors;
         if (errors) {
-            enabled_.store(false);
+            disable_capture();
             state_["input_error"] = "Raw Input read errors: " + std::to_string(errors);
         }
     } catch (...) {
-        enabled_.store(false);
+        disable_capture();
     }
 }
 void CoreService::on_tick(const MouseMonitor &mouse) noexcept {
@@ -210,7 +214,7 @@ void CoreService::on_tick(const MouseMonitor &mouse) noexcept {
         state_["mouse_diagnostics"] = {{"duplicate_downs", mouse.diagnostics().duplicate_downs},
                                        {"state_capacity_events", mouse.diagnostics().state_capacity_events}};
     } catch (const std::exception &e) {
-        enabled_.store(false);
+        disable_capture();
         std::lock_guard lock(mutex_);
         state_["input_error"] = e.what();
     }
@@ -251,7 +255,7 @@ void CoreService::on_reset() noexcept {
         state_["mouse_clicks_session"] = 0;
         state_["keyboard_presses_session"] = 0;
     } catch (...) {
-        enabled_.store(false);
+        disable_capture();
     }
 }
 void CoreService::save_config() {
@@ -274,6 +278,11 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         return {{"pong", true}};
     if (type == "get_status")
         return status();
+    if (type == "get_monthly_traffic") {
+        auto result = monthly_->query(p.value("month", ""));
+        result["last_flush_ms"] = status()["last_flush_ms"];
+        return result;
+    }
     if (type == "set_monitoring") {
         const bool active = p.at("enabled").get<bool>();
         {
@@ -285,6 +294,11 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         ++reset_generation_;
         if (auto h = input_window_.load())
             PostMessageW(h, WM_APP + 16, 0, 0);
+        if (active) {
+            capture_window_.start.store(capture_clock());
+            capture_window_.stop.store(0);
+        } else
+            capture_window_.stop.store(capture_clock());
         enabled_.store(active);
         return status();
     }
@@ -321,9 +335,48 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
             if (ms >= from * 60000 && ms < to * 60000)
                 events.push_back(e);
         }
-        return {{"rows", result},     {"network_events", events},
-                {"from", from},       {"to", to},
-                {"time_zone", "UTC"}, {"freshness", "实时聚合快照 + SQLite 历史；快照约 1 秒更新"}};
+        auto protocol = db.protocol_samples(from, to, bucket, session_, floor);
+        std::map<std::pair<std::int64_t, std::string>, Json> live_protocol;
+        for (const auto &r : network_rows_)
+            if (r.contains("ip_record")) {
+                const auto &p = r["ip_record"];
+                auto m = p["minute"].get<std::int64_t>();
+                if (m >= floor && m >= from && m < to)
+                    live_protocol[{m, p["interface_id"]}] = p;
+            }
+        std::map<std::pair<std::int64_t, std::string>, Json> grouped;
+        const auto merge = [&](Json p) {
+            p["minute"] = p["minute"].get<std::int64_t>() / bucket * bucket;
+            const auto key =
+                std::make_pair(p["minute"].get<std::int64_t>(), p["interface_id"].get<std::string>());
+            if (!grouped.contains(key)) {
+                grouped[key] = std::move(p);
+                return;
+            }
+            auto &old = grouped[key];
+            for (const auto *k :
+                 {"ipv4_up", "ipv4_down", "ipv6_up", "ipv6_down", "accepted", "rejected", "unsupported"})
+                old[k] = old[k].get<std::uint64_t>() + p[k].get<std::uint64_t>();
+            for (const auto *k : {"events_lost", "buffers_lost"})
+                old[k] = std::max(old[k].get<std::uint64_t>(), p[k].get<std::uint64_t>());
+            if (p["quality"] == "incomplete_observation")
+                old["quality"] = "incomplete_observation";
+        };
+        for (const auto &p : protocol)
+            merge(p);
+        for (const auto &[key, p] : live_protocol)
+            merge(p);
+        protocol = Json::array();
+        for (const auto &[key, p] : grouped)
+            protocol.push_back(p);
+        return {{"rows", result},
+                {"network_events", events},
+                {"protocol_samples", protocol},
+                {"legacy_protocol_split", "unknown"},
+                {"from", from},
+                {"to", to},
+                {"time_zone", "UTC"},
+                {"freshness", "实时聚合快照 + SQLite 历史；快照约 1 秒更新"}};
     }
     if (type == "set_config") {
         std::lock_guard lock(mutex_);
@@ -348,9 +401,10 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
     }
     if (type == "export_csv") {
         auto name = "pulsetrace-export-" + std::to_string(utc_now_ms()) + ".csv";
-        auto data = execute({{"type", "get_statistics"},
-                             {"params", {{"from", p.at("from")}, {"to", p.at("to")}, {"bucket", 1}}}},
-                            db)["rows"];
+        auto report = execute({{"type", "get_statistics"},
+                               {"params", {{"from", p.at("from")}, {"to", p.at("to")}, {"bucket", 1}}}},
+                              db);
+        const auto &data = report["rows"];
         std::ofstream out(data_ / name, std::ios::binary);
         out << "utc_minute,module,metric,value\r\n";
         for (const auto &r : data)
@@ -359,7 +413,25 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         out.close();
         if (!out)
             throw std::runtime_error("Export write failed");
-        return {{"file", name}};
+        const auto protocol_name = "pulsetrace-ip-observation-" + std::to_string(utc_now_ms()) + ".csv";
+        std::ofstream ip(data_ / protocol_name, std::ios::binary);
+        ip << "utc_minute,interface_id,ipv4_up_observed,ipv4_down_observed,ipv6_up_observed,ipv6_down_"
+              "observed,source,basis,quality,accepted,rejected,events_lost,buffers_lost,reference_"
+              "validated\r\n";
+        for (const auto &r : report["protocol_samples"]) {
+            ip << r["minute"] << ',' << std::quoted(r["interface_id"].get<std::string>(), '"', '"');
+            for (const auto *k : {"ipv4_up", "ipv4_down", "ipv6_up", "ipv6_down"})
+                ip << ',' << r[k];
+            for (const auto *k : {"source", "basis", "quality"})
+                ip << ',' << std::quoted(r[k].get<std::string>(), '"', '"');
+            for (const auto *k : {"accepted", "rejected", "events_lost", "buffers_lost"})
+                ip << ',' << r[k];
+            ip << ",false\r\n";
+        }
+        ip.close();
+        if (!ip)
+            throw std::runtime_error("Protocol quality export write failed");
+        return {{"file", name}, {"protocol_file", protocol_name}};
     }
     if (type == "clear_data") {
         if (p.value("confirmation", "") != "DELETE")
@@ -371,6 +443,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
             if (!SendMessageTimeoutW(h, WM_APP + 17, 0, 0, SMTO_ABORTIFHUNG, 3000, &result) || !result)
                 throw std::runtime_error("Input reset did not complete; database preserved");
         }
+        monthly_->clear();
         db.clear();
         clear_requested_ = true;
         return {{"cleared", true}};
@@ -380,7 +453,9 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
 void CoreService::worker() {
     try {
         DatabaseManager db(data_ / "monitor.db");
-        NetworkMonitor network;
+        monthly_ = std::make_unique<MonthlyTrafficStore>(data_ / "network-months");
+        monthly_->recover(db);
+        NetworkMonitor network(&capture_window_);
         std::map<std::string, std::int64_t> saved;
         auto last_flush = std::chrono::steady_clock::now() - std::chrono::seconds(300);
         auto last_prune = last_flush;
@@ -402,7 +477,7 @@ void CoreService::worker() {
                 rows = input_rows_;
                 done = stopping_.load() && input_done_;
             }
-            if (std::chrono::steady_clock::now() - last_network >= std::chrono::seconds(1))
+            if (done || std::chrono::steady_clock::now() - last_network >= std::chrono::seconds(1))
                 try {
                     auto sample = network.sample(utc_now_ms() / 60000, enabled_.load(),
                                                  cfg.value("network_interface", ""));
@@ -448,6 +523,7 @@ void CoreService::worker() {
                 try {
                     if (!changed.empty() || !network_events_.empty())
                         db.save(session_, changed, network_events_);
+                    monthly_->save(session_, changed);
                     for (const auto &[k, v] : updates)
                         saved[k] = v;
                     retry_rows.clear();
@@ -471,7 +547,7 @@ void CoreService::worker() {
                     unsaved_events_ = Json::array();
                     state_["pending_retry_rows"] = 0;
                 } catch (const std::exception &e) {
-                    enabled_.store(false);
+                    disable_capture();
                     retry_seconds = std::min(60, retry_seconds * 2);
                     std::lock_guard lock(mutex_);
                     state_["storage_error"] = e.what();
@@ -487,6 +563,16 @@ void CoreService::worker() {
                                  {"error", nullptr}};
                 try {
                     response["data"] = execute(request, db);
+                    if (request["type"] == "set_monitoring") {
+                        auto sample = network.sample(utc_now_ms() / 60000, enabled_.load(),
+                                                     config_.value("network_interface", ""));
+                        net_rows = std::move(sample.rows);
+                        network_rows_ = net_rows;
+                        for (const auto &e : sample.events)
+                            network_events_.push_back(e);
+                        std::lock_guard lock(mutex_);
+                        state_["network"] = std::move(sample.status);
+                    }
                 } catch (const std::exception &e) {
                     response["ok"] = false;
                     response["error"] = {{"code", "REQUEST_FAILED"}, {"message", e.what()}};
@@ -497,7 +583,7 @@ void CoreService::worker() {
                 }
             }
             if (clear_requested_) {
-                network = NetworkMonitor();
+                network = NetworkMonitor(&capture_window_);
                 net_rows = Json::array();
                 network_rows_ = Json::array();
                 network_events_ = Json::array();
@@ -509,7 +595,7 @@ void CoreService::worker() {
                 break;
         }
     } catch (const std::exception &e) {
-        enabled_.store(false);
+        disable_capture();
         std::lock_guard lock(mutex_);
         state_["storage_error"] = e.what();
         for (auto &[request, reply] : requests_)

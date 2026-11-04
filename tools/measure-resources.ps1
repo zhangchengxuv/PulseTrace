@@ -1,6 +1,7 @@
 param(
     [string]$Executable=(Join-Path (Split-Path -Parent $PSScriptRoot) 'build\llvm-release\PulseTrace.exe'),
     [int]$Cycles=2,
+    [string]$DataDirectory='',
     [ValidateSet('UI','Core')][string]$Mode='UI',
     [ValidateRange(5,86400)][int]$CoreSeconds=30
 )
@@ -8,6 +9,7 @@ $ErrorActionPreference='Stop'
 $exe=(Resolve-Path -LiteralPath $Executable).Path
 $directory=Split-Path -Parent $exe
 $arguments=if($Mode -eq 'UI'){@('--self-test','--cycles',([string]$Cycles))}else{@('--background','--core-seconds',([string]$CoreSeconds))}
+if($DataDirectory){$arguments+=@('--data-dir',('"'+[IO.Path]::GetFullPath($DataDirectory)+'"'))}
 $process=Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
 $started=[DateTime]::UtcNow
 $samples=New-Object 'System.Collections.Generic.List[object]'

@@ -18,15 +18,6 @@ void require(bool ok, const char *message) {
 template <class F> void rejects(F fn, const char *message) {
     bool threw = false;
     try {
-        for (const std::wstring argument : {L"", L"D:\\", L"C:\\a b\\", L"a\\\"b"}) {
-            int argc = 0;
-            const auto command = L"PulseTrace.exe " + quote_windows_argument(argument);
-            auto argv = CommandLineToArgvW(command.c_str(), &argc);
-            const bool roundtrip = argv && argc == 2 && argument == argv[1];
-            if (argv)
-                LocalFree(argv);
-            require(roundtrip, "Windows argument quoting roundtrip");
-        }
         fn();
     } catch (...) {
         threw = true;
@@ -48,6 +39,16 @@ Json rpc(CoreService &core, const std::string &type, Json params = Json::object(
 } // namespace
 int main() {
     try {
+        for (const std::wstring argument : {L"", L"D:\\", L"C:\\a b\\", L"a\\\"b"}) {
+            int argc = 0;
+            const auto command = L"PulseTrace.exe " + quote_windows_argument(argument);
+            auto argv = CommandLineToArgvW(command.c_str(), &argc);
+            const bool roundtrip = argv && argc == 2 && argument == argv[1];
+            if (argv)
+                LocalFree(argv);
+            require(roundtrip, "Windows argument quoting roundtrip");
+        }
+
         KeyboardMonitor keys;
         keys.consume(1, 30, 0, 65, 100);
         keys.consume(1, 30, 0, 65, 100);
@@ -109,6 +110,63 @@ int main() {
             db.clear();
             require(db.query(0, 61, 1).empty() && db.network_events(0, 61).empty(),
                     "explicit clear persisted");
+        }
+        {
+            sqlite3 *raw{};
+            const auto legacy = dir / "legacy-v2.db";
+            sqlite3_open(legacy.string().c_str(), &raw);
+            sqlite3_exec(raw,
+                         "CREATE TABLE counts(session TEXT,minute INTEGER,module TEXT,metric TEXT,value "
+                         "INTEGER,PRIMARY KEY(session,minute,module,metric));INSERT INTO counts "
+                         "VALUES('old',60,'network','interface_upload_bytes',777);PRAGMA user_version=2;",
+                         nullptr, nullptr, nullptr);
+            sqlite3_close(raw);
+            raw = nullptr;
+            DatabaseManager upgraded(legacy);
+            require(upgraded.query(60, 61, 1)[0]["value"] == 777,
+                    "v2 migration preserves old interface totals");
+            require(upgraded.protocol_samples(60, 61, 1).empty(),
+                    "legacy bytes never invented as protocol split");
+            Json record = {{"minute", 60},
+                           {"interface_id", "physical-test"},
+                           {"source", "etw_ndis"},
+                           {"basis", "ip_total_length"},
+                           {"quality", "observed_unverified_reference"},
+                           {"ipv4_up", 100},
+                           {"ipv4_down", 200},
+                           {"ipv6_up", 300},
+                           {"ipv6_down", 400},
+                           {"accepted", 4},
+                           {"rejected", 0},
+                           {"unsupported", 0},
+                           {"events_lost", 0},
+                           {"buffers_lost", 0}};
+            Json row = {{"minute", 60},
+                        {"module", "network_ip"},
+                        {"metric", "physical-test/ipv4_up"},
+                        {"value", 100},
+                        {"ip_record", record}};
+            upgraded.save("new", Json::array({row}));
+            upgraded.save("new", Json::array({row}));
+            require(upgraded.protocol_samples(60, 61, 1)[0]["ipv4_up"] == 100,
+                    "protocol snapshot retries idempotent");
+            row["minute"] = 61;
+            row["value"] = 200;
+            row["ip_record"]["minute"] = 61;
+            row["ip_record"]["ipv4_up"] = 200;
+            row["ip_record"]["quality"] = "incomplete_observation";
+            row["ip_record"]["rejected"] = 1;
+            upgraded.save("new", Json::array({row}));
+            auto hour = upgraded.protocol_samples(60, 62, 60);
+            require(hour.size() == 1 && hour[0]["ipv4_up"] == 300 &&
+                        hour[0]["quality"] == "incomplete_observation",
+                    "protocol hourly totals preserve worst quality");
+            require(upgraded.protocol_samples(60, 62, 60, "new", 60).empty(),
+                    "protocol live overlay exclusion");
+            upgraded.prune(61);
+            require(upgraded.protocol_samples(60, 62, 1).size() == 1, "protocol retention");
+            upgraded.clear();
+            require(upgraded.protocol_samples(60, 62, 1).empty(), "protocol clear");
         }
         {
             sqlite3 *raw{};
@@ -189,6 +247,7 @@ int main() {
             require(ready, "background Raw Input ready");
             require(!rpc(core, "get_status")["monitoring"].get<bool>(), "first launch defaults paused");
             rpc(core, "set_monitoring", {{"enabled", true}});
+            require(rpc(core, "get_status")["monitoring"].get<bool>(), "explicit start reflected in status");
             std::this_thread::sleep_for(std::chrono::milliseconds(2300));
             require(rpc(core, "get_status").value("heartbeat_ms", std::int64_t(0)) > 0,
                     "input heartbeat independent of UI");
@@ -196,6 +255,7 @@ int main() {
             auto stats = rpc(core, "get_statistics", {{"from", m - 1}, {"to", m + 1}, {"bucket", 1}});
             require(stats["rows"].is_array(), "live + database range query");
             rpc(core, "set_monitoring", {{"enabled", false}});
+            require(!rpc(core, "get_status")["monitoring"].get<bool>(), "explicit pause reflected in status");
             rpc(core, "set_config", {{"theme", "dark"}, {"retention_days", 7}, {"flush_seconds", 5}});
             rejects([&] { rpc(core, "set_config", {{"retention_days", 4294967326ULL}}); },
                     "overflowing retention rejected before narrowing");

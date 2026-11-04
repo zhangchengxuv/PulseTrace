@@ -1,7 +1,9 @@
 ﻿#include "pulsetrace/core_service.hpp"
 #include "pulsetrace/desktop/webview_host.hpp"
+#include "pulsetrace/desktop/caption_bar.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
+#include "resource.h"
 #include <commdlg.h>
 #include <fstream>
 #include <memory>
@@ -17,7 +19,7 @@ struct Response {
 };
 struct DesktopOptions {
     bool selftest{}, background{}, expect_failure{}, crash_test{}, early_close{};
-    int cycles{2}, core_seconds{};
+    int cycles{2}, core_seconds{}, test_width{}, test_height{};
     std::filesystem::path data;
     std::string page{"dashboard"};
 };
@@ -65,12 +67,13 @@ class DesktopApplication {
     std::filesystem::path data_, exe_;
     std::unique_ptr<CoreService> core_;
     std::unique_ptr<WebViewHost> web_;
+    CaptionBar caption_;
     std::thread exit_thread_;
     HANDLE instance_mutex_{};
     bool maximized_{};
     bool expect_failure_{}, failure_observed_{}, shutdown_verified_{true}, crash_test_{}, crash_done_{};
     bool tray_added_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
-        preview_done_{}, preview_ok_{};
+        preview_done_{}, preview_ok_{}, frame_captured_{};
     int self_stage_{}, ready_count_{}, ping_count_{}, cycles_{2}, recoveries_{}, core_seconds_{};
     std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{};
     std::string diagnostic_, last_tray_state_, test_page_;
@@ -116,7 +119,7 @@ void DesktopApplication::tray() {
     nid_.uID = 1;
     nid_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid_.uCallbackMessage = tray_message;
-    nid_.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    nid_.hIcon = LoadIconW(instance_, MAKEINTRESOURCEW(IDI_PULSETRACE));
     wcscpy_s(nid_.szTip, L"PulseTrace · 本地聚合统计");
     tray_added_ = Shell_NotifyIconW(NIM_ADD, &nid_) != FALSE;
 }
@@ -177,6 +180,14 @@ void DesktopApplication::command(Json request) {
     }
     if (request["type"] == "hide") {
         hide();
+        return;
+    }
+    if (request["type"] == "open_monthly_folder") {
+        const auto path=data_/"network-months";
+        std::filesystem::create_directories(path);
+        if(reinterpret_cast<INT_PTR>(ShellExecuteW(window_,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)
+            throw std::runtime_error("Cannot open monthly archive folder");
+        web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"opened",true}}}});
         return;
     }
     if (request["type"] == "set_autostart") {
@@ -254,6 +265,8 @@ void DesktopApplication::quit() {
     });
 }
 LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
+    LRESULT caption_result{};
+    if(caption_.message(m,w,l,caption_result))return caption_result;
     if (taskbar_message_ && m == taskbar_message_) {
         tray();
         return 0;
@@ -270,7 +283,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: {
         auto *info = reinterpret_cast<MINMAXINFO *>(l);
         UINT dpi = GetDpiForWindow(h);
-        info->ptMinTrackSize = {MulDiv(880, dpi, 96), MulDiv(620, dpi, 96)};
+        info->ptMinTrackSize = {MulDiv(800, dpi, 96), MulDiv(600, dpi, 96)};
         return 0;
     }
     case WM_DPICHANGED: {
@@ -286,11 +299,16 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         auto dc = BeginPaint(h, &p);
         RECT r{};
         GetClientRect(h, &r);
-        FillRect(dc, &r, GetSysColorBrush(COLOR_WINDOW));
+        auto brush=CreateSolidBrush(caption_.background());
+        FillRect(dc, &r, brush);DeleteObject(brush);
+        caption_.paint(dc);
+        SetTextColor(dc,caption_.foreground());SetBkMode(dc,TRANSPARENT);
         r.left += 24;
-        r.top += 24;
-        const auto text =
-            widen("PulseTrace\n" + diagnostic_ + "\nWebView2 初始化中；若失败可通过托盘重新打开。");
+        r.top += caption_.height()+24;
+        const auto text = widen(failure_observed_ && (!web_ || !web_->ready())
+                                    ? "PulseTrace 暂时无法打开界面\n" + diagnostic_ +
+                                          "\n请检查运行时与本地资源，通过托盘“打开 PulseTrace”重试。"
+                                    : "PulseTrace\n正在准备本地统计…");
         DrawTextW(dc, text.c_str(), -1, &r, DT_LEFT | DT_WORDBREAK);
         EndPaint(h, &p);
         return 0;
@@ -359,6 +377,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         if (exiting_)
             return 0;
+        caption_.theme(core_->status()["config"].value("theme","system"));
         if (core_seconds_ > 0 &&
             GetTickCount64() - start_tick_ >= static_cast<std::uint64_t>(core_seconds_) * 1000) {
             diagnostic("Core-only timed run completed");
@@ -397,6 +416,15 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     return 0;
                 }
                 if (!preview_started_) {
+                    if(!IsZoomed(window_)){
+                        RECT client{};GetClientRect(window_,&client);POINT edge{client.right-2,caption_.height()+20};
+                        if(ChildWindowFromPointEx(window_,edge,CWP_SKIPINVISIBLE|CWP_SKIPDISABLED|CWP_SKIPTRANSPARENT)!=window_)
+                            throw std::runtime_error("WebView covered native resize edge");
+                        ClientToScreen(window_,&edge);
+                        if(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(edge.x,edge.y))!=HTRIGHT)
+                            throw std::runtime_error("Native resize edge hit-test failed");
+                        diagnostic("Native resize strip remains outside WebView child bounds");
+                    }
                     preview_started_ = true;
                     web_->capture_preview(data_ / "logs" / ("selftest-" + test_page_ + ".png"),
                                           [this](bool ok) {
@@ -409,6 +437,13 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 }
                 if (!preview_done_)
                     return 0;
+                // CapturePreview releases its output stream after the completion callback returns.
+                if(preview_ok_&&!frame_captured_){
+                    frame_captured_=true;
+                    preview_ok_=caption_.capture_frame(data_/"logs"/("selftest-"+test_page_+".png"),data_/"logs"/("selftest-window-"+test_page_+".png"));
+                    diagnostic(preview_ok_?"Native caption + WebView preview image saved":"SELFTEST FAIL: native frame image capture failed");
+                    diagnostic(caption_.capture_diagnostic());
+                }
                 ++ready_count_;
                 if (ready_count_ >= cycles_) {
                     diagnostic(
@@ -417,7 +452,11 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     quit();
                     return 0;
                 }
-                hide();
+                if(core_->status()["config"].value("close_to_tray",true)){
+                    SendMessageW(window_,WM_COMMAND,712,0);
+                    if(IsWindowVisible(window_))throw std::runtime_error("Caption close did not hide to tray");
+                    diagnostic("Caption close button: hidden to tray; monitoring core retained");
+                }else hide();
                 self_stage_ = 1;
                 stage_tick_ = now;
             } else if (self_stage_ == 1 && now - stage_tick_ > 1500 && !web_->closing()) {
@@ -525,7 +564,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     wc.lpfnWndProc = proc;
     wc.lpszClassName = L"PulseTrace.Desktop";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wc.hIcon = LoadIconW(instance_, MAKEINTRESOURCEW(IDI_PULSETRACE));
     if (!RegisterClassW(&wc))
         throw std::runtime_error("RegisterClass failed");
     int x = CW_USEDEFAULT, y = CW_USEDEFAULT, width = 1180, height = 820;
@@ -537,20 +576,51 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
             maximized_ = p.value("maximized", false);
             RECT work{};
             SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
-            width = std::clamp(p.value("width", 1180), 880,
-                               static_cast<int>(std::max<LONG>(880, work.right - work.left)));
-            height = std::clamp(p.value("height", 820), 620,
-                                static_cast<int>(std::max<LONG>(620, work.bottom - work.top)));
+            width = std::clamp(p.value("width", 1180), 800,
+                               static_cast<int>(std::max<LONG>(800, work.right - work.left)));
+            height = std::clamp(p.value("height", 820), 600,
+                                static_cast<int>(std::max<LONG>(600, work.bottom - work.top)));
             x = std::clamp(p.value("left", work.left), work.left, std::max(work.left, work.right - width));
             y = std::clamp(p.value("top", work.top), work.top, std::max(work.top, work.bottom - height));
         }
     } catch (...) {
         diagnostic("Invalid saved window placement; using defaults");
     }
+    if (selftest_ && options.test_width && options.test_height) {
+        const auto dpi = GetDpiForSystem();
+        RECT client{0, 0, MulDiv(options.test_width, dpi, 96), MulDiv(options.test_height, dpi, 96)};
+        width = client.right - client.left+2*MulDiv(CaptionBar::resize_border_dip,dpi,96);
+        height = client.bottom - client.top+MulDiv(CaptionBar::height_dip+CaptionBar::resize_border_dip,dpi,96);
+        maximized_ = false;
+    }
     window_ = CreateWindowExW(0, wc.lpszClassName, L"PulseTrace", WS_OVERLAPPEDWINDOW, x, y, width, height,
                               nullptr, nullptr, instance, this);
     if (!window_)
         throw std::runtime_error("CreateWindow failed");
+    caption_.create(window_,instance_);
+    caption_.theme(core_->status()["config"].value("theme","system"));
+    if(selftest_){
+        POINT p{100,caption_.height()/2};ClientToScreen(window_,&p);
+        if(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(p.x,p.y))!=HTCAPTION)throw std::runtime_error("Caption drag hit-test failed");
+        SendMessageW(window_,WM_COMMAND,711,0);if(!IsZoomed(window_))throw std::runtime_error("Caption maximize failed");
+        SendMessageW(window_,WM_COMMAND,711,0);if(IsZoomed(window_))throw std::runtime_error("Caption restore failed");
+        SendMessageW(window_,WM_COMMAND,710,0);if(!IsIconic(window_))throw std::runtime_error("Caption minimize failed");
+        SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);
+        diagnostic("Caption native minimize/maximize/restore and drag hit-test passed");
+    }
+    const auto dpi = GetDpiForWindow(window_);
+    for (const auto kind : {ICON_SMALL, ICON_BIG}) {
+        const int size = GetSystemMetricsForDpi(kind == ICON_SMALL ? SM_CXSMICON : SM_CXICON, dpi);
+        const auto icon =
+            LoadImageW(instance_, MAKEINTRESOURCEW(IDI_PULSETRACE), IMAGE_ICON, size, size, LR_SHARED);
+        if (!icon)
+            throw std::runtime_error("PulseTrace application icon resource missing");
+        SendMessageW(window_, WM_SETICON, kind, reinterpret_cast<LPARAM>(icon));
+    }
+    RECT bounds{};
+    GetClientRect(window_, &bounds);
+    diagnostic("Window client pixels=" + std::to_string(bounds.right) + "x" + std::to_string(bounds.bottom) +
+               "; DPI=" + std::to_string(dpi) + "; custom window/tray icon resource=101");
     web_ = std::make_unique<WebViewHost>(
         window_, data_, exe_ / "web",
         [this](Json request) {
@@ -619,6 +689,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
         else if (arg == L"--core-seconds" && i + 1 < argc) {
             options.core_seconds = std::clamp(_wtoi(argv[++i]), 1, 86400);
             options.background = true;
+        } else if (arg == L"--self-test-size" && i + 1 < argc) {
+            const std::wstring size = argv[++i];
+            const auto split = size.find(L'x');
+            if (split != std::wstring::npos) {
+                options.test_width = std::clamp(_wtoi(size.substr(0, split).c_str()), 320, 3840);
+                options.test_height = std::clamp(_wtoi(size.substr(split + 1).c_str()), 300, 2160);
+            }
         } else if (arg == L"--self-test-page" && i + 1 < argc)
             options.page = narrow(argv[++i]);
         else if (arg == L"--expect-ui-failure")

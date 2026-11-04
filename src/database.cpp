@@ -40,7 +40,7 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
         exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA wal_autocheckpoint=256;");
         Statement version(db_, "PRAGMA user_version");
         sqlite3_step(version.p);
-        if (sqlite3_column_int(version.p, 0) > 2)
+        if (sqlite3_column_int(version.p, 0) > 3)
             throw std::runtime_error("Database created by a newer PulseTrace version");
         exec("BEGIN;CREATE TABLE IF NOT EXISTS counts(session TEXT NOT NULL,minute INTEGER NOT NULL,module "
              "TEXT NOT NULL,metric TEXT NOT NULL,value INTEGER NOT NULL,PRIMARY "
@@ -48,7 +48,15 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
              "counts(minute,module);CREATE TABLE IF NOT EXISTS network_events(session TEXT NOT NULL,sequence "
              "INTEGER NOT NULL,observed_ms INTEGER NOT NULL,kind TEXT NOT NULL,interface_id TEXT NOT "
              "NULL,name TEXT NOT NULL,PRIMARY KEY(session,sequence)) WITHOUT ROWID;CREATE INDEX IF NOT "
-             "EXISTS network_events_range ON network_events(observed_ms);PRAGMA user_version=2;COMMIT;");
+             "EXISTS network_events_range ON network_events(observed_ms);"
+             "CREATE TABLE IF NOT EXISTS protocol_samples(session TEXT NOT NULL,minute INTEGER NOT "
+             "NULL,interface_id TEXT NOT NULL,source TEXT NOT NULL,basis TEXT NOT NULL,quality TEXT NOT "
+             "NULL,ipv4_up INTEGER NOT NULL,ipv4_down INTEGER NOT NULL,ipv6_up INTEGER NOT NULL,ipv6_down "
+             "INTEGER NOT NULL,accepted INTEGER NOT NULL,rejected INTEGER NOT NULL,unsupported INTEGER NOT "
+             "NULL,events_lost INTEGER NOT NULL,buffers_lost INTEGER NOT NULL,PRIMARY "
+             "KEY(session,minute,interface_id,source,basis)) WITHOUT ROWID;"
+             "CREATE INDEX IF NOT EXISTS protocol_samples_range ON "
+             "protocol_samples(minute,interface_id);PRAGMA user_version=3;COMMIT;");
         Statement check(db_, "PRAGMA quick_check");
         if (sqlite3_step(check.p) != SQLITE_ROW ||
             std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p, 0))) != "ok")
@@ -68,6 +76,12 @@ void DatabaseManager::save(const std::string &session, const Json &rows, const J
     try {
         Statement s(db_, "INSERT INTO counts VALUES(?,?,?,?,?) ON CONFLICT(session,minute,module,metric) DO "
                          "UPDATE SET value=excluded.value");
+        Statement ip(db_, "INSERT INTO protocol_samples VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON "
+                          "CONFLICT(session,minute,interface_id,source,basis) DO UPDATE SET "
+                          "quality=excluded.quality,ipv4_up=excluded.ipv4_up,ipv4_down=excluded.ipv4_down,"
+                          "ipv6_up=excluded.ipv6_up,ipv6_down=excluded.ipv6_down,accepted=excluded.accepted,"
+                          "rejected=excluded.rejected,unsupported=excluded.unsupported,events_lost=excluded."
+                          "events_lost,buffers_lost=excluded.buffers_lost");
         for (const auto &row : rows) {
             bind_text(s.p, 1, session);
             sqlite3_bind_int64(s.p, 2, row.at("minute").get<std::int64_t>());
@@ -78,6 +92,21 @@ void DatabaseManager::save(const std::string &session, const Json &rows, const J
                 throw std::runtime_error(sqlite3_errmsg(db_));
             sqlite3_reset(s.p);
             sqlite3_clear_bindings(s.p);
+            if (row.contains("ip_record")) {
+                const auto &r = row.at("ip_record");
+                bind_text(ip.p, 1, session);
+                sqlite3_bind_int64(ip.p, 2, r.at("minute").get<std::int64_t>());
+                int column = 3;
+                for (const auto *k : {"interface_id", "source", "basis", "quality"})
+                    bind_text(ip.p, column++, r.at(k).get<std::string>());
+                for (const auto *k : {"ipv4_up", "ipv4_down", "ipv6_up", "ipv6_down", "accepted", "rejected",
+                                      "unsupported", "events_lost", "buffers_lost"})
+                    sqlite3_bind_int64(ip.p, column++, r.at(k).get<std::int64_t>());
+                if (sqlite3_step(ip.p) != SQLITE_DONE)
+                    throw std::runtime_error(sqlite3_errmsg(db_));
+                sqlite3_reset(ip.p);
+                sqlite3_clear_bindings(ip.p);
+            }
         }
         Statement event(db_, "INSERT OR IGNORE INTO network_events VALUES(?,?,?,?,?,?)");
         for (const auto &row : events) {
@@ -125,6 +154,10 @@ Json DatabaseManager::query(std::int64_t from, std::int64_t to, int bucket,
     return rows;
 }
 void DatabaseManager::prune(std::int64_t cutoff) {
+    Statement ip(db_, "DELETE FROM protocol_samples WHERE minute<?");
+    sqlite3_bind_int64(ip.p, 1, cutoff);
+    if (sqlite3_step(ip.p) != SQLITE_DONE)
+        throw std::runtime_error(sqlite3_errmsg(db_));
     Statement s(db_, "DELETE FROM counts WHERE minute<?");
     sqlite3_bind_int64(s.p, 1, cutoff);
     if (sqlite3_step(s.p) != SQLITE_DONE)
@@ -135,7 +168,65 @@ void DatabaseManager::prune(std::int64_t cutoff) {
         throw std::runtime_error(sqlite3_errmsg(db_));
 }
 void DatabaseManager::clear() {
-    exec("BEGIN IMMEDIATE;DELETE FROM counts;DELETE FROM network_events;COMMIT;");
+    exec(
+        "BEGIN IMMEDIATE;DELETE FROM counts;DELETE FROM network_events;DELETE FROM protocol_samples;COMMIT;");
+}
+Json DatabaseManager::traffic_summary() const {
+    Json out = {{"upload_bytes", 0}, {"download_bytes", 0}, {"has_totals", false},
+                {"ipv4_up", 0}, {"ipv4_down", 0}, {"ipv6_up", 0}, {"ipv6_down", 0},
+                {"accepted", 0}, {"rejected", 0}, {"unsupported", 0},
+                {"events_lost", 0}, {"buffers_lost", 0}, {"has_ip", false},
+                {"quality", "no_data"}, {"reference_validated", false},
+                {"total_basis", "selected_interface_octets"}, {"ip_basis", "validated_ip_packet_lengths"}};
+    Statement s(db_, "SELECT metric,SUM(value) FROM counts WHERE module='network' AND "
+                     "metric IN ('interface_upload_bytes','interface_download_bytes') GROUP BY metric");
+    int rc;
+    while ((rc = sqlite3_step(s.p)) == SQLITE_ROW) {
+        const std::string metric = reinterpret_cast<const char *>(sqlite3_column_text(s.p, 0));
+        out[metric == "interface_upload_bytes" ? "upload_bytes" : "download_bytes"] = sqlite3_column_int64(s.p, 1);
+        out["has_totals"] = true;
+    }
+    if (rc != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+    Statement ip(db_, "SELECT COALESCE(SUM(ipv4_up),0),COALESCE(SUM(ipv4_down),0),"
+                      "COALESCE(SUM(ipv6_up),0),COALESCE(SUM(ipv6_down),0),COALESCE(SUM(accepted),0),"
+                      "COALESCE(SUM(rejected),0),COALESCE(SUM(unsupported),0),COALESCE(MAX(events_lost),0),"
+                      "COALESCE(MAX(buffers_lost),0),COALESCE(MAX(quality='incomplete_observation'),0) FROM protocol_samples");
+    if (sqlite3_step(ip.p) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+    int col=0;
+    for (const char *key : {"ipv4_up","ipv4_down","ipv6_up","ipv6_down","accepted","rejected","unsupported","events_lost","buffers_lost"})
+        out[key] = sqlite3_column_int64(ip.p, col++);
+    out["has_ip"] = out["accepted"].get<std::int64_t>() > 0;
+    out["quality"] = sqlite3_column_int(ip.p, 9) ? "incomplete_observation" :
+                       out["has_ip"].get<bool>() ? "observed_unverified_reference" : "no_data";
+    return out;
+}
+void DatabaseManager::visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const {
+    // Stream startup recovery in bounded batches; absolute UPSERTs make retries safe.
+    Statement s(db_, "SELECT session,minute,module,metric,value FROM counts WHERE "
+                     "(module='network' AND (metric IN ('interface_upload_bytes','interface_download_bytes') "
+                     "OR metric LIKE 'bytes/%')) ORDER BY session,minute");
+    Json rows=Json::array(); std::string session; int rc;
+    while ((rc=sqlite3_step(s.p))==SQLITE_ROW) {
+        const std::string next=reinterpret_cast<const char *>(sqlite3_column_text(s.p,0));
+        if (!rows.empty() && (next!=session || rows.size()>=4096)) {visitor(session,rows); rows=Json::array();}
+        session=next;
+        rows.push_back({{"minute",sqlite3_column_int64(s.p,1)}, {"module",reinterpret_cast<const char *>(sqlite3_column_text(s.p,2))},
+                        {"metric",reinterpret_cast<const char *>(sqlite3_column_text(s.p,3))}, {"value",sqlite3_column_int64(s.p,4)}});
+    }
+    if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));
+    if(!rows.empty())visitor(session,rows);
+    Statement p(db_, "SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples ORDER BY session,minute");
+    rows=Json::array();session.clear();
+    while((rc=sqlite3_step(p.p))==SQLITE_ROW){
+        const std::string next=reinterpret_cast<const char *>(sqlite3_column_text(p.p,0));
+        if(!rows.empty()&&(next!=session||rows.size()>=1024)){visitor(session,rows);rows=Json::array();}
+        session=next;Json r={{"minute",sqlite3_column_int64(p.p,1)}};int c=2;
+        for(const char *key:{"interface_id","source","basis","quality"})r[key]=reinterpret_cast<const char *>(sqlite3_column_text(p.p,c++));
+        for(const char *key:{"ipv4_up","ipv4_down","ipv6_up","ipv6_down","accepted","rejected","unsupported","events_lost","buffers_lost"})r[key]=sqlite3_column_int64(p.p,c++);
+        rows.push_back({{"minute",r["minute"]},{"module","network_ip"},{"metric",r["interface_id"].get<std::string>()+"/quality_state"},{"value",r["rejected"]},{"ip_record",r}});
+    }
+    if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));
+    if(!rows.empty())visitor(session,rows);
 }
 Json DatabaseManager::network_events(std::int64_t from, std::int64_t to) const {
     Statement s(db_, "SELECT observed_ms,kind,interface_id,name FROM network_events WHERE observed_ms>=? AND "
@@ -152,6 +243,41 @@ Json DatabaseManager::network_events(std::int64_t from, std::int64_t to) const {
     if (result != SQLITE_DONE)
         throw std::runtime_error(sqlite3_errmsg(db_));
     return events;
+}
+Json DatabaseManager::protocol_samples(std::int64_t from, std::int64_t to, int bucket,
+                                       const std::string &exclude, std::int64_t floor) const {
+    if (from < 0 || to <= from || to - from > 527040 || (bucket != 1 && bucket != 60 && bucket != 1440))
+        throw std::invalid_argument("Invalid protocol range");
+    Statement s(
+        db_,
+        "SELECT (minute/?)*?,interface_id,source,basis,CASE WHEN MAX(quality='incomplete_observation') THEN "
+        "'incomplete_observation' ELSE 'observed_unverified_reference' "
+        "END,SUM(ipv4_up),SUM(ipv4_down),SUM(ipv6_up),SUM(ipv6_down),SUM(accepted),SUM(rejected),SUM("
+        "unsupported),MAX(events_lost),MAX(buffers_lost) FROM protocol_samples WHERE minute>=? AND minute<? "
+        "AND NOT(session=? AND minute>=?) GROUP BY 1,interface_id,source,basis ORDER BY 1,interface_id");
+    sqlite3_bind_int(s.p, 1, bucket);
+    sqlite3_bind_int(s.p, 2, bucket);
+    sqlite3_bind_int64(s.p, 3, from);
+    sqlite3_bind_int64(s.p, 4, to);
+    bind_text(s.p, 5, exclude);
+    sqlite3_bind_int64(s.p, 6, floor);
+    Json out = Json::array();
+    int result{};
+    while ((result = sqlite3_step(s.p)) == SQLITE_ROW) {
+        Json r = {{"minute", sqlite3_column_int64(s.p, 0)}};
+        int c = 1;
+        for (const auto *k : {"interface_id", "source", "basis", "quality"})
+            r[k] = reinterpret_cast<const char *>(sqlite3_column_text(s.p, c++));
+        for (const auto *k : {"ipv4_up", "ipv4_down", "ipv6_up", "ipv6_down", "accepted", "rejected",
+                              "unsupported", "events_lost", "buffers_lost"})
+            r[k] = sqlite3_column_int64(s.p, c++);
+        out.push_back(std::move(r));
+        if (out.size() > 100000)
+            throw std::runtime_error("Protocol result too large; use hour/day aggregation");
+    }
+    if (result != SQLITE_DONE)
+        throw std::runtime_error(sqlite3_errmsg(db_));
+    return out;
 }
 void DatabaseManager::export_csv(const std::filesystem::path &path, std::int64_t from,
                                  std::int64_t to) const {

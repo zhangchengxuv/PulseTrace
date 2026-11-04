@@ -2,6 +2,7 @@
 #include "pulsetrace/database.hpp"
 #include "pulsetrace/keyboard_monitor.hpp"
 #include "pulsetrace/network_monitor.hpp"
+#include "pulsetrace/monthly_traffic.hpp"
 #include "pulsetrace/raw_input_host.hpp"
 #include <atomic>
 #include <condition_variable>
@@ -38,7 +39,13 @@ class CoreService final : public InputCallbacks {
     Json execute(const Json &request, DatabaseManager &db);
     void save_config();
     void retry_final_flush();
+    void disable_capture() noexcept {
+        std::int64_t unset = 0;
+        capture_window_.stop.compare_exchange_strong(unset, capture_clock());
+        enabled_.store(false);
+    }
     std::filesystem::path data_;
+    std::unique_ptr<MonthlyTrafficStore> monthly_;
     std::string session_;
     std::atomic<bool> enabled_{false}, stopping_{false};
     std::atomic<bool> session_locked_{false};
@@ -46,6 +53,7 @@ class CoreService final : public InputCallbacks {
     std::atomic<unsigned> reset_generation_{};
     unsigned keyboard_generation_{};
     KeyboardMonitor keyboard_;
+    CaptureWindow capture_window_;
     std::thread input_thread_, worker_thread_;
     mutable std::mutex mutex_;
     std::condition_variable wake_;

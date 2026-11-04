@@ -22,6 +22,10 @@ std::string utf8(const wchar_t *s) {
     return out;
 }
 } // namespace
+NetworkMonitor::NetworkMonitor(CaptureWindow *window) : capture_(std::make_unique<NdisCapture>(window)) {}
+NetworkMonitor::~NetworkMonitor() = default;
+NetworkMonitor::NetworkMonitor(NetworkMonitor &&) noexcept = default;
+NetworkMonitor &NetworkMonitor::operator=(NetworkMonitor &&) noexcept = default;
 NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const std::string &selected) {
     MIB_IF_TABLE2 *raw{};
     if (GetIfTable2(&raw) != NO_ERROR)
@@ -78,6 +82,7 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
             }
         }
     double in_rate = 0, out_rate = 0;
+    const MIB_IF_ROW2 *physical_selected = nullptr;
     for (ULONG i = 0; i < raw->NumEntries; ++i) {
         const auto &r = raw->Table[i];
         if (r.Type == IF_TYPE_SOFTWARE_LOOPBACK)
@@ -86,6 +91,9 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
         const bool up = r.OperStatus == IfOperStatusUp;
         seen.insert(id);
         const bool physical = r.InterfaceAndOperStatusFlags.HardwareInterface;
+        if (id == chosen && physical && up && r.PhysicalAddressLength == 6 &&
+            (r.Type == IF_TYPE_ETHERNET_CSMACD || r.Type == IF_TYPE_IEEE80211))
+            physical_selected = &r;
         const auto family = addresses[r.InterfaceIndex];
         interfaces.push_back({{"id", id},
                               {"name", utf8(r.Alias)},
@@ -172,6 +180,22 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
                                    {"value", it->second}});
             ++it;
         }
+    }
+    std::array<std::uint8_t, 6> mac{};
+    if (physical_selected)
+        std::copy_n(physical_selected->PhysicalAddress, 6, mac.begin());
+    capture_->configure(enabled && physical_selected,
+                        physical_selected ? physical_selected->InterfaceIndex : 0,
+                        physical_selected ? physical_selected->InterfaceLuid.Value : 0, mac);
+    sample.status["protocol_capture"] = capture_->snapshot(minute, sample.rows);
+    sample.status["protocol_split_available"] = sample.status["protocol_capture"]["available"];
+    sample.status["protocol_split_reason"] =
+        "已接入 ETW NDIS 物理接口 IP 分族观测；显示真实观测值与数据质量，尚待独立抓包对照验收。";
+    if (!physical_selected) {
+        sample.status["protocol_capture"]["available"] = false;
+        sample.status["protocol_split_available"] = false;
+        sample.status["protocol_capture"]["error"] =
+            "请选择已连接的物理 WLAN / Ethernet 接口；TUN、VPN 和回环不会与物理接口相加。";
     }
     return sample;
 }

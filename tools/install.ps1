@@ -14,6 +14,7 @@ if(-not $NoShortcut){
     $shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'PulseTrace.lnk'))
     $shortcut.TargetPath=Join-Path $destinationPath 'PulseTrace.exe'
     $shortcut.WorkingDirectory=$destinationPath
+    $shortcut.IconLocation=(Join-Path $destinationPath 'PulseTrace.exe')+',0'
     $shortcut.Save()
 }
 Write-Output "Installed to $destinationPath. No autostart or monitoring enabled."

@@ -1,4 +1,10 @@
-# PulseTrace 0.2.0-rc1
+# PulseTrace 0.2.0-rc2
+
+[下载 Windows x64 候选版](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.2.0-rc2)
+
+新增：融合主题的原生标题栏、六项月度流量累计与独立的自然月 SQLite / JSON 归档。分钟明细保留天数不删除月度集合。见 [月度存储和标题栏说明](docs/monthly-traffic-and-caption.md)。
+
+最新更新：标准 ANSI 104 物理键盘、Arctic · Custom Colormap（OKLab + 平方根归一化），以及真实 ETW NDIS 物理接口 IPv4/IPv6 分族观测与 SQLite schema v3。仍为候选版本，部分流量存在拒收，未宣称完整精确计量验收。详见 docs/ansi-arctic-network-validation.md。
 
 PulseTrace 是 Windows x64 本地桌面统计应用，使用 C++20、Win32、系统 Evergreen WebView2、Raw Input 和 SQLite。当前交付定位为**候选版本**：可运行功能与外部人工验收分开记录，不宣称完整最终验收通过。
 
@@ -37,6 +43,7 @@ data/
   monitor.db          SQLite 聚合统计与连接观察历史
   monitor.db-wal      SQLite 自己管理，运行时不要单独移动或删除
   monitor.db-shm
+  network-months/     按自然月独立保存的网络 SQLite / JSON，长期保留
   config.json         用户设置
   window.json         窗口位置与尺寸
   webview2/           本应用 WebView2 用户数据
@@ -49,7 +56,7 @@ data/
 .\PulseTrace.exe --data-dir "D:\PulseTraceData"
 ```
 
-设置页显示实际数据目录，支持范围 CSV 导出、保留期与持久化周期。清空统计必须先暂停并输入 `DELETE`；不会删除配置或系统 Runtime。备份前完全退出，再复制 data/monitor.db；不要在运行中仅拷贝主数据库忽略 WAL。
+设置页显示实际数据目录，支持范围 CSV 导出、保留期与持久化周期。导出同时生成普通聚合 CSV 和带 source/basis/quality/reference_validated 的 IP 观测 CSV，必须连同质量字段分析。清空统计必须先暂停并输入 `DELETE`；不会删除配置或系统 Runtime。备份前完全退出，再复制 data/monitor.db 和 data/network-months/；不要在运行中仅拷贝主数据库忽略 WAL。
 
 默认每 30 秒批量持久化，可设置为 5–300 秒；正常退出做最终提交。突然断电/强制终止可能丢失最近未提交批次，但已提交事务保持一致。磁盘忙或写失败时暂停采集并保留待重试聚合，退避重试，不在输入回调写数据库；失败退出会要求明确选择是否丢弃未写数据。严重数据库异常保留原文件并显示诊断，不自动覆盖数据库。
 
@@ -57,7 +64,7 @@ data/
 
 ## 统计口径
 
-**键盘**按物理扫描码与 E0/E1 扩展位隔离键位，左右修饰键、主键区/小键盘可区分；按住产生的重复 MAKE 单列，不重复算物理按下。Pause 无通常 BREAK 的情况和 PrintScreen 的伪 Shift 报告单独处理。热力图是 ANSI 位置示意，字母标签不是实际输入内容；其他布局、媒体键和设备固件差异需结合扫描码排名及实机验收。
+**键盘**按物理扫描码与 E0/E1 扩展位隔离键位，左右修饰键、主键区/小键盘可区分；按住产生的重复 MAKE 单列，不重复算物理按下。Pause 无通常 BREAK 的情况和 PrintScreen 的伪 Shift 报告单独处理。热力图采用标准 ANSI 104 物理位置、Arctic OKLab 连续色图及平方根归一化，字母标签不是实际输入内容；其他布局、媒体键和设备固件差异需结合扫描码排名及实机验收。
 
 **鼠标**支持五键、时间双击、垂直/水平滚轮。时间双击是同设备同按键 DOWN→UP→DOWN、两个 DOWN 不超过系统双击时限，不重叠配对；不验证位置，因此不是 Windows 标准空间双击。普通两次点击仍分别计数。空句柄不推断双击。
 
@@ -69,7 +76,7 @@ data/
 
 自动选择首个活动物理接口，也可在设置中明确选物理网卡或 Mihomo TUN。不会把所有接口相加。接口总量不等于应用净荷、物理介质全部开销或校园网账单。NLM 提示是系统级状态，不证明指定接口对任意地址都可达。
 
-**IPv4/IPv6 上传下载分项当前未支持，界面明确显示未知。** 普通权限接口 octet 没有准确分族字节字段；不按 IP 地址、包数或比例猜测。物理出口、代理原始流量、TUN 内层和封装外层必须分开。精确分项需要独立验证的可选 ETW/包观察后端；本版本不安装驱动、不拦截或修改数据包、不申请管理员权限，不更改 Clash、代理或防火墙。
+**IPv4/IPv6 物理接口分族观测已接入，但完整准确性尚未验收。** 采用独立 ETW NDIS-PacketCapture 会话，绑定所选物理 WLAN/Ethernet，按实际 IP 头部长度聚合；与接口总量/TUN 分开。局域 IPv4/IPv6 Echo 校验通过；对一般流量中的捕获分段、卸载异常等严格拒收并显示“不完整观测”。没有经过独立抓包对照，不等于校园网计费字节。不会自动安装驱动、升权或修改 Clash/路由。
 
 ## 构建
 

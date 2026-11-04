@@ -1,5 +1,6 @@
 #include "pulsetrace/desktop/webview_host.hpp"
 #include "pulsetrace/protocol.hpp"
+#include "pulsetrace/desktop/caption_bar.hpp"
 #include <shlwapi.h>
 #include <stdexcept>
 namespace pulsetrace {
@@ -291,6 +292,9 @@ void WebViewHost::resize() {
     if (controller_) {
         RECT bounds{};
         GetClientRect(window_, &bounds);
+        bounds.top=std::min(bounds.bottom,static_cast<LONG>(MulDiv(CaptionBar::height_dip,GetDpiForWindow(window_),96)));
+        const int edge=CaptionBar::resize_border(window_);
+        bounds.left+=edge;bounds.right=std::max(bounds.left,bounds.right-edge);bounds.bottom=std::max(bounds.top,bounds.bottom-edge);
         controller_->put_Bounds(bounds);
     }
 }

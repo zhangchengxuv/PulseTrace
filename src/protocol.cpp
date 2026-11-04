@@ -48,7 +48,18 @@ void validate_request(const Json &r) {
     const auto type = r["type"].get<std::string>();
     const auto &p = r["params"];
     std::set<std::string> allowed;
-    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide") {
+    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide" || type == "open_monthly_folder") {
+    } else if (type == "get_monthly_traffic") {
+        allowed = {"month"};
+        if (p.contains("month")) {
+            if (!p["month"].is_string()) throw std::invalid_argument("month must be YYYY-MM or all");
+            const auto m = p["month"].get<std::string>();
+            if (!m.empty() && m != "all" && (m.size()!=7 || m[4]!='-' ||
+                m.substr(0,4).find_first_not_of("0123456789")!=std::string::npos ||
+                m.substr(5).find_first_not_of("0123456789")!=std::string::npos ||
+                m.substr(0,4)<"1970" || m.substr(5)<"01" || m.substr(5)>"12"))
+                throw std::invalid_argument("Invalid calendar month");
+        }
     } else if (type == "set_monitoring" || type == "set_autostart") {
         allowed = {"enabled"};
         if (!p.contains("enabled") || !p["enabled"].is_boolean())

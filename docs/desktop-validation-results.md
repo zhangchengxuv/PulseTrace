@@ -1,5 +1,7 @@
 # PulseTrace 桌面候选版验证记录
 
+以下为首次候选版的阶段记录。蓝色 UI 更新后的 Release/Debug 各 4/4 CTest、响应式矩阵、对比度与图标检查见 [UI 验证记录](ui-validation-results.md)。
+
 日期：2026-11-04（Asia/Singapore）。当前环境为 Windows 11 Pro 10.0.26300 x64、非管理员令牌；LLVM-MinGW 20260616 / Clang 22.1.8、CMake 3.31.8、Evergreen WebView2 Runtime 156.0.4314.58。后端使用 SQLite 3.54.1，数据库 schema v2。
 
 ## 已实际通过

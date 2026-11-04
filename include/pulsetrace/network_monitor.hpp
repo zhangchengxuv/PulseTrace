@@ -1,5 +1,6 @@
 #pragma once
 #include "pulsetrace/json.hpp"
+#include "pulsetrace/ndis_capture.hpp"
 #include <cstdint>
 #include <map>
 #include <string>
@@ -10,6 +11,10 @@ struct NetworkSample {
 };
 class NetworkMonitor {
   public:
+    explicit NetworkMonitor(CaptureWindow *window = nullptr);
+    ~NetworkMonitor();
+    NetworkMonitor(NetworkMonitor &&) noexcept;
+    NetworkMonitor &operator=(NetworkMonitor &&) noexcept;
     NetworkSample sample(std::int64_t minute, bool enabled, const std::string &selected);
 
   private:
@@ -24,5 +29,6 @@ class NetworkMonitor {
     std::uint64_t last_tick_{};
     bool was_enabled_{};
     std::uint64_t sequence_{};
+    std::unique_ptr<NdisCapture> capture_;
 };
 } // namespace pulsetrace

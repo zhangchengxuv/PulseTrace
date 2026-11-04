@@ -2,3 +2,13 @@
 /data/
 /.vs/
 *.user
+/assets/PulseTrace-*.png
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.etl
+*.pcap
+*.pcapng
