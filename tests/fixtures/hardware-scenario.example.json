@@ -1,0 +1,8 @@
+{
+  "description": "Expected generator scenario ONLY; replace with independent totals from the actual HID run.",
+  "clicks": {"left": 10000, "right": 10000, "middle": 10000, "mouse4": 10000, "mouse5": 10000},
+  "wheel_up_events": 8000,
+  "wheel_down_events": 8000,
+  "wheel_up_delta": 120000,
+  "wheel_down_delta": 120000
+}

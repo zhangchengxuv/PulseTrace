@@ -1,0 +1,78 @@
+#include "pulsetrace/protocol.hpp"
+#include <set>
+#include <stdexcept>
+#include <vector>
+namespace pulsetrace {
+std::wstring quote_windows_argument(const std::wstring &argument) {
+    std::wstring result = L"\"";
+    std::size_t slashes = 0;
+    for (const auto c : argument) {
+        if (c == L'\\') {
+            ++slashes;
+            continue;
+        }
+        result.append(slashes * (c == L'"' ? 2 : 1), L'\\');
+        if (c == L'"')
+            result += L'\\';
+        result += c;
+        slashes = 0;
+    }
+    result.append(slashes * 2, L'\\');
+    result += L'"';
+    return result;
+}
+Json parse_message(const std::string &text) {
+    if (text.size() > 65536)
+        throw std::invalid_argument("Message exceeds 64 KiB");
+    std::vector<std::set<std::string>> objects;
+    auto json = Json::parse(text, [&](int depth, Json::parse_event_t event, Json &value) {
+        if (depth > 16)
+            throw std::invalid_argument("JSON nesting too deep");
+        if (event == Json::parse_event_t::object_start)
+            objects.emplace_back();
+        if (event == Json::parse_event_t::key && !objects.back().insert(value.get<std::string>()).second)
+            throw std::invalid_argument("Duplicate JSON field");
+        if (event == Json::parse_event_t::object_end)
+            objects.pop_back();
+        return true;
+    });
+    validate_request(json);
+    return json;
+}
+void validate_request(const Json &r) {
+    if (!r.is_object() || r.size() != 3 || !r.contains("type") || !r["type"].is_string() ||
+        !r.contains("request_id") || !r["request_id"].is_number_integer() ||
+        r["request_id"].get<double>() < 0 || r["request_id"].get<double>() > 9007199254740991.0 ||
+        !r.contains("params") || !r["params"].is_object())
+        throw std::invalid_argument("Invalid request envelope");
+    const auto type = r["type"].get<std::string>();
+    const auto &p = r["params"];
+    std::set<std::string> allowed;
+    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide") {
+    } else if (type == "set_monitoring" || type == "set_autostart") {
+        allowed = {"enabled"};
+        if (!p.contains("enabled") || !p["enabled"].is_boolean())
+            throw std::invalid_argument("enabled must be boolean");
+    } else if (type == "get_statistics" || type == "export_csv") {
+        allowed = {"from", "to", "bucket"};
+        if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
+            !p["to"].is_number_integer())
+            throw std::invalid_argument("Range needs integer UTC minutes");
+        auto from = p["from"].get<std::int64_t>(), to = p["to"].get<std::int64_t>();
+        if (from < 0 || to <= from || to - from > 527040)
+            throw std::invalid_argument("Range must be 1 minute..366 days");
+        if (p.contains("bucket") && (!p["bucket"].is_number_integer() ||
+                                     (p["bucket"] != 1 && p["bucket"] != 60 && p["bucket"] != 1440)))
+            throw std::invalid_argument("Invalid aggregation bucket");
+    } else if (type == "set_config")
+        allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
+                   "close_to_tray", "capture_on_launch"};
+    else if (type == "clear_data")
+        allowed = {"confirmation"};
+    else
+        throw std::invalid_argument("Unknown request type");
+    for (auto it = p.begin(); it != p.end(); ++it)
+        if (!allowed.contains(it.key()))
+            throw std::invalid_argument("Unexpected request parameter");
+}
+} // namespace pulsetrace

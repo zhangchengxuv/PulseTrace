@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>PulseTrace · 本地活动统计</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-icon">P<span></span></span><span>PulseTrace<small>本地活动统计</small></span></a>
+    <div class="nav-label">工作空间</div>
+    <a class="nav-item selected" href="#overview"><span>◉</span>鼠标统计<span class="tag">验证版</span></a>
+    <div class="nav-item unavailable"><span>⌨</span>键盘统计<small>待集成</small></div>
+    <div class="nav-item unavailable"><span>⇄</span>网络流量<small>待集成</small></div>
+    <div class="sidebar-bottom"><span class="privacy-icon">◇</span><strong>数据始终留在本机</strong><p>只读取聚合报告<br>不采集坐标和操作内容</p><span id="host-address" class="mono"></span></div>
+  </aside>
+  <main id="overview">
+    <header class="topbar"><div class="breadcrumb">工作空间 <span>/</span> 鼠标统计</div><div class="header-actions"><span class="local"><i></i>本地服务</span><button id="theme" class="icon-button" type="button" aria-label="切换深浅主题">◐</button></div></header>
+    <section class="page-heading"><div><div class="eyebrow">MOUSE ACTIVITY</div><h1>每一次点击，都有迹可循<span class="heading-dot">.</span></h1><p>查看鼠标使用的聚合统计与采集验证结果。</p></div><button id="refresh" class="button" type="button">↻ <span>刷新报告</span></button></section>
+    <div class="notice"><span class="notice-symbol">i</span><div><strong>当前为验证报告视图</strong><p>本页读取已结束采集的报告，不自动开始监测。硬件准确性与输入延迟仍待验证。</p></div><span class="readonly">只读</span></div>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section class="controls" aria-label="报告与时间范围"><div class="report-control"><label for="report">采集报告</label><select id="report"><option>正在读取…</option></select></div><div><label for="range">时间范围</label><select id="range"><option value="all">完整会话</option><option value="60">最近一小时</option><option value="1440">最近 24 小时</option><option value="custom">自定义</option></select></div><div><label for="resolution">趋势粒度</label><select id="resolution"><option value="1">分钟</option><option value="60">小时（UTC）</option><option value="1440">天（UTC）</option></select></div><span id="report-status" class="status-pill">正在读取</span></section>
+    <section id="custom-range" class="custom-range" hidden><label>开始（本地时间）<input id="from" type="datetime-local" step="60"></label><label>结束（不含，本地时间）<input id="to" type="datetime-local" step="60"></label><button id="apply-range" class="button" type="button">应用范围</button></section>
+    <section class="metrics" aria-label="统计概览">
+      <article class="metric"><span class="metric-label">点击总次数 <span class="metric-symbol">↖</span></span><strong id="click-total">—</strong><small id="click-description">等待采集报告</small></article>
+      <article class="metric"><span class="metric-label">时间双击 <span class="metric-symbol">⌁</span></span><strong id="double-total">—</strong><small>同设备、同按键、系统时限内配对</small></article>
+      <article class="metric"><span class="metric-label">向上滚动事件 <span class="metric-symbol">↑</span></span><strong id="wheel-up">—</strong><small id="wheel-up-amount">累计滚动量 —</small></article>
+      <article class="metric"><span class="metric-label">向下滚动事件 <span class="metric-symbol">↓</span></span><strong id="wheel-down">—</strong><small id="wheel-down-amount">累计滚动量 —</small></article>
+    </section>
+    <section class="charts"><article class="panel trend-panel"><div class="panel-heading"><div><h2>点击频率趋势</h2><p id="trend-description">按时间桶汇总的点击次数</p></div><span class="legend"><i></i>点击次数</span></div><div class="chart-wrap"><canvas id="trend" aria-label="点击频率趋势图"></canvas><div id="chart-empty" class="chart-empty"><span>⌁</span><strong>暂无输入数据</strong><p>报告尚未记录到鼠标按键或滚轮事件</p></div></div><div class="chart-footer"><span>统计精度：整分钟</span><span id="session-time">—</span></div></article>
+    <article class="panel distribution-panel"><div class="panel-heading"><div><h2>按键分布</h2><p>五个按键的点击占比</p></div><span class="subtle">次数 / 占比</span></div><div id="distribution" class="distribution"></div><div class="distribution-note">双击同时计入两次普通点击。<br>不采集鼠标位置与移动轨迹。</div></article></section>
+    <section class="details-grid"><article class="panel"><div class="panel-heading"><div><h2>采集状态</h2><p>区分运行结果与尚未验证的能力</p></div><span class="small-label">RAW INPUT</span></div><dl class="detail-list"><div><dt>接收到的鼠标报告包</dt><dd id="packet-count">—</dd></div><div><dt>报告读取错误</dt><dd id="read-errors">—</dd></div><div><dt>设备来源</dt><dd>按句柄证据分类</dd></div><div><dt>键盘 / 网络模块</dt><dd class="muted">尚未集成</dd></div></dl><div id="capture-note" class="inline-note">等待采集报告。</div></article>
+    <article class="panel"><div class="panel-heading"><div><h2>验证与性能</h2><p>聚合器重放不代表真实硬件采集</p></div><span class="small-label">BENCHMARK</span></div><dl class="detail-list"><div><dt>最近一次重放</dt><dd id="replay-status">暂无报告</dd></div><div><dt>测试时长</dt><dd id="replay-duration">—</dd></div><div><dt>处理样本</dt><dd id="replay-operations">—</dd></div><div><dt>私有内存变化</dt><dd id="replay-memory">—</dd></div></dl><div class="inline-note neutral">真实设备丢失率、端到端延迟和长期运行仍待验证。</div></article></section>
+    <section class="next-step"><div class="terminal-icon">›_</div><div><h2>开始一次新的采集验证</h2><p>在项目目录运行下方命令，操作鼠标；30 秒结束后刷新本页查看结果。</p><code>.\build\llvm-release\mouse_probe.exe --capture --seconds 30</code></div><button id="copy-command" class="button secondary" type="button">复制命令</button></section>
+    <footer><span>PulseTrace · 验证阶段</span><span>报告无数据时显示空状态，不使用模拟使用记录。</span></footer>
+  </main>
+</body>
+</html>
