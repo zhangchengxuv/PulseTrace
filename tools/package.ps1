@@ -2,9 +2,9 @@ param([string]$BuildDirectory='build\llvm-release')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root $BuildDirectory
-$release=Join-Path $root 'build\release\PulseTrace-0.2.0-rc2-win-x64'
+$release=Join-Path $root 'build\release\PulseTrace-0.2.0-rc3-win-x64'
 $stage=Join-Path $root ('build\package-staging-'+[Guid]::NewGuid().ToString('N'))
-$zip=Join-Path (Split-Path $release -Parent) 'PulseTrace-0.2.0-rc2-win-x64.zip'
+$zip=Join-Path (Split-Path $release -Parent) 'PulseTrace-0.2.0-rc3-win-x64.zip'
 if((Get-Process PulseTrace -ErrorAction SilentlyContinue) | Where-Object {$_.Path -eq (Join-Path $release 'PulseTrace.exe')}){throw 'Exit this release copy before packaging.'}
 New-Item -ItemType Directory -Force -Path $stage,(Join-Path $stage 'web'),(Join-Path $stage 'licenses'),(Join-Path $stage 'tools\diagnostics'),(Join-Path $stage 'docs') | Out-Null
 try {
@@ -12,7 +12,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'web\desktop') -Destination (Join-Path $stage 'web') -Recurse
     Copy-Item -LiteralPath (Join-Path $root 'docs\desktop-guide.md') -Destination (Join-Path $stage 'README.md')
     Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination $stage
-    foreach($name in @('development-status.md','desktop-validation-results.md','ui-design.md','ui-validation-results.md','ansi-arctic-network-validation.md','monthly-traffic-and-caption.md')){
+    foreach($name in @('development-status.md','desktop-validation-results.md','ui-design.md','ui-validation-results.md','ansi-arctic-network-validation.md','monthly-traffic-and-caption.md','immersive-dashboard-validation.md')){
         Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs')
     }
     Copy-Item -LiteralPath (Join-Path $root 'tools\install.ps1') -Destination (Join-Path $stage 'tools')

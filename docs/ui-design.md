@@ -1,5 +1,7 @@
 # 蓝色主题与科学热力图
 
+> RC3 已更新为沉浸式 Dashboard、1480px 内容上限及原生 DWM 标题栏。当前规范与实测以 [沉浸式界面记录](immersive-dashboard-validation.md) 为准，以下保留早期设计背景。
+
 > 本文保留上一轮蓝色主题设计。当前默认已改为 ANSI 104 + Arctic（OKLab 连续插值、平方根归一化），网络接入真实 ETW NDIS 观测；以 [最新设计与验收记录](ansi-arctic-network-validation.md) 为准。
 
 当前正式入口是 `web/desktop/index.html`，加载 `colormaps.js`、`visualization.js`、`product.js`。根目录旧 `web/index.html` 不参与桌面运行；未引用的桌面验证 `app.js` 已清理。NativeMessageBridge 和本地虚拟来源继续使用，桌面程序不启动 HTTP 服务；旧 HTTP 工具改为显式选项 `PULSETRACE_BUILD_HTTP_REPORT=ON`。

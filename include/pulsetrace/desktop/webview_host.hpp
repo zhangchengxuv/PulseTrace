@@ -89,7 +89,9 @@ class WebViewHost {
     void close();
     void release_closed_environment();
     void resize();
-    void set_visible(bool visible){if(controller_)controller_->put_IsVisible(visible?TRUE:FALSE);}
+    void set_visible(bool visible);
+    void set_background(COLORREF color);
+    void verify_hidden_ui(std::function<void(bool)> complete);
     void post(const Json &json);
     void capture_preview(const std::filesystem::path &file, std::function<void(bool)> complete);
     bool crash_browser_for_test();
@@ -115,6 +117,7 @@ class WebViewHost {
     std::uint64_t generation_{};
     bool creating_{}, ready_{}, closing_{}, browser_exited_{true};
     UINT32 browser_pid_{};
+    COLORREF background_{RGB(7,19,33)};
 };
 std::string narrow(const std::wstring &value);
 std::wstring widen(const std::string &value);

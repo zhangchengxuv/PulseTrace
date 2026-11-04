@@ -62,6 +62,7 @@ class DesktopApplication {
     void command(Json request);
     void diagnostic(const std::string &text);
     void save_window();
+    Json appearance() const{return {{"transparency",caption_.transparency()},{"reduced_motion",caption_.reduced_motion()},{"active",caption_.active()},{"dark",caption_.dark()}};}
     HWND window_{};
     HINSTANCE instance_{};
     std::filesystem::path data_, exe_;
@@ -78,6 +79,7 @@ class DesktopApplication {
     std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{};
     std::string diagnostic_, last_tray_state_, test_page_;
     UINT taskbar_message_{};
+    bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{};
     NOTIFYICONDATAW nid_{};
     std::ofstream log_;
 };
@@ -174,6 +176,18 @@ void DesktopApplication::command(Json request) {
     if (exiting_)
         return;
     validate_request(request);
+    if(request["type"]=="selftest_snapshot"){
+        if(!selftest_)throw std::runtime_error("Selftest capture is disabled in normal operation");
+        const auto phase=request["params"]["phase"].get<std::string>();
+        if(request["params"].contains("metrics")){
+            std::ofstream out(data_/"logs"/"scroll-metrics.json");out<<request["params"]["metrics"].dump(2);
+            if(!out)throw std::runtime_error("Cannot save selftest metrics");
+        }
+        const auto id=request["request_id"];const auto generation=web_->generation();
+        web_->capture_preview(data_/"logs"/("selftest-toolbar-"+phase+".png"),[this,id,generation](bool ok){
+            if(web_&&web_->generation()==generation)web_->post({{"type","response"},{"request_id",id},{"ok",ok},{"data",{{"captured",ok}}},{"error",{{"message","Selftest capture failed"}}}});
+        });return;
+    }
     if (request["type"] == "exit") {
         quit();
         return;
@@ -267,6 +281,9 @@ void DesktopApplication::quit() {
 LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     LRESULT caption_result{};
     if(caption_.message(m,w,l,caption_result))return caption_result;
+    if(web_&&(m==WM_ACTIVATE||m==WM_SETTINGCHANGE)){
+        web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
+    }
     if (taskbar_message_ && m == taskbar_message_) {
         tray();
         return 0;
@@ -283,7 +300,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: {
         auto *info = reinterpret_cast<MINMAXINFO *>(l);
         UINT dpi = GetDpiForWindow(h);
-        info->ptMinTrackSize = {MulDiv(800, dpi, 96), MulDiv(600, dpi, 96)};
+        info->ptMinTrackSize = {MulDiv(400, dpi, 96), MulDiv(400, dpi, 96)};
         return 0;
     }
     case WM_DPICHANGED: {
@@ -321,6 +338,8 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case response_message: {
         std::unique_ptr<Response> response(reinterpret_cast<Response *>(l));
+        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config"))
+            response->json["data"]["appearance"]=appearance();
         if (web_ && response->generation == web_->generation())
             web_->post(response->json);
         return 0;
@@ -378,6 +397,9 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (exiting_)
             return 0;
         caption_.theme(core_->status()["config"].value("theme","system"));
+        if(web_&&caption_.consume_changed()){
+            web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
+        }
         if (core_seconds_ > 0 &&
             GetTickCount64() - start_tick_ >= static_cast<std::uint64_t>(core_seconds_) * 1000) {
             diagnostic("Core-only timed run completed");
@@ -407,6 +429,10 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 return 0;
             }
             if (web_->ready() && self_stage_ == 0 && ping_count_ >= (ready_count_ + 1) * 2) {
+                if(!minimize_test_done_){
+                    minimize_test_done_=true;self_stage_=2;stage_tick_=now;
+                    SendMessageW(window_,WM_SYSCOMMAND,SC_MINIMIZE,0);return 0;
+                }
                 if (crash_test_ && !crash_done_) {
                     crash_done_ = true;
                     ping_count_ = 0;
@@ -417,13 +443,12 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 }
                 if (!preview_started_) {
                     if(!IsZoomed(window_)){
-                        RECT client{};GetClientRect(window_,&client);POINT edge{client.right-2,caption_.height()+20};
-                        if(ChildWindowFromPointEx(window_,edge,CWP_SKIPINVISIBLE|CWP_SKIPDISABLED|CWP_SKIPTRANSPARENT)!=window_)
-                            throw std::runtime_error("WebView covered native resize edge");
-                        ClientToScreen(window_,&edge);
+                        RECT outer{},client{};GetWindowRect(window_,&outer);GetClientRect(window_,&client);
+                        POINT origin{0,0};ClientToScreen(window_,&origin);
+                        POINT edge{outer.right-2,origin.y+client.bottom/2};
                         if(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(edge.x,edge.y))!=HTRIGHT)
                             throw std::runtime_error("Native resize edge hit-test failed");
-                        diagnostic("Native resize strip remains outside WebView child bounds");
+                        diagnostic("System resize frame hit-test passed; native non-client area retained");
                     }
                     preview_started_ = true;
                     web_->capture_preview(data_ / "logs" / ("selftest-" + test_page_ + ".png"),
@@ -453,12 +478,19 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     return 0;
                 }
                 if(core_->status()["config"].value("close_to_tray",true)){
-                    SendMessageW(window_,WM_COMMAND,712,0);
+                    SendMessageW(window_,WM_SYSCOMMAND,SC_CLOSE,0);
                     if(IsWindowVisible(window_))throw std::runtime_error("Caption close did not hide to tray");
                     diagnostic("Caption close button: hidden to tray; monitoring core retained");
                 }else hide();
                 self_stage_ = 1;
                 stage_tick_ = now;
+            } else if(self_stage_==2){
+                if(!hidden_check_started_&&now-stage_tick_>250){hidden_check_started_=true;
+                    web_->verify_hidden_ui([this](bool ok){hidden_ui_ok_=ok;hidden_check_done_=true;diagnostic(ok?"Minimized UI: native visibility false and refresh timer stopped":"SELFTEST FAIL: minimized UI refresh did not stop");});}
+                if(hidden_check_done_&&now-stage_tick_>1000){
+                    if(!hidden_ui_ok_){quit();return 0;}
+                    SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);self_stage_=0;
+                }else if(now-stage_tick_>5000){diagnostic("SELFTEST FAIL: hidden UI verification timed out");quit();}
             } else if (self_stage_ == 1 && now - stage_tick_ > 1500 && !web_->closing()) {
                 diagnostic("Selftest: core heartbeat while UI closed=" +
                            core_->status().value("heartbeat_ms", Json(0)).dump());
@@ -561,6 +593,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     core_->start();
     WNDCLASSW wc{};
     wc.hInstance = instance;
+    wc.style=CS_DBLCLKS;
     wc.lpfnWndProc = proc;
     wc.lpszClassName = L"PulseTrace.Desktop";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -589,8 +622,8 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     if (selftest_ && options.test_width && options.test_height) {
         const auto dpi = GetDpiForSystem();
         RECT client{0, 0, MulDiv(options.test_width, dpi, 96), MulDiv(options.test_height, dpi, 96)};
-        width = client.right - client.left+2*MulDiv(CaptionBar::resize_border_dip,dpi,96);
-        height = client.bottom - client.top+MulDiv(CaptionBar::height_dip+CaptionBar::resize_border_dip,dpi,96);
+        AdjustWindowRectExForDpi(&client,WS_OVERLAPPEDWINDOW,FALSE,0,dpi);
+        width=client.right-client.left;height=client.bottom-client.top;
         maximized_ = false;
     }
     window_ = CreateWindowExW(0, wc.lpszClassName, L"PulseTrace", WS_OVERLAPPEDWINDOW, x, y, width, height,
@@ -600,11 +633,20 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     caption_.create(window_,instance_);
     caption_.theme(core_->status()["config"].value("theme","system"));
     if(selftest_){
-        POINT p{100,caption_.height()/2};ClientToScreen(window_,&p);
+        ShowWindow(window_,SW_SHOWNOACTIVATE);
+        POINT p=caption_.caption_point();
         if(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(p.x,p.y))!=HTCAPTION)throw std::runtime_error("Caption drag hit-test failed");
-        SendMessageW(window_,WM_COMMAND,711,0);if(!IsZoomed(window_))throw std::runtime_error("Caption maximize failed");
-        SendMessageW(window_,WM_COMMAND,711,0);if(IsZoomed(window_))throw std::runtime_error("Caption restore failed");
-        SendMessageW(window_,WM_COMMAND,710,0);if(!IsIconic(window_))throw std::runtime_error("Caption minimize failed");
+        const auto maximize=caption_.maximize_point();
+        diagnostic("Native maximize point="+std::to_string(maximize.x)+","+std::to_string(maximize.y)+" hit="+std::to_string(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(maximize.x,maximize.y))));
+        if(SendMessageW(window_,WM_NCHITTEST,0,MAKELPARAM(maximize.x,maximize.y))!=HTMAXBUTTON)
+            throw std::runtime_error("Native maximize hit-test did not return HTMAXBUTTON");
+        diagnostic("Native HTMAXBUTTON verified; system Snap Layout handling retained");
+        SendMessageW(window_,WM_SYSCOMMAND,SC_MAXIMIZE,0);if(!IsZoomed(window_))throw std::runtime_error("Caption maximize failed");
+        SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);if(IsZoomed(window_))throw std::runtime_error("Caption restore failed");
+        SendMessageW(window_,WM_NCLBUTTONDBLCLK,HTCAPTION,MAKELPARAM(p.x,p.y));
+        if(!IsZoomed(window_))throw std::runtime_error("Native caption double-click failed");
+        SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);
+        SendMessageW(window_,WM_SYSCOMMAND,SC_MINIMIZE,0);if(!IsIconic(window_))throw std::runtime_error("Caption minimize failed");
         SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);
         diagnostic("Caption native minimize/maximize/restore and drag hit-test passed");
     }
@@ -635,6 +677,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         },
         [this](std::string message) { diagnostic(message); });
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
+    web_->set_background(caption_.background());
     tray();
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);
     if (!options.background || !tray_added_)
@@ -716,6 +759,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
         DesktopApplication app;
         result = app.run(instance, options);
     } catch (const std::exception &e) {
+        if(options.selftest){
+            const auto directory=options.data.empty()?executable_data_directory():options.data;
+            std::ofstream out(directory/"logs"/"desktop.log",std::ios::app);out<<"SELFTEST FAIL: "<<e.what()<<'\n';
+        }
         if (!options.selftest)
             MessageBoxW(nullptr, widen(e.what()).c_str(), L"PulseTrace 启动失败", MB_OK | MB_ICONERROR);
     }

@@ -206,6 +206,9 @@ int main() {
         }
         require(parse_message(R"({"type":"ping","request_id":1,"params":{}})")["type"] == "ping",
                 "JSON bridge valid envelope");
+        rejects([] {parse_message(R"({"type":"selftest_snapshot","request_id":1,"params":{"phase":"../data"}})");},"selftest snapshot path injection rejected");
+        rejects([] {parse_message(R"({"type":"selftest_snapshot","request_id":1,"params":{"phase":"top","metrics":{"path":1}}})");},"selftest metrics reject unknown fields");
+        rejects([] {parse_message(R"({"type":"selftest_snapshot","request_id":1,"params":{"phase":"top","path":"other"}})");},"selftest snapshot filename is not frontend-controlled");
         rejects([] { parse_message(R"({"type":"ping","type":"exit","request_id":1,"params":{}})"); },
                 "duplicate message fields rejected");
         rejects([] { parse_message(R"({"type":"system_command","request_id":1,"params":{}})"); },

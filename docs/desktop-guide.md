@@ -1,4 +1,6 @@
-# PulseTrace 0.2.0-rc2
+# PulseTrace 0.2.0-rc3
+
+RC3：同色原生标题栏、滚动模糊工具栏和六卡片 Dashboard。标题栏按钮由 Windows 管理，关闭仍默认进入托盘。监测时长表示实际覆盖时长；IP 占比只代表已接收的观测样本。详见 [本轮实测记录](docs/immersive-dashboard-validation.md)。
 
 新增：融合主题的原生标题栏、六项月度流量累计与独立的自然月 SQLite / JSON 归档。分钟明细保留天数不删除月度集合。见 [月度存储和标题栏说明](docs/monthly-traffic-and-caption.md)。
 

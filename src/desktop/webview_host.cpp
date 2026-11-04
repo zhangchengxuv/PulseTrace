@@ -143,12 +143,23 @@ void WebViewHost::open() {
                             return S_OK;
                         }
                         controller_.set(controller);
+                        set_background(background_);
                         const auto core_result=controller->get_CoreWebView2(view_.put());
                         if(FAILED(core_result)||!view_){fail(core_result,"Get CoreWebView2");return S_OK;}
                         try{configure();resize();}catch(const std::exception& e){diagnostic_(e.what());fail(E_FAIL,"Configure WebView2");}
                         return S_OK;
                     });
-            const auto result = env->CreateCoreWebView2Controller(window_, controller_complete);
+            HRESULT result=E_NOINTERFACE;
+            ComPtr<ICoreWebView2Environment10> env10;
+            ComPtr<ICoreWebView2ControllerOptions> options;
+            if(SUCCEEDED(env->QueryInterface(__uuidof(ICoreWebView2Environment10),reinterpret_cast<void **>(env10.put())))&&
+               SUCCEEDED(env10->CreateCoreWebView2ControllerOptions(options.put()))){
+                ComPtr<ICoreWebView2ControllerOptions3> color;
+                if(SUCCEEDED(options->QueryInterface(__uuidof(ICoreWebView2ControllerOptions3),reinterpret_cast<void **>(color.put()))))
+                    color->put_DefaultBackgroundColor({255,GetRValue(background_),GetGValue(background_),GetBValue(background_)});
+                result=env10->CreateCoreWebView2ControllerWithOptions(window_,options.get(),controller_complete);
+            }
+            if(FAILED(result))result=env->CreateCoreWebView2Controller(window_,controller_complete);
             controller_complete->Release();
             if (FAILED(result))
                 fail(result, "Start controller creation");
@@ -297,6 +308,30 @@ void WebViewHost::resize() {
         bounds.left+=edge;bounds.right=std::max(bounds.left,bounds.right-edge);bounds.bottom=std::max(bounds.top,bounds.bottom-edge);
         controller_->put_Bounds(bounds);
     }
+}
+void WebViewHost::set_background(COLORREF color){
+    background_=color;
+    if(controller_){ComPtr<ICoreWebView2Controller2> c;
+        if(SUCCEEDED(controller_->QueryInterface(__uuidof(ICoreWebView2Controller2),reinterpret_cast<void **>(c.put()))))
+            c->put_DefaultBackgroundColor({255,GetRValue(color),GetGValue(color),GetBValue(color)});
+    }
+}
+void WebViewHost::set_visible(bool visible){
+    post({{"type","visibility"},{"visible",visible}});
+    if(controller_)controller_->put_IsVisible(visible?TRUE:FALSE);
+}
+void WebViewHost::verify_hidden_ui(std::function<void(bool)> complete){
+    if(!view_){complete(false);return;}
+    auto alive=alive_;const auto generation=generation_;
+    auto *cb=new ComCallback<ICoreWebView2ExecuteScriptCompletedHandler,HRESULT,LPCWSTR>(
+        [this,alive,generation,complete](HRESULT hr,LPCWSTR text){
+            if(!*alive||generation!=generation_)return S_OK;
+            bool ok=false;
+            try{const auto value=Json::parse(narrow(text?text:L"null"));ok=SUCCEEDED(hr)&&value.value("hidden",false)&&value.value("timer",-1)==0;}catch(...){}
+            complete(ok);return S_OK;
+        });
+    const auto hr=view_->ExecuteScript(L"({hidden: !nativeVisible, timer: refreshTimer})",cb);
+    if(FAILED(hr))cb->Invoke(hr,L"null");cb->Release();
 }
 void WebViewHost::post(const Json &json) {
     if (view_) {

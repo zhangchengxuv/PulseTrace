@@ -1,6 +1,23 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');require(path.join(root,'web/desktop/colormaps.js'));require(path.join(root,'web/desktop/visualization.js'));
 const v=PulseViz;let checks=0;function check(ok,message){checks++;assert.ok(ok,message);}
+require(path.join(root,'web/desktop/dashboard-data.js'));const dash=PulseDashboard;
+const r=(minute,module,metric,value)=>({minute,module,metric,value});
+check(dash.inputs([]).length===0,'empty dashboard does not invent bins');
+let bin=dash.inputs([r(1,'keyboard','30',3)],1)[0];check(bin.keyboard===3&&bin.mouse===null,'unknown mouse interval stays missing');
+bin=dash.inputs([r(1,'coverage','observed_ms',1000)],1)[0];check(bin.keyboard===0&&bin.mouse===0,'observed idle interval is real zero');
+const inputRows=Array.from({length:3000},(_,i)=>r(i,'keyboard','30',2));const inputBins=dash.inputs(inputRows,1);
+check(inputBins.length<=96&&inputBins.reduce((n,b)=>n+b.keyboard,0)===6000,'dashboard bar coarsening preserves totals and point bound');
+const shiftedBins=dash.inputs(inputRows.map(row=>({...row,minute:row.minute+31})),1);
+check(shiftedBins.length<=96&&shiftedBins.reduce((n,b)=>n+b.keyboard,0)===6000,'unaligned range still respects point bound and totals');
+check(dash.distribution([0,0])===null&&dash.distribution([1,3])[1]===.75,'ratio requires real denominator');
+const sample={accepted:1,source:'ndis',basis:'ip',ipv4_up:10,ipv4_down:20,ipv6_up:20,ipv6_down:10,quality:'incomplete_observation'};
+check(dash.protocol([sample]).ratio[0]===.5&&dash.protocol([sample]).quality==='不完整观测','observed ratio retains quality');
+check(!dash.protocol([sample,{...sample,basis:'other'}]).has,'incomparable protocol bases are not summed');
+check(!dash.protocol([{...sample,accepted:0}]).has,'rejected-only samples are not a valid zero');
+const monitored=(ms,presses)=>[r(1,'coverage','observed_ms',ms),r(1,'keyboard','30',presses)];
+check(dash.comparison(monitored(60000,12),monitored(60000,10))===.2,'comparison uses actual equivalent observation periods');
+check(dash.comparison(monitored(30000,12),monitored(60000,10))===null&&dash.comparison(monitored(60000,12),[])===null,'incomparable coverage suppresses change percentage');
 require(path.join(root,'web/desktop/keyboard-layout.js'));
 const keys=PulseKeyboard.keys;
 check(keys.length===104,'ANSI exactly 104 keys');check(new Set(keys.map(k=>k.id)).size===104,'ANSI unique Raw Input IDs');
@@ -36,6 +53,6 @@ const results=[];
 check(!/\?{3,}|\uFFFD/.test(fs.readFileSync(path.join(root,'web/desktop/product.js'),'utf8')),'frontend source contains no corrupted translation text');
 for(const theme of ['light','dark']){const vars={...parse(base),...(theme==='dark'?parse(dark):{})};const rgb=key=>{let val=vars[key]||key;while(val.startsWith('var('))val=vars[val.slice(4,-1)];return val.replace('#','').match(/../g).map(h=>parseInt(h,16));};
  for(const fg of ['--text','--muted'])for(const bg of ['--bg','--panel','--sidebar','--hover','--accent-soft']){const ratio=v.contrast(rgb(fg),rgb(bg));check(ratio>=4.5,`${theme} ${fg}/${bg} contrast ${ratio}`);results.push({theme,fg,bg,ratio});}
- for(const [fg,bg,min]of [['--accent','--accent-soft',4.5],['--button-text','--accent',4.5],['--bg','--error',4.5],['--chart-upload','--panel',3],['--chart-download','--panel',3],['--protocol-ipv4','--panel',3],['--protocol-ipv6','--panel',3],['--control-border','--panel',3]]){const ratio=v.contrast(rgb(fg),rgb(bg));check(ratio>=min,`${theme} ${fg}/${bg} contrast ${ratio}`);results.push({theme,fg,bg,ratio});}}
+ for(const [fg,bg,min]of [['--accent','--accent-soft',4.5],['--button-text','--accent',4.5],['--bg','--error',4.5],['--chart-upload','--panel',3],['--chart-download','--panel',3],['--protocol-ipv4','--panel',3],['--protocol-ipv6','--panel',3],['--control-border','--panel',3],...['--data-keyboard','--data-mouse','--data-wheel','--data-time','--input-mouse','--eyebrow'].map(k=>[k,'--panel',4.5])]){const ratio=v.contrast(rgb(fg),rgb(bg));check(ratio>=min,`${theme} ${fg}/${bg} contrast ${ratio}`);results.push({theme,fg,bg,ratio});}}
 console.log(`${checks} frontend checks passed. Minimum text/interaction contrast: ${Math.min(...results.filter(r=>!r.fg.startsWith('--chart')&&!r.fg.startsWith('--protocol')&&r.fg!=='--control-border').map(r=>r.ratio)).toFixed(2)}:1`);
 if(process.argv[2])fs.writeFileSync(process.argv[2],JSON.stringify({checks,contrast:results},null,2));

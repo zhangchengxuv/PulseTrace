@@ -2,6 +2,7 @@
 #include <set>
 #include <stdexcept>
 #include <vector>
+#include <cmath>
 namespace pulsetrace {
 std::wstring quote_windows_argument(const std::wstring &argument) {
     std::wstring result = L"\"";
@@ -49,6 +50,17 @@ void validate_request(const Json &r) {
     const auto &p = r["params"];
     std::set<std::string> allowed;
     if (type == "ping" || type == "get_status" || type == "exit" || type == "hide" || type == "open_monthly_folder") {
+    } else if (type == "selftest_snapshot") {
+        allowed={"phase","metrics"};
+        const auto phase=p.value("phase",std::string());
+        if(phase!="top"&&phase!="scrolled"&&phase!="opaque")throw std::invalid_argument("Invalid selftest phase");
+        if(p.contains("metrics")){
+            const std::set<std::string> keys={"frames","mean_ms","p95_ms","fps","scroll_px","toolbar_top","blur_enabled","opacity_fallback"};
+            if(!p["metrics"].is_object()||p["metrics"].size()>keys.size())throw std::invalid_argument("Invalid selftest metrics");
+            for(auto it=p["metrics"].begin();it!=p["metrics"].end();++it)
+                if(!keys.contains(it.key())||!it->is_number()||!std::isfinite(it->get<double>())||it->get<double>()< -10000||it->get<double>()>1e9)
+                    throw std::invalid_argument("Invalid selftest metric");
+        }
     } else if (type == "get_monthly_traffic") {
         allowed = {"month"};
         if (p.contains("month")) {

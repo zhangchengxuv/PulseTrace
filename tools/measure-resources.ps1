@@ -2,13 +2,15 @@ param(
     [string]$Executable=(Join-Path (Split-Path -Parent $PSScriptRoot) 'build\llvm-release\PulseTrace.exe'),
     [int]$Cycles=2,
     [string]$DataDirectory='',
-    [ValidateSet('UI','Core')][string]$Mode='UI',
+    [ValidateSet('UI','Core','Window')][string]$Mode='UI',
     [ValidateRange(5,86400)][int]$CoreSeconds=30
 )
 $ErrorActionPreference='Stop'
 $exe=(Resolve-Path -LiteralPath $Executable).Path
 $directory=Split-Path -Parent $exe
-$arguments=if($Mode -eq 'UI'){@('--self-test','--cycles',([string]$Cycles))}else{@('--background','--core-seconds',([string]$CoreSeconds))}
+$arguments=if($Mode -eq 'UI'){@('--self-test','--cycles',([string]$Cycles))}elseif($Mode -eq 'Core'){@('--background','--core-seconds',([string]$CoreSeconds))}else{@('--core-seconds',([string]$CoreSeconds),'--self-test-early-close')}
+# --core-seconds implies background in older releases. The existing early-close/reopen
+# diagnostic opens the normal page on the first timer tick, without --self-test work.
 if($DataDirectory){$arguments+=@('--data-dir',('"'+[IO.Path]::GetFullPath($DataDirectory)+'"'))}
 $process=Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
 $started=[DateTime]::UtcNow
@@ -41,3 +43,4 @@ $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $out -Encoding UTF8
 Write-Output "Resource report: $out"
 Write-Output "ExitCode=$($process.ExitCode); Remaining observed child processes=$($remaining.Count)"
 if($process.ExitCode -ne 0 -or $remaining.Count -ne 0){throw 'Lifecycle test failed or child processes remain; inspect report'}
+if($Mode -eq 'Window' -and $known.Count -eq 0){throw 'Window measurement did not observe any WebView2 child process'}

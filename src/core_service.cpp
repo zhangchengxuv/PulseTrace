@@ -42,7 +42,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
               {"storage_error", ""},       {"network", Json::object()},
               {"session", session_},       {"last_flush_ms", 0},
               {"mouse_clicks_session", 0}, {"keyboard_presses_session", 0},
-              {"version", "0.2.0-rc2"}};
+              {"version", "0.2.0-rc3"}};
 }
 CoreService::~CoreService() { stop(); }
 void CoreService::start() {

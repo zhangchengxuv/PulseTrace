@@ -1,4 +1,4 @@
-param([string]$Zip='build\release\PulseTrace-0.2.0-rc2-win-x64.zip')
+param([string]$Zip='build\release\PulseTrace-0.2.0-rc3-win-x64.zip')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $zipPath=(Resolve-Path -LiteralPath (Join-Path $root $Zip)).Path
@@ -30,8 +30,8 @@ try {
     $p=Start-Process -FilePath (Join-Path $installed 'PulseTrace.exe') -ArgumentList '--self-test','--self-test-page','settings','--self-test-size','1024x768' -WindowStyle Hidden -Wait -PassThru
     if($p.ExitCode -ne 0){throw "Installed application self-test failed: $($p.ExitCode)"}
     & (Join-Path $PSScriptRoot 'test-icons.ps1') -Executable (Join-Path $extracted 'PulseTrace.exe')
-    $report=[ordered]@{Version='0.2.0-rc2';RecordedUtc=[DateTime]::UtcNow.ToString('o');ManifestFiles=$count;ZipSha256=(Get-FileHash -LiteralPath $zipPath).Hash;ExeSha256=(Get-FileHash -LiteralPath (Join-Path $extracted 'PulseTrace.exe')).Hash;NoRuntimeData=$true;ObsoletePrototypeAbsent=$true;ExtractedSelftestExit=0;InstalledSelftestExit=0;InstallPreservesDataAndConfiguration=$true;IconSizes=@(16,24,32,48,64,128,256)}
-    $report | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $root 'build\release\package-validation.json') -Encoding UTF8
+    $report=[ordered]@{Version='0.2.0-rc3';RecordedUtc=[DateTime]::UtcNow.ToString('o');ManifestFiles=$count;ZipSha256=(Get-FileHash -LiteralPath $zipPath).Hash;ExeSha256=(Get-FileHash -LiteralPath (Join-Path $extracted 'PulseTrace.exe')).Hash;NoRuntimeData=$true;ObsoletePrototypeAbsent=$true;ExtractedSelftestExit=0;InstalledSelftestExit=0;InstallPreservesDataAndConfiguration=$true;IconSizes=@(16,24,32,48,64,128,256)}
+    $report | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $root 'build\release\package-validation-rc3.json') -Encoding UTF8
     $report | ConvertTo-Json -Depth 4
     $passed=$true
 } finally {

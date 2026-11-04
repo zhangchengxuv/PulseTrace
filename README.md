@@ -1,6 +1,8 @@
-# PulseTrace 0.2.0-rc2
+# PulseTrace 0.2.0-rc3
 
-[下载 Windows x64 候选版](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.2.0-rc2)
+[下载 Windows x64 候选版 RC3](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.2.0-rc3)。本地包：`build/release/PulseTrace-0.2.0-rc3-win-x64.zip`。保留上一版 RC2，更新时安装脚本保留 `data`。
+
+RC3：系统原生同色标题栏、Windows 11 圆角请求、滚动模糊工具栏和六卡片 Dashboard。保留 ANSI 104 / Arctic、月度归档和全部采集口径；[改动与实测记录](docs/immersive-dashboard-validation.md)。
 
 新增：融合主题的原生标题栏、六项月度流量累计与独立的自然月 SQLite / JSON 归档。分钟明细保留天数不删除月度集合。见 [月度存储和标题栏说明](docs/monthly-traffic-and-caption.md)。
 
