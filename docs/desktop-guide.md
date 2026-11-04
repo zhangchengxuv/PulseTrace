@@ -54,7 +54,7 @@ data/
 .\PulseTrace.exe --data-dir "D:\PulseTraceData"
 ```
 
-设置页显示实际数据目录，支持范围 CSV 导出、保留期与持久化周期。导出同时生成普通聚合 CSV 和带 source/basis/quality/reference_validated 的 IP 观测 CSV，必须连同质量字段分析。清空统计必须先暂停并输入 `DELETE`；不会删除配置或系统 Runtime。备份前完全退出，再复制 data/monitor.db 和 data/network-months/；不要在运行中仅拷贝主数据库忽略 WAL。
+设置页提供月度数据文件夹入口，支持范围 CSV 导出、保留期与持久化周期。导出同时生成普通聚合 CSV 和带 source/basis/quality/reference_validated 的 IP 观测 CSV，必须连同质量字段分析。清空统计必须先暂停并输入 `DELETE`；不会删除配置或系统 Runtime。备份前完全退出，再复制 data/monitor.db 和 data/network-months/；不要在运行中仅拷贝主数据库忽略 WAL。
 
 默认每 30 秒批量持久化，可设置为 5–300 秒；正常退出做最终提交。突然断电/强制终止可能丢失最近未提交批次，但已提交事务保持一致。磁盘忙或写失败时暂停采集并保留待重试聚合，退避重试，不在输入回调写数据库；失败退出会要求明确选择是否丢弃未写数据。严重数据库异常保留原文件并显示诊断，不自动覆盖数据库。
 
