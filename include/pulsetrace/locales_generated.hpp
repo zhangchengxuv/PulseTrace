@@ -126,5 +126,7 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"ranking.attribution_unknown",L"归属未知",L"Unknown attribution"},
 {"ranking.attribution_mihomo_metadata_host",L"Mihomo 连接报告的域名；不合并 CDN",L"Mihomo connection-reported domain; no CDN regrouping"},
 {"ranking.attribution_capacity_overflow",L"容量溢出集合",L"Capacity overflow bucket"},
-{"ranking.unknown_family",L"未知协议族",L"Unknown IP family"}
+{"ranking.unknown_family",L"未知协议族",L"Unknown IP family"},
+{"theme.pearl",L"Pearl Mist（珍珠晨雾）",L"Pearl Mist"},
+{"theme.ocean",L"Deep Ocean（深海蓝）",L"Deep Ocean"}
 };}

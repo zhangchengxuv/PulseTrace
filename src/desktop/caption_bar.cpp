@@ -19,7 +19,7 @@ void CaptionBar::apply_attributes(){
     DwmSetWindowAttribute(window_,static_cast<DWMWINDOWATTRIBUTE>(20),&dark,sizeof(dark));
     const DWORD rounded=2; // DWMWCP_ROUND; unsupported versions return E_INVALIDARG.
     DwmSetWindowAttribute(window_,static_cast<DWMWINDOWATTRIBUTE>(33),&rounded,sizeof(rounded));
-    const COLORREF bg=background(),fg=high_contrast_?GetSysColor(COLOR_WINDOWTEXT):active_?foreground():dark_?RGB(151,177,199):RGB(65,91,112);
+    const COLORREF bg=background(),fg=high_contrast_?GetSysColor(COLOR_WINDOWTEXT):active_?foreground():dark_?RGB(151,177,199):RGB(98,104,129);
     DwmSetWindowAttribute(window_,static_cast<DWMWINDOWATTRIBUTE>(35),&bg,sizeof(bg));
     DwmSetWindowAttribute(window_,static_cast<DWMWINDOWATTRIBUTE>(36),&fg,sizeof(fg));
     const COLORREF border=high_contrast_?GetSysColor(COLOR_WINDOWFRAME):0xFFFFFFFE;

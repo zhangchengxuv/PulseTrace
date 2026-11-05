@@ -451,5 +451,7 @@
   "ranking.attribution_unknown": "归属未知",
   "ranking.attribution_mihomo_metadata_host": "Mihomo 连接报告的域名；不合并 CDN",
   "ranking.attribution_capacity_overflow": "容量溢出集合",
-  "ranking.unknown_family": "未知协议族"
+  "ranking.unknown_family": "未知协议族",
+  "theme.pearl": "Pearl Mist（珍珠晨雾）",
+  "theme.ocean": "Deep Ocean（深海蓝）"
 }

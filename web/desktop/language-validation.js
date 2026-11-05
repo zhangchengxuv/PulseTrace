@@ -1,4 +1,14 @@
 'use strict';
+async function validateThemeState(){
+ const before=await rpc('get_status'),original=before.config.theme;
+ try{for(const theme of ['light','dark','system']){
+  await rpc('set_config',{theme});applyTheme(theme);
+  const after=await rpc('get_status');
+  if(after.config.theme!==theme||after.session!==before.session||after.monitoring!==before.monitoring||after.input_ready!==before.input_ready)throw new Error('Theme switching changed monitoring');
+  const expected=theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):theme;
+  if(document.documentElement.dataset.theme!==expected)throw new Error('Theme did not apply');
+ }}finally{await rpc('set_config',{theme:original});applyTheme(original);}
+}
 async function validateLanguageState(){
  const before=await rpc('get_status'),original=before.config.language;
  try{for(const language of ['en-US','zh-CN']){await rpc('set_config',{language});const after=await rpc('get_status');if(after.effective_language!==language||after.session!==before.session||after.monitoring!==before.monitoring||after.input_ready!==before.input_ready)throw new Error('Language switching restarted or changed monitoring');}}

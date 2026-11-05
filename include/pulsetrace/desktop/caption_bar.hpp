@@ -24,8 +24,8 @@ class CaptionBar {
     bool dark() const{return dark_;}
     bool capture_frame(const std::filesystem::path &page, const std::filesystem::path &output);
     const std::string &capture_diagnostic() const{return capture_diagnostic_;}
-    COLORREF background() const{return high_contrast_?GetSysColor(COLOR_WINDOW):dark_?(active_?RGB(7,19,33):RGB(9,22,37)):RGB(212,233,247);}
-    COLORREF foreground() const{return high_contrast_?GetSysColor(COLOR_WINDOWTEXT):dark_?RGB(239,247,252):RGB(10,38,57);}
+    COLORREF background() const{return high_contrast_?GetSysColor(COLOR_WINDOW):dark_?(active_?RGB(7,19,33):RGB(9,22,37)):RGB(248,247,252);}
+    COLORREF foreground() const{return high_contrast_?GetSysColor(COLOR_WINDOWTEXT):dark_?RGB(239,247,252):RGB(48,53,79);}
  private:
     void apply_attributes();
     HWND window_{};

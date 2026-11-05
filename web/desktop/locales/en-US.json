@@ -451,5 +451,7 @@
   "ranking.attribution_unknown": "Unknown attribution",
   "ranking.attribution_mihomo_metadata_host": "Mihomo connection-reported domain; no CDN regrouping",
   "ranking.attribution_capacity_overflow": "Capacity overflow bucket",
-  "ranking.unknown_family": "Unknown IP family"
+  "ranking.unknown_family": "Unknown IP family",
+  "theme.pearl": "Pearl Mist",
+  "theme.ocean": "Deep Ocean"
 }
