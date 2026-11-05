@@ -159,5 +159,13 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"usage.save",L"保存",L"Save"},
 {"usage.this_week",L"本周（本地）",L"This week (local)"},
 {"usage.this_month",L"本月（本地）",L"This month (local)"},
-{"usage.gaps",L"已跳过的观测缺口",L"Discarded observation gaps"}
+{"usage.gaps",L"已跳过的观测缺口",L"Discarded observation gaps"},
+{"mouse.back",L"Mouse4 · 后退",L"Mouse4 · Back"},
+{"mouse.forward",L"Mouse5 · 前进",L"Mouse5 · Forward"},
+{"mouse.diagram",L"鼠标按键",L"Mouse buttons"},
+{"mouse.wheel",L"滚轮",L"Scroll wheel"},
+{"mouse.mapping",L"Arctic · Custom Colormap · 平方根归一化",L"Arctic · Custom Colormap · Square-root scale"},
+{"mouse.no_data",L"没有采集数据",L"No observations"},
+{"mouse.share",L"{name}：{count} 次 · {share}",L"{name}: {count} clicks · {share}"},
+{"mouse.legend",L"零 → 高频 · 最大 {count} 次",L"Zero → high · Maximum {count} clicks"}
 };}

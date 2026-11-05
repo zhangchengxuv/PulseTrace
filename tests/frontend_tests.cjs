@@ -2,6 +2,12 @@ require('../web/desktop/locales.js');require('../web/desktop/i18n.js');PulseI18n
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');require(path.join(root,'web/desktop/colormaps.js'));require(path.join(root,'web/desktop/visualization.js'));
 const v=PulseViz;let checks=0;function check(ok,message){checks++;assert.ok(ok,message);}
+require('../web/desktop/mouse-view.js');
+check(!PulseMouse.model([]).has,'mouse missing coverage stays missing');
+const mouse=PulseMouse.model([{module:'coverage',metric:'observed_ms',value:60000},{module:'mouse',metric:'mouse4',value:1},{module:'mouse',metric:'mouse5',value:3}]);
+check(mouse.has&&mouse.total===4&&mouse.max===3,'mouse model uses real aggregate counts');
+check(mouse.buttons.find(b=>b.id==='mouse4').share===.25&&mouse.buttons.find(b=>b.id==='mouse5').share===.75,'side buttons retain distinct identities and shares');
+check(mouse.buttons.find(b=>b.id==='left').state==='zero'&&PulseMouse.model([]).buttons[0].state==='missing','mouse zero differs from missing');
 require(path.join(root,'web/desktop/dashboard-data.js'));const dash=PulseDashboard;
 const r=(minute,module,metric,value)=>({minute,module,metric,value});
 check(dash.inputs([]).length===0,'empty dashboard does not invent bins');

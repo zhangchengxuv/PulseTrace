@@ -484,5 +484,13 @@
   "usage.save": "保存",
   "usage.this_week": "本周（本地）",
   "usage.this_month": "本月（本地）",
-  "usage.gaps": "已跳过的观测缺口"
+  "usage.gaps": "已跳过的观测缺口",
+  "mouse.back": "Mouse4 · 后退",
+  "mouse.forward": "Mouse5 · 前进",
+  "mouse.diagram": "鼠标按键",
+  "mouse.wheel": "滚轮",
+  "mouse.mapping": "Arctic · Custom Colormap · 平方根归一化",
+  "mouse.no_data": "没有采集数据",
+  "mouse.share": "{name}：{count} 次 · {share}",
+  "mouse.legend": "零 → 高频 · 最大 {count} 次"
 }

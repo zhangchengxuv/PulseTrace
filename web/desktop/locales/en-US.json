@@ -484,5 +484,13 @@
   "usage.save": "Save",
   "usage.this_week": "This week (local)",
   "usage.this_month": "This month (local)",
-  "usage.gaps": "Discarded observation gaps"
+  "usage.gaps": "Discarded observation gaps",
+  "mouse.back": "Mouse4 · Back",
+  "mouse.forward": "Mouse5 · Forward",
+  "mouse.diagram": "Mouse buttons",
+  "mouse.wheel": "Scroll wheel",
+  "mouse.mapping": "Arctic · Custom Colormap · Square-root scale",
+  "mouse.no_data": "No observations",
+  "mouse.share": "{name}: {count} clicks · {share}",
+  "mouse.legend": "Zero → high · Maximum {count} clicks"
 }

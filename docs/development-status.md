@@ -1,5 +1,11 @@
 # PulseTrace 开发状态
 
+## 鼠标可视化
+
+- 新增二维 SVG 鼠标与真实点击占比排行，复用 Arctic 连续映射；Mouse4=后退、Mouse5=前进，未修改 Raw Input。零次数与无观测分别渲染。两主题和中英即时切换均使用同一数据源。
+- 新增聚合/占比/缺失状态测试；Release 构建及 18/18 CTest 通过，实际 WebView2 鼠标页、七页双语双主题无溢出、托盘关闭重开自检通过。截图仅留在忽略的 build/mouse-visual-verified-*，未提交。
+- 后续：全部数据默认范围、Network 月度日历热力图、界面打开更新提示和极简启动。
+
 ## v0.3.0-rc3 双源发布
 
 - 发布源提交 `4469489a6b13a7608731ce017bfe0d301c82b3d9`，两端 `v0.3.0-rc3` 标签均指向该提交；[GitHub](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.3.0-rc3) 与 [Gitee](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.3.0-rc3) 均为候选版，安装 EXE、便携 ZIP 及两个 SHA-256 附件已上传。GitHub 服务器 digest 匹配；Gitee 四个附件已独立下载核对 SHA-256。
