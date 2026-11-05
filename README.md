@@ -1,5 +1,7 @@
 > 最新候选版：**0.3.0-rc2**。任务栏实际可见性修复、中英双语、默认 D 盘安装及 data 同目录方案，见 [本轮验证说明](docs/taskbar-language-layout-rc2.md)；外部权限和人工验收限制见 [开发状态](docs/development-status.md)。
 
+> 安装器 `50:91` 启动异常已有修复包：`build/release/installer-startup-fix/PulseTrace-Setup-v0.3.0-rc2-x64.exe`。根因和实际向导/升级测试见 [安装器修复说明](docs/installer-startup-fix.md)。
+
 > 历史开发版本：**0.3.0-rc1**。自定义日期选择器、任务栏原生网速、双源更新与每用户 EXE 安装器说明见 [使用和升级说明](docs/upgrade-and-taskbar.md)。实际验证见 [开发状态](docs/development-status.md)。以下保留此前版本记录。
 
 开发流程：每项修改验证后提交并同步 GitHub/Gitee，规则见 [AGENTS.md](AGENTS.md)。`tools/sync-remotes.ps1` 默认只读，推送后核对两个实际远程 SHA。

@@ -14,6 +14,7 @@ try {
  & (Join-Path $PSScriptRoot 'bootstrap-inno.ps1')
  & (Join-Path $PSScriptRoot 'package.ps1') -BuildDirectory $build
  & (Join-Path $PSScriptRoot 'build-installer.ps1') -BuildDirectory $build
+ & (Join-Path $PSScriptRoot 'test-installer-wizard.ps1') -BuildDirectory $build -InstallerPath (Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe")
  & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language english
  & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language chinesesimp
  & (Join-Path $PSScriptRoot 'test-legacy-layout.ps1') -BuildDirectory $build

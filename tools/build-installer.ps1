@@ -1,11 +1,11 @@
-param([string]$BuildDirectory='build\llvm-release',[string]$Compiler='build\tools\innosetup-7.1.0\tools\ISCC.exe')
+param([string]$BuildDirectory='build\llvm-release',[string]$Compiler='build\tools\innosetup-7.1.0\tools\ISCC.exe',[string]$OutputDirectory='build\release')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root $BuildDirectory
 $version=Get-Content -LiteralPath (Join-Path $build 'version.json') -Raw | ConvertFrom-Json
 if($version.configuration -ne 'Release' -or $version.architecture -ne 'x64'){throw 'Only x64 Release artifacts can be packaged'}
 $stage=Join-Path $root "build\release\PulseTrace-v$($version.version)-x64"
-$output=Join-Path $root 'build\release'
+$output=if([IO.Path]::IsPathRooted($OutputDirectory)){$OutputDirectory}else{Join-Path $root $OutputDirectory}
 $iscc=if([IO.Path]::IsPathRooted($Compiler)){$Compiler}else{Join-Path $root $Compiler}
 if(-not(Test-Path -LiteralPath $iscc)){throw 'Inno Setup compiler missing; run tools/bootstrap-inno.ps1'}
 $sig=Get-AuthenticodeSignature -LiteralPath $iscc

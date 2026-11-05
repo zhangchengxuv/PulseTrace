@@ -1,9 +1,9 @@
-param([string]$BuildDirectory='build\llvm-release')
+param([string]$BuildDirectory='build\llvm-release',[string]$InstallerPath='')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root $BuildDirectory
 $v=Get-Content -LiteralPath (Join-Path $build 'version.json') -Raw | ConvertFrom-Json
-$setup=Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe"
+$setup=if($InstallerPath){(Resolve-Path -LiteralPath $InstallerPath).Path}else{Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe"}
 $key='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A9F4B181-98CE-426B-AE31-7112540CB549}_is1'
 if(Test-Path -LiteralPath $key){throw 'An existing installation is registered; refusing to replace it'}
 $reports=@()

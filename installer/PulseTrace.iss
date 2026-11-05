@@ -28,6 +28,7 @@ RestartApplications=no
 UsePreviousAppDir=yes
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
+DisableDirPage=no
 LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=yes
 VersionInfoVersion={#BaseVersion}.0
@@ -109,8 +110,9 @@ Type: files; Name: "{app}\installed.ini"
 var ImportPage: TInputQueryWizardPage;
     ChoicePage: TInputOptionWizardPage;
     DataPreview: TNewStaticText;
-    DataPath, BackupPath, OriginalSID, LegacySource: String;
-    MaintenanceReady, PermissionsUnlocked: Boolean;
+    DataPath, BackupPath, OriginalSID, AutoImportSource: String;
+    PreparedApp, UnlockedApp: String;
+    MaintenanceReady, PermissionsUnlocked, WizardReady: Boolean;
 
 function Quote(const S: String): String;
 begin Result := '"' + S + '"'; end;
@@ -123,8 +125,36 @@ begin
 end;
 function DefaultInstallPath(Param: String): String;
 begin
+  { Used before InitializeWizard: never read WizardForm, WizardDirValue or app. }
   if DirExists('D:\') then Result := 'D:\Program Files\PulseTrace'
   else Result := ExpandConstant('{localappdata}\Programs\PulseTrace');
+end;
+
+function SelectedInstallPath: String;
+begin
+  if not WizardReady then RaiseException('Installation directory requested before wizard initialization');
+  Result := WizardDirValue;
+end;
+
+function DataDirectoryFor(const InstallPath: String): String;
+begin Result := AddBackslash(InstallPath) + 'data'; end;
+
+function DetectLegacySource(const InstallPath: String): String;
+var Existing: String;
+begin
+  Result := '';
+  Existing := GetIniString('PulseTrace', 'DataDirectory', '', AddBackslash(InstallPath)+'installed.ini');
+  if (Existing <> '') and (CompareText(Existing, DataDirectoryFor(InstallPath)) <> 0) and FileExists(AddBackslash(Existing)+'monitor.db') then Result := Existing;
+  if (Result = '') and not HasOption('NOLEGACYDETECT') and FileExists(ExpandConstant('{localappdata}\PulseTrace\data\monitor.db')) then Result := ExpandConstant('{localappdata}\PulseTrace\data');
+end;
+
+procedure RefreshImportSource;
+var Detected: String;
+begin
+  Detected := DetectLegacySource(SelectedInstallPath);
+  { Recompute automatic detection after Back/reselection; preserve explicit imports. }
+  if (ImportPage.Values[0] = '') or (ImportPage.Values[0] = AutoImportSource) then ImportPage.Values[0] := Detected;
+  AutoImportSource := Detected;
 end;
 
 procedure ExtractMaintenance;
@@ -141,49 +171,59 @@ begin
   Result := Exec(ExpandConstant('{tmp}\PulseTraceMaintenance.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, ExitCode) and (ExitCode = 0);
 end;
 
+function RestorePermissions: Boolean;
+begin
+  Result := True;
+  if not PermissionsUnlocked then Exit;
+  { Cancellation may happen before app is initialized, or after the path changed. }
+  Result := Maintain('--permissions ' + Quote(UnlockedApp) + ' ' + Quote(OriginalSID) + ' seal');
+  if Result then begin PermissionsUnlocked := False; UnlockedApp := ''; end;
+end;
+
 procedure DirChanged(Sender: TObject);
-begin DataPreview.Caption := FmtMessage(CustomMessage('datapreview'), [AddBackslash(WizardDirValue) + 'data']); end;
+begin
+  if not WizardReady then Exit;
+  DataPreview.Caption := FmtMessage(CustomMessage('datapreview'), [DataDirectoryFor(SelectedInstallPath)]);
+  RefreshImportSource;
+end;
 
 procedure InitializeWizard;
 begin
   DataPreview := TNewStaticText.Create(WizardForm); DataPreview.Parent := WizardForm.SelectDirPage;
   DataPreview.Left := WizardForm.DirEdit.Left; DataPreview.Top := WizardForm.DirEdit.Top + WizardForm.DirEdit.Height + ScaleY(12);
   DataPreview.Width := WizardForm.DirEdit.Width; DataPreview.Height := ScaleY(48); DataPreview.WordWrap := True;
-  WizardForm.DirEdit.OnChange := @DirChanged; DirChanged(nil);
   ImportPage := CreateInputQueryPage(wpSelectTasks, CustomMessage('importtitle'), CustomMessage('importsubtitle'), CustomMessage('importdesc'));
   ImportPage.Add(CustomMessage('importlabel'), False);
   ImportPage.Values[0] := ExpandConstant('{param:PORTABLESOURCE|}');
   ChoicePage := CreateInputOptionPage(ImportPage.ID, CustomMessage('choicetitle'), CustomMessage('choicesub'), CustomMessage('choicedesc'), True, False);
   ChoicePage.Add(CustomMessage('keeptarget')); ChoicePage.Add(CustomMessage('usesource')); ChoicePage.SelectedValueIndex := 0;
+  WizardReady := True;
+  WizardForm.DirEdit.OnChange := @DirChanged; DirChanged(nil);
   if not DirExists('D:\') and not WizardSilent then MsgBox(CustomMessage('fallback'), mbInformation, MB_OK);
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
-var Existing: String;
 begin
   if CurPageID = wpSelectDir then DirChanged(nil);
-  if CurPageID = ImportPage.ID then begin
-    Existing := GetIniString('PulseTrace', 'DataDirectory', '', ExpandConstant('{app}\installed.ini'));
-    if (Existing <> '') and (CompareText(Existing, AddBackslash(WizardDirValue)+'data') <> 0) and FileExists(AddBackslash(Existing)+'monitor.db') then LegacySource := Existing;
-    if (LegacySource = '') and not HasOption('NOLEGACYDETECT') and FileExists(ExpandConstant('{localappdata}\PulseTrace\data\monitor.db')) then LegacySource := ExpandConstant('{localappdata}\PulseTrace\data');
-    if (ImportPage.Values[0] = '') and (LegacySource <> '') then ImportPage.Values[0] := LegacySource;
-  end;
+  if CurPageID = ImportPage.ID then RefreshImportSource;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
-var Existing: String;
 begin
   Result := False;
-  Existing := GetIniString('PulseTrace', 'DataDirectory', '', ExpandConstant('{app}\installed.ini'));
-  if PageID = ImportPage.ID then Result := (ImportPage.Values[0] = '') and not WizardIsTaskSelected('portableimport') and ((Existing = '') or (CompareText(Existing, AddBackslash(WizardDirValue)+'data') = 0)) and (HasOption('NOLEGACYDETECT') or not FileExists(ExpandConstant('{localappdata}\PulseTrace\data\monitor.db')));
-  if PageID = ChoicePage.ID then Result := not FileExists(AddBackslash(WizardDirValue)+'data\monitor.db') or not FileExists(AddBackslash(ImportPage.Values[0])+'monitor.db') or (CompareText(ImportPage.Values[0], AddBackslash(WizardDirValue)+'data') = 0);
+  { Also called for Welcome, before app is initialized. Do no path work there. }
+  if not WizardReady then Exit;
+  if (PageID <> ImportPage.ID) and (PageID <> ChoicePage.ID) then Exit;
+  RefreshImportSource;
+  if PageID = ImportPage.ID then Result := (ImportPage.Values[0] = '') and not WizardIsTaskSelected('portableimport');
+  if PageID = ChoicePage.ID then Result := not FileExists(AddBackslash(DataDirectoryFor(SelectedInstallPath))+'monitor.db') or not FileExists(AddBackslash(ImportPage.Values[0])+'monitor.db') or (CompareText(ImportPage.Values[0], DataDirectoryFor(SelectedInstallPath)) = 0);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
   if CurPageID = wpSelectDir then begin
-    Result := Maintain('--check-install-path ' + Quote(WizardDirValue));
+    Result := Maintain('--check-install-path ' + Quote(SelectedInstallPath));
     if not Result then MsgBox(CustomMessage('patherror'), mbError, MB_OK);
   end;
 end;
@@ -191,20 +231,22 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var ExitCode: Integer; Source, SIDFile, Existing, Owner: String; SIDBytes: AnsiString;
 begin
-  Result := ''; DataPath := ExpandConstant('{app}\data');
-  if not Maintain('--check-install-path ' + Quote(ExpandConstant('{app}'))) then begin Result := CustomMessage('patherror'); Exit; end;
+  Result := '';
+  if not RestorePermissions then begin Result := CustomMessage('permissionerror'); Exit; end;
+  PreparedApp := SelectedInstallPath; DataPath := DataDirectoryFor(PreparedApp); BackupPath := '';
+  if not Maintain('--check-install-path ' + Quote(PreparedApp)) then begin Result := CustomMessage('patherror'); Exit; end;
   ExtractMaintenance; SIDFile := ExpandConstant('{tmp}\original-user.sid');
   if not ExecAsOriginalUser(ExpandConstant('{tmp}\PulseTraceMaintenance.exe'), '--write-user-sid ' + Quote(SIDFile), '', SW_HIDE, ewWaitUntilTerminated, ExitCode) or (ExitCode <> 0) or not LoadStringFromFile(SIDFile, SIDBytes) then begin Result := CustomMessage('identityerror'); Exit; end;
   OriginalSID := Trim(String(SIDBytes));
-  Owner := GetIniString('PulseTrace', 'OwnerSID', '', ExpandConstant('{app}\installed.ini'));
+  Owner := GetIniString('PulseTrace', 'OwnerSID', '', AddBackslash(PreparedApp)+'installed.ini');
   if (Owner <> '') and (Owner <> OriginalSID) then begin Result := CustomMessage('identityerror'); Exit; end;
-  if FileExists(ExpandConstant('{app}\PulseTrace.exe')) then begin
-    if not Maintain('--close ' + Quote(ExpandConstant('{app}\PulseTrace.exe'))) then begin Result := CustomMessage('closeerror'); Exit; end;
-    if not Maintain('--permissions ' + Quote(ExpandConstant('{app}')) + ' ' + Quote(OriginalSID) + ' unlock') then begin Result := CustomMessage('permissionerror'); Exit; end;
-    PermissionsUnlocked := True;
+  if FileExists(AddBackslash(PreparedApp)+'PulseTrace.exe') then begin
+    if not Maintain('--close ' + Quote(AddBackslash(PreparedApp)+'PulseTrace.exe')) then begin Result := CustomMessage('closeerror'); Exit; end;
+    if not Maintain('--permissions ' + Quote(PreparedApp) + ' ' + Quote(OriginalSID) + ' unlock') then begin Result := CustomMessage('permissionerror'); Exit; end;
+    PermissionsUnlocked := True; UnlockedApp := PreparedApp;
   end;
   Source := ImportPage.Values[0];
-  Existing := GetIniString('PulseTrace', 'DataDirectory', '', ExpandConstant('{app}\installed.ini'));
+  Existing := GetIniString('PulseTrace', 'DataDirectory', '', AddBackslash(PreparedApp)+'installed.ini');
   if (Source = '') and (Existing <> '') and (CompareText(Existing,DataPath) <> 0) then Source := Existing;
   if (Source <> '') and (CompareText(Source,DataPath) <> 0) and FileExists(AddBackslash(Source)+'monitor.db') then begin
     if FileExists(AddBackslash(DataPath)+'monitor.db') then begin
@@ -229,22 +271,22 @@ var ExitCode: Integer; InitialLanguage: String;
 begin
  if CurStep = ssPostInstall then begin
   if not ForceDirectories(DataPath) then RaiseException(CustomMessage('patherror'));
-  SetIniString('PulseTrace','DataDirectory',DataPath,ExpandConstant('{app}\installed.ini'));
-  SetIniString('PulseTrace','OwnerSID',OriginalSID,ExpandConstant('{app}\installed.ini'));
-  SetIniString('PulseTrace','LayoutVersion','2',ExpandConstant('{app}\installed.ini'));
+  SetIniString('PulseTrace','DataDirectory',DataPath,AddBackslash(PreparedApp)+'installed.ini');
+  SetIniString('PulseTrace','OwnerSID',OriginalSID,AddBackslash(PreparedApp)+'installed.ini');
+  SetIniString('PulseTrace','LayoutVersion','2',AddBackslash(PreparedApp)+'installed.ini');
   if ActiveLanguage = 'chinesesimp' then InitialLanguage := 'zh-CN' else InitialLanguage := 'en-US';
   if not FileExists(AddBackslash(DataPath)+'config.json') then SaveStringToFile(AddBackslash(DataPath)+'config.json','{"language":"'+InitialLanguage+'"}',False);
-  if BackupPath <> '' then SetIniString('PulseTrace','UpgradeBackup',BackupPath,ExpandConstant('{app}\installed.ini'));
-  if not Maintain('--permissions ' + Quote(ExpandConstant('{app}')) + ' ' + Quote(OriginalSID) + ' seal') then RaiseException(CustomMessage('permissionerror'));
-  if not Maintain('--existing-autostart ' + Quote(ExpandConstant('{app}')) + ' ' + Quote(OriginalSID) + ' migrate') then RaiseException(CustomMessage('identityerror'));
-  PermissionsUnlocked := False;
-  if not Exec(ExpandConstant('{app}\PulseTraceMaintenance.exe'),'--runtime-check','',SW_HIDE,ewWaitUntilTerminated,ExitCode) or (ExitCode <> 0) then if not WizardSilent then MsgBox(CustomMessage('runtime')+#13#10+'https://developer.microsoft.com/microsoft-edge/webview2/',mbInformation,MB_OK);
+  if BackupPath <> '' then SetIniString('PulseTrace','UpgradeBackup',BackupPath,AddBackslash(PreparedApp)+'installed.ini');
+  if not Maintain('--permissions ' + Quote(PreparedApp) + ' ' + Quote(OriginalSID) + ' seal') then RaiseException(CustomMessage('permissionerror'));
+  if not Maintain('--existing-autostart ' + Quote(PreparedApp) + ' ' + Quote(OriginalSID) + ' migrate') then RaiseException(CustomMessage('identityerror'));
+  PermissionsUnlocked := False; UnlockedApp := '';
+  if not Exec(AddBackslash(PreparedApp)+'PulseTraceMaintenance.exe','--runtime-check','',SW_HIDE,ewWaitUntilTerminated,ExitCode) or (ExitCode <> 0) then if not WizardSilent then MsgBox(CustomMessage('runtime')+#13#10+'https://developer.microsoft.com/microsoft-edge/webview2/',mbInformation,MB_OK);
  end;
 end;
 
 procedure DeinitializeSetup;
 begin
- if PermissionsUnlocked then Maintain('--permissions ' + Quote(ExpandConstant('{app}')) + ' ' + Quote(OriginalSID) + ' seal');
+ if not RestorePermissions then Log('Could not restore installation permissions during setup cleanup');
 end;
 
 function InitializeUninstall: Boolean;
