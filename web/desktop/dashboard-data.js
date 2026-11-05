@@ -19,8 +19,8 @@ globalThis.PulseDashboard=(()=>{
  function distribution(values){const sum=values.reduce((n,v)=>n+v,0);return sum>0?values.map(v=>v/sum):null;}
  function protocol(records){const valid=records.filter(r=>r.accepted>0),same=new Set(valid.map(r=>r.source+'|'+r.basis)).size<=1;
   const bytes=[0,0];if(same)for(const r of valid){bytes[0]+=Number(r.ipv4_up)+Number(r.ipv4_down);bytes[1]+=Number(r.ipv6_up)+Number(r.ipv6_down);}
-  const has=valid.length>0&&same,quality=records.some(r=>r.quality==='incomplete_observation')?'不完整观测':has?'待验证':'暂无数据';
-  return {has,bytes,ratio:has?distribution(bytes):null,quality:same?quality:'口径不一致'};
+  const has=valid.length>0&&same,quality=records.some(r=>r.quality==='incomplete_observation')?tr("ui.3f955ae5b843"):has?tr("ui.76a2e875d985"):tr("ui.497c85690c4c");
+  return {has,bytes,ratio:has?distribution(bytes):null,quality:same?quality:tr("ui.013c99479178")};
  }
  function comparison(current,previous){
   const a=total(current,'coverage',['observed_ms']),b=total(previous,'coverage',['observed_ms']);

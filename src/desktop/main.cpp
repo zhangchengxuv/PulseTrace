@@ -1,8 +1,12 @@
-﻿#include "pulsetrace/core_service.hpp"
+#include "pulsetrace/core_service.hpp"
 #include "pulsetrace/desktop/webview_host.hpp"
+#include "pulsetrace/desktop/taskbar_host.hpp"
 #include "pulsetrace/desktop/caption_bar.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
+#include "pulsetrace/update.hpp"
+#include "pulsetrace/installation.hpp"
+#include "pulsetrace/localization.hpp"
 #include "resource.h"
 #include <commdlg.h>
 #include <fstream>
@@ -18,7 +22,7 @@ struct Response {
     Json json;
 };
 struct DesktopOptions {
-    bool selftest{}, background{}, expect_failure{}, crash_test{}, early_close{};
+    bool selftest{}, background{}, expect_failure{}, crash_test{}, early_close{}, picker_test{}, widget_test{};
     int cycles{2}, core_seconds{}, test_width{}, test_height{};
     std::filesystem::path data;
     std::string page{"dashboard"};
@@ -48,7 +52,8 @@ class DesktopApplication {
             try {
                 return app->message(h, m, w, l);
             } catch (const std::exception &e) {
-                app->diagnostic(e.what());
+                app->diagnostic((app->selftest_?"SELFTEST FAIL: ":"")+std::string(e.what()));
+                if(app->selftest_)app->quit();
                 return 0;
             }
         return DefWindowProcW(h, m, w, l);
@@ -68,6 +73,8 @@ class DesktopApplication {
     std::filesystem::path data_, exe_;
     std::unique_ptr<CoreService> core_;
     std::unique_ptr<WebViewHost> web_;
+    std::unique_ptr<TaskbarWidgetHost> widget_;
+    std::unique_ptr<UpdateService> updates_;
     CaptionBar caption_;
     std::thread exit_thread_;
     HANDLE instance_mutex_{};
@@ -77,9 +84,10 @@ class DesktopApplication {
         preview_done_{}, preview_ok_{}, frame_captured_{};
     int self_stage_{}, ready_count_{}, ping_count_{}, cycles_{2}, recoveries_{}, core_seconds_{};
     std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{};
-    std::string diagnostic_, last_tray_state_, test_page_;
+    std::string diagnostic_, last_tray_state_, test_page_,pending_page_;
     UINT taskbar_message_{};
-    bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{};
+    bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{},picker_test_{},widget_test_{};
+    HWND widget_test_handle_{};
     NOTIFYICONDATAW nid_{};
     std::ofstream log_;
 };
@@ -122,7 +130,7 @@ void DesktopApplication::tray() {
     nid_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid_.uCallbackMessage = tray_message;
     nid_.hIcon = LoadIconW(instance_, MAKEINTRESOURCEW(IDI_PULSETRACE));
-    wcscpy_s(nid_.szTip, L"PulseTrace · 本地聚合统计");
+    wcscpy_s(nid_.szTip, ui_text("tray.paused"));
     tray_added_ = Shell_NotifyIconW(NIM_ADD, &nid_) != FALSE;
 }
 void DesktopApplication::open() {
@@ -151,13 +159,13 @@ void DesktopApplication::hide() {
 }
 void DesktopApplication::menu() {
     HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, 1, L"打开 PulseTrace");
-    AppendMenuW(m, MF_STRING, 2, L"开始监测");
-    AppendMenuW(m, MF_STRING, 3, L"暂停监测");
-    AppendMenuW(m, MF_STRING, 4, L"今日统计");
-    AppendMenuW(m, MF_STRING, 5, L"设置");
+    AppendMenuW(m, MF_STRING, 1, ui_text("tray.open"));
+    AppendMenuW(m, MF_STRING, 2, ui_text("tray.start"));
+    AppendMenuW(m, MF_STRING, 3, ui_text("tray.pause"));
+    AppendMenuW(m, MF_STRING, 4, ui_text("tray.today"));
+    AppendMenuW(m, MF_STRING, 5, ui_text("tray.settings"));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, 6, L"完全退出");
+    AppendMenuW(m, MF_STRING, 6, ui_text("tray.exit"));
     POINT point{};
     GetCursorPos(&point);
     SetForegroundWindow(window_);
@@ -176,6 +184,25 @@ void DesktopApplication::command(Json request) {
     if (exiting_)
         return;
     validate_request(request);
+    const auto kind=request["type"].get<std::string>();
+    if(kind=="get_update_status"||kind=="check_updates"||kind=="download_update"||kind=="cancel_update"||kind=="open_update_folder"||kind=="open_release_page"||kind=="install_update"){
+        try{
+            if(kind=="check_updates"){const auto cfg=core_->status()["config"];updates_->check(cfg.value("update_channel","stable"),cfg.value("update_source","auto"));}
+            else if(kind=="download_update")updates_->download();
+            else if(kind=="cancel_update")updates_->cancel();
+            else if(kind=="install_update")throw std::runtime_error("Automatic installation disabled: PulseTrace publisher signing identity is not configured. Use the verified download folder for manual installation.");
+            else if(kind=="open_update_folder"||kind=="open_release_page"){
+                const auto folder=data_/"updates";std::filesystem::create_directories(folder);
+                const auto target=kind=="open_update_folder"?folder.wstring():widen(updates_->release_page());
+                if(reinterpret_cast<INT_PTR>(ShellExecuteW(window_,L"open",target.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)throw std::runtime_error("Cannot open update location");
+            }
+            web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",updates_->status()}});
+        }catch(const std::exception &e){web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",false},{"error",{{"code","UPDATE_ERROR"},{"message",e.what()}}}});}return;
+    }
+    if(request["type"]=="selftest_failure"){
+        if(!selftest_)throw std::runtime_error("Selftest diagnostics disabled");
+        diagnostic("SELFTEST FAIL: "+request["params"]["message"].get<std::string>());quit();return;
+    }
     if(request["type"]=="selftest_snapshot"){
         if(!selftest_)throw std::runtime_error("Selftest capture is disabled in normal operation");
         const auto phase=request["params"]["phase"].get<std::string>();
@@ -196,8 +223,8 @@ void DesktopApplication::command(Json request) {
         hide();
         return;
     }
-    if (request["type"] == "open_monthly_folder") {
-        const auto path=data_/"network-months";
+    if (request["type"] == "open_monthly_folder"||request["type"]=="open_data_folder") {
+        const auto path=request["type"]=="open_monthly_folder"?data_/"network-months":data_;
         std::filesystem::create_directories(path);
         if(reinterpret_cast<INT_PTR>(ShellExecuteW(window_,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)
             throw std::runtime_error("Cannot open monthly archive folder");
@@ -232,18 +259,23 @@ void DesktopApplication::command(Json request) {
     if (request["type"] == "ping") {
         ++ping_count_;
         diagnostic("Native JSON bridge ping received");
+        if(!pending_page_.empty()){web_->post({{"type","navigate"},{"page",pending_page_}});pending_page_.clear();}
     }
     const auto generation = web_->generation();
     const auto hwnd = window_;
     const bool status_request = request["type"] == "get_status";
-    const bool test = selftest_;
+    const bool test = selftest_, picker_test=picker_test_&&ready_count_==0;
     const auto directory = narrow(data_.wstring()), test_page = test_page_;
+    const bool installed=std::filesystem::exists(exe_/L"installed.ini");
     try {
-        core_->request(request, [hwnd, generation, status_request, test, directory, test_page](Json json) {
+        core_->request(request, [hwnd, generation, status_request, test, picker_test, directory, test_page,installed](Json json) {
             if (status_request && json.value("ok", false)) {
                 json["data"]["self_test"] = test;
+                json["data"]["self_test_picker"] = test&&picker_test;
                 json["data"]["self_test_page"] = test_page;
                 json["data"]["data_directory"] = directory;
+                json["data"]["installation_mode"]=installed?"installed":"portable";
+                json["data"]["effective_language"]=effective_language(json["data"]["config"].value("language","system"));
                 HKEY key{};
                 bool enabled = false;
                 if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
@@ -279,6 +311,14 @@ void DesktopApplication::quit() {
     });
 }
 LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
+    if(m==maintenance_message()){quit();return 0;}
+    if(m==widget_message()){
+        if(exiting_)return 0;
+        if(w==1||w==6){pending_page_=w==1?"network":"settings";open();if(web_->ready()){web_->post({{"type","navigate"},{"page",pending_page_}});pending_page_.clear();}}
+        else if(w==7)quit();
+        else if(w>=2&&w<=5)command({{"type","set_config"},{"request_id",0u},{"params",{{"taskbar_mode",w==3?"embedded":w==4?"floating":"tray"}}}});
+        return 0;
+    }
     LRESULT caption_result{};
     if(caption_.message(m,w,l,caption_result))return caption_result;
     if(web_&&(m==WM_ACTIVATE||m==WM_SETTINGCHANGE)){
@@ -322,10 +362,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         SetTextColor(dc,caption_.foreground());SetBkMode(dc,TRANSPARENT);
         r.left += 24;
         r.top += caption_.height()+24;
-        const auto text = widen(failure_observed_ && (!web_ || !web_->ready())
-                                    ? "PulseTrace 暂时无法打开界面\n" + diagnostic_ +
-                                          "\n请检查运行时与本地资源，通过托盘“打开 PulseTrace”重试。"
-                                    : "PulseTrace\n正在准备本地统计…");
+        const std::wstring text=failure_observed_&&(!web_||!web_->ready())?std::wstring(ui_text("native.ui_failed"))+L"\n"+widen(diagnostic_):ui_text("native.initializing");
         DrawTextW(dc, text.c_str(), -1, &r, DT_LEFT | DT_WORDBREAK);
         EndPaint(h, &p);
         return 0;
@@ -338,8 +375,11 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case response_message: {
         std::unique_ptr<Response> response(reinterpret_cast<Response *>(l));
-        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config"))
+        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("language")){set_ui_language(response->json["data"].value("language","system"));if(widget_)widget_->update(core_->status());}
+        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config")){
             response->json["data"]["appearance"]=appearance();
+            response->json["data"]["taskbar_widget"]=widget_?widget_->status():Json{{"mode","tray"},{"reason","Disabled in ordinary selftest"}};
+        }
         if (web_ && response->generation == web_->generation())
             web_->post(response->json);
         return 0;
@@ -360,14 +400,14 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         const auto status = core_->status();
         if (!status.value("storage_error", "").empty() && !selftest_) {
             const auto result = MessageBoxW(window_,
-                                            L"数据库保存失败。选择“取消”保留未写入的聚合数据，排除磁盘问题后"
-                                            L"再次退出以重试；或“确定”退出并丢弃未写入数据。",
-                                            L"PulseTrace 保存失败", MB_OKCANCEL | MB_ICONERROR);
+                                            ui_text("native.save_prompt"),
+                                            ui_text("native.save_failed"), MB_OKCANCEL | MB_ICONERROR);
             if (result != IDOK) {
                 exiting_ = false;
                 return 0;
             }
         }
+        if(widget_){widget_->stop();if(widget_test_handle_&&IsWindow(widget_test_handle_))throw std::runtime_error("Widget did not exit");diagnostic("Taskbar widget stopped; native helper released");}
         web_->close();
         finalizing_ = true;
         final_tick_ = GetTickCount64();
@@ -396,6 +436,8 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         if (exiting_)
             return 0;
+        if(widget_)widget_->update(core_->status());
+        set_ui_language(core_->status()["config"].value("language","system"));
         caption_.theme(core_->status()["config"].value("theme","system"));
         if(web_&&caption_.consume_changed()){
             web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
@@ -408,9 +450,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         if (tray_added_) {
             const auto state = core_->status();
-            const auto label = state.value("session_locked", false) ? "PulseTrace · 锁屏输入已暂停"
-                               : state.value("monitoring", false)   ? "PulseTrace · 正在监测（仅聚合）"
-                                                                    : "PulseTrace · 监测已暂停";
+            const auto label=narrow(ui_text(state.value("session_locked",false)?"tray.locked":state.value("monitoring",false)?"tray.active":"tray.paused"));
             if (last_tray_state_ != label) {
                 last_tray_state_ = label;
                 const auto text = widen(label);
@@ -442,6 +482,10 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     return 0;
                 }
                 if (!preview_started_) {
+                    if(widget_test_){const auto value=widget_->status();widget_test_handle_=reinterpret_cast<HWND>(static_cast<UINT_PTR>(value.value("hwnd",0ULL)));
+                        std::ofstream out(data_/"logs"/"widget-validation.json");out<<value.dump(2);
+                        if(value.value("mode","")!="embedded"||value.value("visibility",0)!=1||value.value("paint_count",0)<1||GetParent(widget_test_handle_)!=FindWindowW(L"Shell_TrayWnd",nullptr)||(GetWindowLongPtrW(widget_test_handle_,GWL_STYLE)&WS_CHILD)==0||(GetWindowLongPtrW(widget_test_handle_,GWL_EXSTYLE)&WS_EX_NOACTIVATE)==0)throw std::runtime_error("Visible taskbar embedding not verified: "+value.dump());
+                        diagnostic("Taskbar widget verified: WS_CHILD, GetParent Shell_TrayWnd, no-activate, independent helper");}
                     if(!IsZoomed(window_)){
                         RECT outer{},client{};GetWindowRect(window_,&outer);GetClientRect(window_,&client);
                         POINT origin{0,0};ClientToScreen(window_,&origin);
@@ -492,12 +536,13 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);self_stage_=0;
                 }else if(now-stage_tick_>5000){diagnostic("SELFTEST FAIL: hidden UI verification timed out");quit();}
             } else if (self_stage_ == 1 && now - stage_tick_ > 1500 && !web_->closing()) {
+                if(widget_test_){const auto widget=widget_->status();widget_test_handle_=reinterpret_cast<HWND>(static_cast<UINT_PTR>(widget.value("hwnd",0ULL)));if(!IsWindow(widget_test_handle_)||!IsWindowVisible(widget_test_handle_)){if(now-stage_tick_<8000)return 0;throw std::runtime_error("Widget did not survive close to tray: "+widget.dump());}}
                 diagnostic("Selftest: core heartbeat while UI closed=" +
                            core_->status().value("heartbeat_ms", Json(0)).dump());
                 open();
                 self_stage_ = 0;
             }
-            if (now - start_tick_ > static_cast<std::uint64_t>(cycles_ * 20000 + 30000)) {
+            if (now - start_tick_ > static_cast<std::uint64_t>(cycles_ * 20000 + 30000+(picker_test_?90000:0))) {
                 diagnostic("SELFTEST FAIL: timeout");
                 quit();
             }
@@ -525,6 +570,8 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
 int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     instance_ = instance;
     selftest_ = options.selftest;
+    picker_test_ = options.picker_test;
+    widget_test_ = options.widget_test;
     cycles_ = options.cycles;
     core_seconds_ = options.core_seconds;
     test_page_ = options.page;
@@ -535,7 +582,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     if (!GetModuleFileNameW(nullptr, executable, 32768))
         throw std::runtime_error("Cannot resolve executable path");
     exe_ = std::filesystem::path(executable).parent_path();
-    data_ = options.data.empty() ? exe_ / "data" : std::filesystem::absolute(options.data);
+    data_ = DataDirectoryManager::resolve(exe_,options.data);
     try {
         std::filesystem::create_directories(data_ / "logs");
         std::ofstream probe(data_ / "logs" / "write-test.tmp");
@@ -546,9 +593,10 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     } catch (const std::exception &) {
         if (selftest_)
             throw;
+        if(std::filesystem::exists(exe_/L"installed.ini"))throw std::runtime_error("Installed data directory is not writable. Repair permissions or choose another installation directory. Data is preserved.");
         const auto answer =
-            MessageBoxW(nullptr, L"程序数据目录不可写。是否手动选择另一个目录？不会自动写入其他位置。",
-                        L"PulseTrace 数据目录", MB_YESNO | MB_ICONWARNING);
+            MessageBoxW(nullptr, ui_text("native.data_prompt"),
+                        ui_text("native.data_title"), MB_YESNO | MB_ICONWARNING);
         if (answer != IDYES)
             throw std::runtime_error("No writable data directory selected");
         ComPtr<IFileOpenDialog> dialog;
@@ -590,7 +638,12 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     if (!log_)
         throw std::runtime_error("Application data directory is not writable");
     core_ = std::make_unique<CoreService>(data_);
+    set_ui_language(core_->status()["config"].value("language","system"));
     core_->start();
+    updates_ = std::make_unique<UpdateService>(data_);
+    if(!selftest_&&core_->status()["config"].value("check_updates_on_start",false)){
+        const auto cfg=core_->status()["config"];updates_->check(cfg.value("update_channel","stable"),cfg.value("update_source","auto"));
+    }
     WNDCLASSW wc{};
     wc.hInstance = instance;
     wc.style=CS_DBLCLKS;
@@ -679,6 +732,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
     web_->set_background(caption_.background());
     tray();
+    if(!selftest_||widget_test_){widget_=std::make_unique<TaskbarWidgetHost>(window_,exe_);widget_->update(core_->status());}
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);
     if (!options.background || !tray_added_)
         open();
@@ -723,6 +777,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
         std::wstring arg = argv[i];
         if (arg == L"--self-test")
             options.selftest = true;
+        else if(arg==L"--self-test-picker") {options.selftest=true;options.picker_test=true;}
+        else if(arg==L"--self-test-widget") {options.selftest=true;options.widget_test=true;}
         else if (arg == L"--background")
             options.background = true;
         else if (arg == L"--data-dir" && i + 1 < argc)
@@ -764,7 +820,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
             std::ofstream out(directory/"logs"/"desktop.log",std::ios::app);out<<"SELFTEST FAIL: "<<e.what()<<'\n';
         }
         if (!options.selftest)
-            MessageBoxW(nullptr, widen(e.what()).c_str(), L"PulseTrace 启动失败", MB_OK | MB_ICONERROR);
+            MessageBoxW(nullptr, (std::wstring(ui_text("native.ui_failed"))+L"\n\n"+widen(e.what())).c_str(), ui_text("native.start_failed"), MB_OK | MB_ICONERROR);
     }
     CoUninitialize();
     return result;

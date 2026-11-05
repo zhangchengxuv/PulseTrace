@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');require('../web/desktop/locales.js');require('../web/desktop/i18n.js');let checks=0;
+function check(value,message){checks++;assert.ok(value,message);}
+const zh=JSON.parse(fs.readFileSync(''+__dirname+'/../web/desktop/locales/zh-CN.json','utf8')),en=JSON.parse(fs.readFileSync(''+__dirname+'/../web/desktop/locales/en-US.json','utf8'));
+check(JSON.stringify(zh)===JSON.stringify(PulseLocales['zh-CN'])&&JSON.stringify(en)===JSON.stringify(PulseLocales['en-US']),'generated catalogue matches source');check(Object.keys(zh).sort().join()===Object.keys(en).sort().join(),'complete key coverage');
+for(const key of Object.keys(zh)){for(const language of ['zh-CN','en-US']){PulseI18n.use(language);check(tr(key)===PulseLocales[language][key],'resource lookup '+key);check(typeof tr(key)==='string'&&tr(key).length>0,'nonempty translation '+key);}check((zh[key].match(/\{\w+\}/g)||[]).sort().join()===(en[key].match(/\{\w+\}/g)||[]).sort().join(),'placeholder parity '+key);if(key.startsWith('ui.'))check(!/\p{Script=Han}/u.test(en[key]),'no untranslated Chinese '+key);}
+PulseI18n.use('en-US');check(tr('tray.open')==='Open PulseTrace','English native menu');check(PulseI18n.number(12345)==='12,345','locale number');PulseI18n.use('zh-CN');check(tr('tray.open')==='打开 PulseTrace','Chinese native menu');PulseI18n.use('unsupported');check(PulseI18n.locale==='en-US','unsupported locale falls back to English');
+console.log(checks+' bilingual resource checks passed');
+const context=vm.createContext({});vm.runInContext(fs.readFileSync(__dirname+'/../web/desktop/widget-view.js','utf8'),context);
+for(const [status,expected]of [[{mode:'embedded',visibility:0},'widget.verifying'],[{mode:'embedded',visibility:1},'widget.visible'],[{mode:'embedded',visibility:3},'widget.occluded'],[{mode:'tray',reason:'Tray-only selected'},'widget.tray'],[{mode:'tray',reason:'Insufficient verified free taskbar space'},'widget.no_space'],[{mode:'floating',visibility:0},'widget.verifying']])assert.equal(context.widgetStatusKey(status),expected);
+console.log('6 widget display-state regression checks passed');
