@@ -1,0 +1,13 @@
+/* Static chrome only: containers, tables and diagnostic text remain selectable. */
+:where(.brand,nav button,h1,h2,h3,button,summary,label,.state,footer,
+ .card>span,.card>small,.section-heading,.chart-legend,.chart-unit,.chart-empty,
+ .kpi-head,.kpi-foot,.ratio-line,.wheel-ratios,.quality-badge,.daily-summary span,
+ .range-label,.range>span,.heat-scale,.heat-states,.heat-legend p,.dt-week,
+ .dt-head strong,.dt-time>span,.dt-time>b,.boot,.notice,.muted){
+ -webkit-user-select:none;user-select:none;
+}
+/* Explicit escape hatches also work inside labels and static descriptions. */
+input,textarea,select,option,[contenteditable]:not([contenteditable=false]),
+pre,code,table,.selectable-text,.selectable-text *{
+ -webkit-user-select:text;user-select:text;
+}
