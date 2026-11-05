@@ -508,5 +508,11 @@
   "calendar.max": "Monthly maximum",
   "calendar.octets": "All: selected egress interface octets; TUN and physical interfaces are never added.",
   "calendar.ip": "IPv4/IPv6: observed IP lengths; independent reference validation is pending.",
-  "calendar.persisted": "Saved calendar-day aggregates; dashes and hatching identify gaps and partial observations."
+  "calendar.persisted": "Saved calendar-day aggregates; dashes and hatching identify gaps and partial observations.",
+  "update.available": "Update available",
+  "update.later": "Remind me later",
+  "update.now": "Update now",
+  "update.versions": "Current {current} → Latest {latest}",
+  "update.source": "Source: {source} · Installer {size}",
+  "update.no_notes": "No release notes"
 }

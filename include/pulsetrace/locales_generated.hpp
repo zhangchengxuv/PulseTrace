@@ -183,5 +183,11 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"calendar.max",L"当月最大",L"Monthly maximum"},
 {"calendar.octets",L"全部：所选出口接口字节，不叠加 TUN 与物理网卡。",L"All: selected egress interface octets; TUN and physical interfaces are never added."},
 {"calendar.ip",L"IPv4/IPv6：IP 长度观测，未经独立对照验收。",L"IPv4/IPv6: observed IP lengths; independent reference validation is pending."},
-{"calendar.persisted",L"已保存的自然日聚合；虚线或纹理标记缺失、非全天或不完整采集。",L"Saved calendar-day aggregates; dashes and hatching identify gaps and partial observations."}
+{"calendar.persisted",L"已保存的自然日聚合；虚线或纹理标记缺失、非全天或不完整采集。",L"Saved calendar-day aggregates; dashes and hatching identify gaps and partial observations."},
+{"update.available",L"发现新版本",L"Update available"},
+{"update.later",L"稍后提醒",L"Remind me later"},
+{"update.now",L"立即更新",L"Update now"},
+{"update.versions",L"当前 {current} → 最新 {latest}",L"Current {current} → Latest {latest}"},
+{"update.source",L"来源：{source} · 安装包 {size}",L"Source: {source} · Installer {size}"},
+{"update.no_notes",L"暂无更新说明",L"No release notes"}
 };}
