@@ -65,7 +65,9 @@ try {
     foreach($a in $assets){
      $client=[Net.Http.HttpClient]::new();$client.Timeout=[TimeSpan]::FromMinutes(5)
      $multipart=[Net.Http.MultipartFormDataContent]::new();$stream=[IO.File]::OpenRead($a.Path)
-     try{$multipart.Add([Net.Http.StringContent]::new($gt),'access_token');$multipart.Add([Net.Http.StreamContent]::new($stream),'file',$a.Name);$response=$client.PostAsync(($t.API+'/releases/'+$release.id+'/attach_files'),$multipart).GetAwaiter().GetResult();if(-not $response.IsSuccessStatusCode){throw "Gitee attachment upload HTTP $([int]$response.StatusCode)"}}finally{$multipart.Dispose();$stream.Dispose();$client.Dispose()}
+     # Send OAuth separately from the multipart file fields, matching the verified endpoint.
+     # Never print the credential-bearing URI.
+     try{$multipart.Add([Net.Http.StreamContent]::new($stream),'file',$a.Name);$upload=$t.API+'/releases/'+$release.id+'/attach_files?access_token='+[Uri]::EscapeDataString($gt);$response=$client.PostAsync($upload,$multipart).GetAwaiter().GetResult();if(-not $response.IsSuccessStatusCode){throw "Gitee attachment upload HTTP $([int]$response.StatusCode)"}}finally{$multipart.Dispose();$stream.Dispose();$client.Dispose();$upload=$null}
      $files=Invoke-RestMethod ($t.API+'/releases/'+$release.id+'/attach_files?per_page=100')
      $remote=$files | Where-Object {$_.name -eq $a.Name} | Select-Object -First 1
      if(-not $remote -or $remote.size -ne $a.Size){throw 'Gitee attachment size verification failed'}
@@ -79,7 +81,7 @@ try {
     $receipt.URL='https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/'+$tag
    }
    $receipt.Success=$true
-  }catch{$receipt.Error=$_.Exception.Message}
+  }catch{$message=$_.Exception.Message;foreach($secret in @($gh,$gt)){if($secret){$message=$message.Replace($secret,'[redacted]')}};$receipt.Error=$message}
   $results+=$receipt
  }
  $receiptName='publish-'+$tag+'-'+($Sources -join '-')+'.json'

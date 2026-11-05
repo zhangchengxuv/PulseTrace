@@ -8,6 +8,7 @@
 
 - **键盘**：按键次数、频率和 ANSI 104 热力图，仅保存聚合计数。
 - **鼠标**：五键、时间双击、垂直/水平滚轮事件与累计滚动量。
+- **应用使用**：前台停留与有效活跃时长、排行、小时/日期趋势、排除列表和 CSV；[统计说明](docs/app-usage.md)。
 - **网络**：接口状态、切换历史、上传/下载速率及物理接口 IPv4/IPv6 流量观测。
 - **流量排行**：可选 Mihomo 应用/连接域名排行，支持协议族、时间范围、搜索和排序；域名历史单独授权。
 - **任务栏网速**：Windows 11 原生组件、透明背景、上传/下载双行显示，支持悬浮窗或托盘回退。
@@ -48,7 +49,7 @@ Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 - **安装版**：运行 `PulseTrace-Setup-*.exe`，选择安装位置；数据位于安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP 后运行 `PulseTrace.exe`，保留同目录的 Web 资源、DLL 和 helper。
 
-main 分支可能领先于发布包；截图和性能对应上述开发构建。Gitee 暂无发布附件时请使用 GitHub。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)。
+当前候选版 **v0.3.0-rc3** 已在两源提供相同附件。main 可能领先于发布包；截图和性能对应上述开发构建。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)。
 
 ## 技术栈
 

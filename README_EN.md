@@ -8,6 +8,7 @@ A local keyboard, mouse and network activity monitor for Windows.
 
 - **Keyboard**: key counts, frequency and an ANSI 104 heatmap; aggregate counts only.
 - **Mouse**: five buttons, temporal double clicks, vertical/horizontal wheel events and cumulative deltas.
+- **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV; [measurement details](docs/app-usage.md).
 - **Network**: interface status, switching history, upload/download rates and physical-interface IPv4/IPv6 traffic observations.
 - **Traffic rankings**: optional Mihomo application/connection-domain rankings with IP-family, time-range, search and sorting controls; domain history requires separate consent.
 - **Taskbar speed**: a native Windows 11 component with transparent background and two-line upload/download display; floating-window or tray fallback.
@@ -48,7 +49,7 @@ Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 - **Installer**: run `PulseTrace-Setup-*.exe` and choose a location. Data lives in its `data` subdirectory and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP and launch `PulseTrace.exe`, keeping the Web resources, DLL and helpers together.
 
-The main branch may be ahead of published packages; screenshots and measurements describe the development build above. Use GitHub if Gitee has no release assets. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md).
+Candidate **v0.3.0-rc3** is available with matching assets on both sources. Main may be ahead of published packages; screenshots and measurements describe the development build above. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md).
 
 ## Technology
 

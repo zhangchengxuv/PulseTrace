@@ -1,5 +1,13 @@
 # PulseTrace 开发状态
 
+## v0.3.0-rc3 双源发布
+
+- 发布源提交 `4469489a6b13a7608731ce017bfe0d301c82b3d9`，两端 `v0.3.0-rc3` 标签均指向该提交；[GitHub](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.3.0-rc3) 与 [Gitee](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.3.0-rc3) 均为候选版，安装 EXE、便携 ZIP 及两个 SHA-256 附件已上传。GitHub 服务器 digest 匹配；Gitee 四个附件已独立下载核对 SHA-256。
+- Release/Debug 各 18/18 CTest，中英真实向导启动/返回/取消、安装/运行中升级/卸载保留/重装、旧版独立目录迁移（含非空目标保护）、55 文件便携清单、解压运行和七种 EXE 图标尺寸通过。绑定源树及附件哈希的记录在 `build/release/v0.3.0-rc3-public/validation-v0.3.0-rc3.json`。
+- 发布测试发现旧版夹具只降低主库版本、却残留新表及 v5 月档；已修正所有受控数据库的真实 v1 结构，并将验证改为只读，保持源库哈希不变。故障记录保留；一个暂停且数据库已无占用的隔离旧测试进程在一致性备份后清理，用户实际运行实例未操作。最终完整发布验证通过，未放宽生产迁移保护。
+- GitHub 一度返回服务端 commit_refs_rules 拒绝，有限重试后正常推送；Gitee multipart 表单内的令牌不被上传端点识别，改用已实测的 OAuth query 鉴权完成续传。发布工具同步修复鉴权并对异常日志脱敏。凭据仅在进程内使用，未保存到源码、配置或文件。
+- 安装包 SHA-256 `b0642ce7fa1c2db999900c6da73e46e6fbf1e48d1686d6e0d770323007d235e5`；ZIP `758c6d25a25369c16f99e753b4a01a58801ae65589ef965f2f26503e4efa0442`。安装身份签名、其他系统/DPI、多屏、真实锁屏/睡眠/长期运行和网络独立对照仍待验收，详见 [发行说明](releases/v0.3.0-rc3.md)。
+
 ## 托盘注册恢复（2026-11-05）
 
 - 回归曾实测“Tray unavailable; keeping window visible”，同一时段观察到 Explorer 重启。代码只有一次 NIM_ADD，失败后不重试；重复注册也会把原成功状态改为失败。现在先 MODIFY、后 ADD，缺失时每五秒重试，关闭到托盘前立即尝试恢复；退出阶段不重新添加图标。没有改变监测、数据路径或窗口关闭的安全回退。
