@@ -1,0 +1,1 @@
+{"version":"@PULSETRACE_VERSION@","base_version":"@PULSETRACE_VERSION_BASE@","repository":"zhangchengxuv/PulseTrace","configuration":"@CMAKE_BUILD_TYPE@","architecture":"x64"}

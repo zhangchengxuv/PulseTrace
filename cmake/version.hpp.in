@@ -1,0 +1,7 @@
+#pragma once
+#define PULSETRACE_VERSION "@PULSETRACE_VERSION@"
+#define PULSETRACE_VERSION_RESOURCE @PULSETRACE_VERSION_RESOURCE@
+#define PULSETRACE_REPOSITORY "zhangchengxuv/PulseTrace"
+#ifndef RC_INVOKED
+namespace pulsetrace { inline constexpr const char *app_version=PULSETRACE_VERSION; }
+#endif
