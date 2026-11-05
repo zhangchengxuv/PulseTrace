@@ -1,0 +1,57 @@
+# 0.3.0-rc1 修改文件
+
+以当前未提交工作树为准；保留既有采集算法、数据库和用户配置。
+
+- `CMakeLists.txt`
+- `README.md`
+- `THIRD-PARTY-NOTICES.md`
+- `docs/desktop-guide.md`
+- `docs/development-status.md`
+- `include/pulsetrace/database.hpp`
+- `src/core_service.cpp`
+- `src/database.cpp`
+- `src/desktop/PulseTrace.rc`
+- `src/desktop/main.cpp`
+- `src/protocol.cpp`
+- `tools/package.ps1`
+- `tools/publish-release.ps1`
+- `tools/test-package.ps1`
+- `web/desktop/index.html`
+- `web/desktop/product.css`
+- `web/desktop/product.js`
+- `cmake/version.cmake`
+- `cmake/version.hpp.in`
+- `cmake/version.json.in`
+- `docs/changed-files-v0.3.0-rc1.md`
+- `docs/releases/v0.3.0-rc1.md`
+- `docs/upgrade-and-taskbar.md`
+- `include/pulsetrace/desktop/taskbar_host.hpp`
+- `include/pulsetrace/desktop/taskbar_layout.hpp`
+- `include/pulsetrace/desktop/widget_ipc.hpp`
+- `include/pulsetrace/installation.hpp`
+- `include/pulsetrace/update.hpp`
+- `installer/PulseTrace.iss`
+- `src/desktop/maintenance.cpp`
+- `src/desktop/taskbar_host.cpp`
+- `src/desktop/taskbar_widget.cpp`
+- `src/update_model.cpp`
+- `src/update_service.cpp`
+- `tests/date_time_tests.cjs`
+- `tests/frontend_assets.cjs`
+- `tests/migration_tests.cpp`
+- `tests/taskbar_probe.cpp`
+- `tests/update_live_probe.cpp`
+- `tests/update_tests.cpp`
+- `tests/upgrade_fixture.cpp`
+- `tests/widget_tests.cpp`
+- `tools/bootstrap-inno.ps1`
+- `tools/build-installer.ps1`
+- `tools/prepare-release.ps1`
+- `tools/publish-dual.ps1`
+- `tools/test-installer.ps1`
+- `web/desktop/date-time.css`
+- `web/desktop/date-time.js`
+- `web/desktop/picker-validation.js`
+- `web/desktop/range-controls.js`
+- `web/desktop/update-view.js`
+- `web/desktop/widget-view.js`

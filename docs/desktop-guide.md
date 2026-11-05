@@ -1,129 +1,36 @@
-# PulseTrace 0.2.0-rc3
+# PulseTrace 0.3.0-rc2
 
-RC3：同色原生标题栏、滚动模糊工具栏和六卡片 Dashboard。标题栏按钮由 Windows 管理，关闭仍默认进入托盘。监测时长表示实际覆盖时长；IP 占比只代表已接收的观测样本。详见 [本轮实测记录](docs/immersive-dashboard-validation.md)。
+本地 Windows 活动统计工具 / Local Windows activity monitor
 
-新增：融合主题的原生标题栏、六项月度流量累计与独立的自然月 SQLite / JSON 归档。分钟明细保留天数不删除月度集合。见 [月度存储和标题栏说明](docs/monthly-traffic-and-caption.md)。
+## 简体中文
 
-最新更新：标准 ANSI 104 物理键盘、Arctic · Custom Colormap（OKLab + 平方根归一化），以及真实 ETW NDIS 物理接口 IPv4/IPv6 分族观测与 SQLite schema v3。仍为候选版本，部分流量存在拒收，未宣称完整精确计量验收。详见 docs/ansi-arctic-network-validation.md。
+运行完整便携包中的 PulseTrace.exe，或使用 EXE 安装包。首次启动暂停统计，在设置中选择“跟随系统 / 简体中文 / English”。关闭窗口默认进入托盘，完全退出会保存数据并停止核心。
 
-PulseTrace 是 Windows x64 本地桌面统计应用，使用 C++20、Win32、系统 Evergreen WebView2、Raw Input 和 SQLite。当前交付定位为**候选版本**：可运行功能与外部人工验收分开记录，不宣称完整最终验收通过。
+任务栏网速使用真正的子窗口。设置可选嵌入、独立悬浮或托盘；暂停、不可用与实际速率明确区分。系统无法验证显示时安全回退。默认每秒更新，不另起采集器。
 
-## 启动与使用
+新安装默认 D:\Program Files\PulseTrace，data 固定在安装目录内。D 不可用会给出替代位置；权限不足会提前提示，用户可明确提升安装器或改选可写目录。普通运行不需要管理员权限，不修改整个 Program Files 的 ACL。
 
-解压完整发布包到一个可写目录，运行 `PulseTrace.exe`。不要单独移动 exe；同目录需要 `WebView2Loader.dll`、`web/desktop/` 和许可证文件。
+升级保留原安装位置和设置。旧版独立数据目录通过安装器安全迁移，一致性备份、原目录保留；目标已有数据时不会覆盖或合并。普通卸载保留 data，重新安装会继续读取历史。
 
-首次启动默认暂停统计，点击右上角“开始监测”后采集。界面含总览、网络、键盘、鼠标、历史和设置六页；所有统计来自本机核心与 SQLite，没有正式使用数据模拟模式。无记录时显示零值或空状态。
+日期选择先编辑草稿，确认后查询；分钟精度、本地时间与 UTC 转换。仅保存聚合统计，不记录输入内容或鼠标轨迹，敏感操作前请暂停。
 
-- 关闭主窗口默认隐藏到托盘，停止并释放 WebView2 页面，后台核心继续运行。
-- 点击托盘图标或“打开 PulseTrace”重新创建页面，读取最新聚合数据。
-- 托盘右键可开始、暂停、打开今日统计/设置、完全退出。
-- 完全退出先停止采集和提交数据库，再等待 WebView2 进程组结束，删除托盘图标。
-- 这是桌面程序，不依赖 `http://127.0.0.1:8765`。该端口被其他程序占用不影响桌面版本。
+更新支持 GitHub/Gitee。尚未配置可信发布签名，下载核对 SHA-256 后只提供手动安装，不自动执行 EXE。IPv4/IPv6 为真实物理接口观测，仍带未完成独立抓包对照的质量标识，不等于校园网账单。
 
-程序使用系统已有 Evergreen WebView2 Runtime，不打包 Chromium，不需要 Node.js 或 Python 后台。缺 Runtime 时显示原生诊断窗口与错误码，可安装微软官方 Runtime 后重开程序；不自动安装或更改系统安全设置。
+## English
 
-## 安装
+Run PulseTrace.exe from the complete portable ZIP, or use the EXE installer. Monitoring starts paused. Choose System default, 简体中文, or English in Settings. Closing the window normally hides it to the tray; Exit saves data and stops the core.
 
-可以直接便携运行；也可显式运行发布包中的安装脚本：
+Network speed is displayed in a real taskbar child window. Embedded, floating and tray modes are available. Paused and unavailable states are distinct from real rates. Unverifiable display falls back safely. Rates use the existing monitor snapshot, updated once per second.
 
-```powershell
-.\tools\install.ps1 -Destination "$env:LOCALAPPDATA\Programs\PulseTrace"
-```
+New installations default to D:\Program Files\PulseTrace. All data stays in its data subfolder. If D is unavailable, an alternative is suggested. Permission checks occur before copying; explicitly elevate the installer if required, or choose another location. The running app does not require administrator rights and the parent Program Files ACL is not changed.
 
-安装器复制运行文件并创建开始菜单快捷方式，不启用开机启动或监测。`-NoShortcut` 可只复制运行文件。更新前从托盘完全退出；安装器保留已有 data。
+Upgrades keep the existing location and preferences. The installer can copy legacy external data using consistent SQLite backups while preserving the source. An occupied destination is never silently overwritten or merged. Uninstall keeps data; reinstall reads the retained history.
 
-开机自启动仅在设置页主动勾选时修改当前用户 Run 项；与“下次启动恢复监测”是两个独立设置。后者默认关闭。开发测试不会擅自启用自启动。
+The calendar edits a draft and commits on confirmation, with minute precision and local/UTC conversion. Only aggregate statistics are saved. Input text and mouse trails are not recorded; pause before sensitive activity.
 
-## 数据与隐私
+GitHub/Gitee update sources are supported. A trusted publisher signature is not configured, so hash-checked downloads require manual installation and never run automatically. IPv4/IPv6 values remain physical-interface observations with explicit quality limitations, not a billing total.
 
-默认路径取 exe 的绝对目录，不取工作目录：
+Microsoft Evergreen WebView2 Runtime is required / 需要系统 WebView2 Runtime:
+https://developer.microsoft.com/microsoft-edge/webview2/
 
-```text
-data/
-  monitor.db          SQLite 聚合统计与连接观察历史
-  monitor.db-wal      SQLite 自己管理，运行时不要单独移动或删除
-  monitor.db-shm
-  network-months/     按自然月独立保存的网络 SQLite / JSON，长期保留
-  config.json         用户设置
-  window.json         窗口位置与尺寸
-  webview2/           本应用 WebView2 用户数据
-  logs/               有界运行日志与显式自检产物
-```
-
-目录不可写时显示错误并让用户手动选目录，不静默写到其他位置。也可明确指定：
-
-```powershell
-.\PulseTrace.exe --data-dir "D:\PulseTraceData"
-```
-
-设置页提供月度数据文件夹入口，支持范围 CSV 导出、保留期与持久化周期。导出同时生成普通聚合 CSV 和带 source/basis/quality/reference_validated 的 IP 观测 CSV，必须连同质量字段分析。清空统计必须先暂停并输入 `DELETE`；不会删除配置或系统 Runtime。备份前完全退出，再复制 data/monitor.db 和 data/network-months/；不要在运行中仅拷贝主数据库忽略 WAL。
-
-默认每 30 秒批量持久化，可设置为 5–300 秒；正常退出做最终提交。突然断电/强制终止可能丢失最近未提交批次，但已提交事务保持一致。磁盘忙或写失败时暂停采集并保留待重试聚合，退避重试，不在输入回调写数据库；失败退出会要求明确选择是否丢弃未写数据。严重数据库异常保留原文件并显示诊断，不自动覆盖数据库。
-
-键鼠只保存分钟聚合计数，不保存文本、按键顺序、可还原文本的逐键时间戳、鼠标坐标、轨迹、剪贴板或窗口文本。输入设备句柄只在内存中做短期去重。Raw Input 无法识别所有密码输入；敏感操作前应主动暂停。锁屏通知触发输入暂停和临时状态清理，仍须在目标系统人工验证锁屏/解锁行为。
-
-## 统计口径
-
-**键盘**按物理扫描码与 E0/E1 扩展位隔离键位，左右修饰键、主键区/小键盘可区分；按住产生的重复 MAKE 单列，不重复算物理按下。Pause 无通常 BREAK 的情况和 PrintScreen 的伪 Shift 报告单独处理。热力图采用标准 ANSI 104 物理位置、Arctic OKLab 连续色图及平方根归一化，字母标签不是实际输入内容；其他布局、媒体键和设备固件差异需结合扫描码排名及实机验收。
-
-**鼠标**支持五键、时间双击、垂直/水平滚轮。时间双击是同设备同按键 DOWN→UP→DOWN、两个 DOWN 不超过系统双击时限，不重叠配对；不验证位置，因此不是 Windows 标准空间双击。普通两次点击仍分别计数。空句柄不推断双击。
-
-滚轮事件与 delta 分开：`+15 × 8` 是 8 个事件、120 delta、1 个标准刻度；先累加再换算，不逐条截断。正负量分别保留，水平独立。来源仅按 Raw Input 证据说明，有句柄不证明物理设备，空句柄不证明触控板；不声称全部物理/合成/触控板输入可靠三分。
-
-**时间范围**使用 `[from,to)` 整分钟边界；界面输入本地时间，传输和存储 UTC。分钟/小时/天汇总中小时和天按 UTC 边界，不能把 UTC 天冒充本地日历天。“今天”范围以本地零点转换为 UTC。当前查询上限 366 天、100000 个聚合指标行，超限需选更粗粒度。历史页每次呈现 100 行，网络观察历史最多返回最近 500 条。
-
-**网络**提供 IP Helper 单接口收发 octet 与速率、物理/虚拟标志、已配置地址族、Windows NLM 系统级 IPv4/IPv6 互联网连通性提示，以及连接/断开/接口选择观察历史。接口列表与计数低频采样约 1 秒；短暂切换可能无法捕捉，记录时间是观察时刻，初始状态不伪装成实际连接发生时间。
-
-自动选择首个活动物理接口，也可在设置中明确选物理网卡或 Mihomo TUN。不会把所有接口相加。接口总量不等于应用净荷、物理介质全部开销或校园网账单。NLM 提示是系统级状态，不证明指定接口对任意地址都可达。
-
-**IPv4/IPv6 物理接口分族观测已接入，但完整准确性尚未验收。** 采用独立 ETW NDIS-PacketCapture 会话，绑定所选物理 WLAN/Ethernet，按实际 IP 头部长度聚合；与接口总量/TUN 分开。局域 IPv4/IPv6 Echo 校验通过；对一般流量中的捕获分段、卸载异常等严格拒收并显示“不完整观测”。没有经过独立抓包对照，不等于校园网计费字节。不会自动安装驱动、升权或修改 Clash/路由。
-
-## 构建
-
-工作区已有的便携 LLVM-MinGW 与 CMake：
-
-```powershell
-.\tools\bootstrap-deps.ps1
-.\tools\build.ps1 -Toolchain PortableLLVM -Configuration Release
-.\build\llvm-release\PulseTrace.exe
-```
-
-固定依赖为 WebView2 SDK 1.0.4314.35、nlohmann/json 3.12.0、SQLite 3.54.1。bootstrap 只在 build/deps 下载官方文件并校验固定 SHA-256；SQLite 还独立比对过官方公布 SHA3-256，Loader 的 Microsoft Authenticode 签名实测有效。构建不会安装驱动或更改全局 PATH。
-
-已有 MSVC + Windows SDK + CMake 时：
-
-```powershell
-cmake -S . -B build/msvc -A x64
-cmake --build build/msvc --config Release --parallel
-ctest --test-dir build/msvc -C Release --output-on-failure
-```
-
-MSVC 构建尚未在本机执行。`-DPULSETRACE_BUILD_DESKTOP=OFF` 可只构建原有独立验证工具。保留了 mouse_probe、mouse_benchmark、mouse_latency_target；HTTP 报告原型不作为桌面依赖。
-
-## 测试与交付状态
-
-```powershell
-ctest --test-dir build/llvm-release --output-on-failure
-.\build\llvm-release\PulseTrace.exe --self-test --cycles 20
-.\tools\measure-resources.ps1 -Mode UI -Cycles 2
-.\tools\measure-resources.ps1 -Mode Core -CoreSeconds 30
-```
-
-自检会创建自己的聚合数据库/日志并正常退出；`--data-dir` 可指向专用测试目录。自检不伪造物理输入，也不启用自启动。`--core-seconds` 是定时后台诊断模式，默认暂停采集；不会创建 WebView2。
-
-已实际完成 Release 编译、鼠标原有检查、产品键盘/SQLite/协议/线程测试、事务中异常退出恢复、20 次桌面开关循环和进程组释放测量。详细数值、失败后修复记录及最后部署测试以 `docs/development-status.md` 和 `docs/desktop-validation-results.md` 为准。
-
-Windows 10/其他 Windows 11、MSVC、真实高频 HID 丢失率、端到端输入延迟、高速下载吞吐量、Clash TUN 开关对照、24/72 小时运行，以及自启动真实登录场景仍待人工验收。不得把进程内重放、零包烟测或短期内存测量当成这些测试通过。
-
-## 项目模块
-
-```text
-include/pulsetrace/  独立聚合、输入宿主、键盘、数据库、网络、CoreService、协议
-src/                各模块实现
-src/desktop/        Win32 生命周期、托盘、WebView2 与原生消息桥
-web/desktop/        六页桌面前端与本地样式
-tests/              鼠标、产品集成、崩溃恢复测试和性能工具
-tools/              固定依赖、构建、测量、打包与用户主动运行的安装器
-docs/               当前进度、实测结果、设计与历史验证说明
-build/              构建、依赖和候选发布包（不提交 Git）
-```
+验证、迁移与限制 / Validation, migration and limitations: docs/taskbar-language-layout-rc2.md
