@@ -14,6 +14,7 @@ void validate_config(const Json &c) {
     const auto channel=c.at("update_channel").get<std::string>();if(channel!="stable"&&channel!="preview")throw std::invalid_argument("Invalid update channel");
     const auto source=c.at("update_source").get<std::string>();if(source!="auto"&&source!="github"&&source!="gitee")throw std::invalid_argument("Invalid update source");
     const auto mode=c.at("taskbar_mode").get<std::string>();if(mode!="embedded"&&mode!="floating"&&mode!="tray")throw std::invalid_argument("Invalid taskbar mode");
+    const auto background=c.at("taskbar_background").get<std::string>();if(background!="transparent"&&background!="subtle")throw std::invalid_argument("Invalid taskbar background");
     if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
     for(const char *key:{"close_to_tray","capture_on_launch","check_updates_on_start"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean setting");
     const auto theme = c.at("theme").get<std::string>();
@@ -37,7 +38,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
     config_ = {{"theme", "system"},       {"retention_days", 30},  {"flush_seconds", 30},
                {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false},
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
-               {"taskbar_mode","embedded"},{"taskbar_monitor",0},{"language","system"}};
+               {"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"}};
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {

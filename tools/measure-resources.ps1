@@ -38,7 +38,9 @@ $process.WaitForExit()
 $remaining=@()
 foreach($id in $known.Keys){$current=Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction SilentlyContinue;if($current -and $current.CreationDate -eq $known[$id]){$remaining+=$id}}
 $report=[pscustomobject]@{Mode=$Mode;ExecutableSha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash;ExitCode=$process.ExitCode;Cycles=$Cycles;MainPid=$process.Id;RemainingKnownChildPids=$remaining;Note='Working Set sums include shared pages; process IO writes include IPC and are not physical disk IO. 500ms sampling can miss brief child processes. Measurement script overhead is external to app. Core mode uses paused capture by default.';Samples=$samples}
-$out=Join-Path $directory ('data\resource-test-'+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+'.json')
+$reportDirectory=if($DataDirectory){[IO.Path]::GetFullPath($DataDirectory)}else{Join-Path $directory 'data'}
+New-Item -ItemType Directory -Force -Path $reportDirectory | Out-Null
+$out=Join-Path $reportDirectory ('resource-test-'+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()+'.json')
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $out -Encoding UTF8
 Write-Output "Resource report: $out"
 Write-Output "ExitCode=$($process.ExitCode); Remaining observed child processes=$($remaining.Count)"

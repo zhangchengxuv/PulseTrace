@@ -91,7 +91,7 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("Invalid aggregation bucket");
     } else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","language"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","taskbar_background","language"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else

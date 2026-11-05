@@ -249,6 +249,7 @@ int main() {
             }
             require(ready, "background Raw Input ready");
             require(!rpc(core, "get_status")["monitoring"].get<bool>(), "first launch defaults paused");
+            require(rpc(core,"get_status")["config"]["taskbar_background"]=="transparent","old/default configuration starts with a transparent widget");
             rpc(core, "set_monitoring", {{"enabled", true}});
             require(rpc(core, "get_status")["monitoring"].get<bool>(), "explicit start reflected in status");
             std::this_thread::sleep_for(std::chrono::milliseconds(2300));
@@ -260,6 +261,11 @@ int main() {
             rpc(core, "set_monitoring", {{"enabled", false}});
             require(!rpc(core, "get_status")["monitoring"].get<bool>(), "explicit pause reflected in status");
             rpc(core, "set_config", {{"theme", "dark"}, {"retention_days", 7}, {"flush_seconds", 5}});
+            const auto session=rpc(core,"get_status")["session"];
+            rpc(core,"set_config",{{"taskbar_background","subtle"}});
+            rejects([&]{rpc(core,"set_config",{{"taskbar_background","opaque"}});},"unsupported widget background rejected");
+            const auto after_background=rpc(core,"get_status");
+            require(after_background["session"]==session&&!after_background["monitoring"].get<bool>()&&after_background["config"]["taskbar_background"]=="subtle","background preference preserves collector session, pause state and valid configuration");
             rejects([&] { rpc(core, "set_config", {{"retention_days", 4294967326ULL}}); },
                     "overflowing retention rejected before narrowing");
             rejects([&] { rpc(core, "set_config", {{"flush_seconds", 4294967326ULL}}); },
@@ -279,6 +285,7 @@ int main() {
             require(core.status()["config"]["theme"] == "dark" &&
                         core.status()["config"]["retention_days"] == 7,
                     "configuration recovered after restart");
+            require(core.status()["config"]["taskbar_background"]=="subtle","widget background preference persists across restart");
         }
         {
             const auto broken = dir / "broken";

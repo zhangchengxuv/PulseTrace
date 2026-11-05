@@ -2,6 +2,19 @@
 
 当前：**0.3.0-rc2 / Windows x64 候选版**（2026-11-05）。任务栏实际可见性、中英双语、安装目录/data 统一和安装器启动修复已按功能提交。用户已明确授权本版双源 Release；实际发布结果以发布回执和远程附件核验为准。
 
+## 最新：透明任务栏修复
+
+- 移除整面背景填充与窗口级透明度，改为缓存的预乘 BGRA/ULW_ALPHA；默认背景 Alpha=0，文字独立抗锯齿和不透明度。保留真正任务栏子窗口、字形点击和右键菜单；透明 padding 透传。
+- 中英设置增加可选 Alpha=32 淡色回退，旧配置默认完全透明；配置切换不重启采集。NetworkMonitor、SQLite 和 WebView2 生命周期没有修改。
+- Release/Debug 构建及各 13/13 CTest，148 项图形/IPC/GDI 检查通过；最终排版微调后另行重建两种配置、复测 148 项及真实活动网速窗口。TranslucentTB 运行时背景 18/18 对照一致，文字 16/16 匹配，打开/菜单/托盘/退出通过。
+- 本轮只提交同步源码，不覆盖已发布 RC2 附件。真实截图、资源数值与人工模式/DPI/Explorer 验收范围见 [透明任务栏验证](taskbar-alpha-validation.md)。
+
+## 上一项发布结果
+
+- GitHub 已发布 [v0.3.0-rc2](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.3.0-rc2)，预发布状态，4 个安装/便携/校验附件均核验成功。
+- 发布提交 `fd84970e9c3fc642b75c96352b0bb885447da271`；GitHub/Gitee 的 `v0.3.0-rc2` 标签均指向它。Gitee Git 推送成功，但 Release API 凭据验证返回 401；没有创建 Gitee Release，也没有将凭据写入仓库。
+- 发布文件与回执在 `build/release/v0.3.0-rc2-public`。当前透明修复的源码在该发布提交之后，不属于上述附件。
+
 ## 双源发布准备
 
 - 发布包含已验证的安装器启动修复；不会使用旧的错误安装包。安装器、ZIP 和校验文件单独汇集在 `build/release/v0.3.0-rc2-public`，排除用户数据和原始测试证据。
