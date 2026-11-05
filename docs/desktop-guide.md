@@ -1,4 +1,4 @@
-# PulseTrace 0.3.0-rc2
+# PulseTrace
 
 本地 Windows 活动统计工具 / Local Windows activity monitor
 
@@ -14,6 +14,10 @@
 
 日期选择先编辑草稿，确认后查询；分钟精度、本地时间与 UTC 转换。仅保存聚合统计，不记录输入内容或鼠标轨迹，敏感操作前请暂停。
 
+设置提供 Deep Ocean、Pearl Mist 和跟随系统主题。使用统计分开显示前台停留与有效活跃，默认空闲阈值 120 秒，可排除应用、调整保留期及导出 CSV。阅读或视频可能被判断为空闲，不记录窗口标题、文档或 URL。流量排行的可选来源与域名历史需主动启用，不与物理接口计量相加。
+
+数据库升级至 Schema v5 前自动创建一致性备份。降级时使用兼容备份，不要用旧程序写新结构。
+
 更新支持 GitHub/Gitee。尚未配置可信发布签名，下载核对 SHA-256 后只提供手动安装，不自动执行 EXE。IPv4/IPv6 为真实物理接口观测，仍带未完成独立抓包对照的质量标识，不等于校园网账单。
 
 ## English
@@ -28,9 +32,13 @@ Upgrades keep the existing location and preferences. The installer can copy lega
 
 The calendar edits a draft and commits on confirmation, with minute precision and local/UTC conversion. Only aggregate statistics are saved. Input text and mouse trails are not recorded; pause before sensitive activity.
 
+Settings offers Deep Ocean, Pearl Mist and System themes. App Usage separates foreground dwell from input-idle activity (120 seconds by default), with exclusions, retention and CSV export. Reading or video may appear idle. No titles, documents or URLs are recorded. Optional ranking sources and domain history require opt-in; do not add their totals to physical-interface traffic.
+
+Schema v5 upgrades create a consistent backup first. Use a compatible backup for downgrades, rather than writing a newer database with older binaries.
+
 GitHub/Gitee update sources are supported. A trusted publisher signature is not configured, so hash-checked downloads require manual installation and never run automatically. IPv4/IPv6 values remain physical-interface observations with explicit quality limitations, not a billing total.
 
 Microsoft Evergreen WebView2 Runtime is required / 需要系统 WebView2 Runtime:
 https://developer.microsoft.com/microsoft-edge/webview2/
 
-验证、迁移与限制 / Validation, migration and limitations: docs/taskbar-language-layout-rc2.md
+验证、迁移与限制 / Validation, migration and limitations: docs/release-notes.md · docs/app-usage.md
