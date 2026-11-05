@@ -1,5 +1,6 @@
 #pragma once
 #include "pulsetrace/database.hpp"
+#include "pulsetrace/app_usage.hpp"
 #include "pulsetrace/keyboard_monitor.hpp"
 #include "pulsetrace/network_monitor.hpp"
 #include "pulsetrace/monthly_traffic.hpp"
@@ -48,6 +49,8 @@ class CoreService final : public InputCallbacks {
     std::filesystem::path data_;
     std::unique_ptr<MonthlyTrafficStore> monthly_;
     std::unique_ptr<TrafficRankings> rankings_;
+    std::unique_ptr<AppUsageMonitor> usage_;
+    Json unsaved_usage_=Json::array();
     Json unsaved_rankings_=Json::array();
     std::map<std::string,std::string> ranking_icons_;
     std::string session_;

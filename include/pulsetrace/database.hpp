@@ -27,7 +27,11 @@ class DatabaseManager {
     void clear_rankings(bool domains_only);
     void prune_rankings(std::int64_t cutoff);
     std::string ranking_icon_path(const std::string &source,const std::string &identity)const;
-    static constexpr int supported_schema=4;
+    void save_usage(const std::string &session,const Json &rows);
+    Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0)const;
+    void prune_usage(std::int64_t cutoff);
+    std::string usage_icon_path(const std::string &identity)const;
+    static constexpr int supported_schema=5;
     void backup(const std::filesystem::path &destination) const;
     static void backup_file(const std::filesystem::path &source,const std::filesystem::path &destination);
     Json migration_info() const{return migration_;}

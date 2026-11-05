@@ -2,6 +2,8 @@
 async function validateStaticInteractions(){
  const check=(value,message)=>{if(!value)throw new Error('Static UI: '+message);};
  check(!document.getElementById('eyebrow')&&!document.querySelector('aside .privacy'),'removed labels');
+ const action=el('button',{disabled:false,onclick:()=>{action.dataset.clicked='true';}});action.click();
+ check(!action.disabled&&action.dataset.clicked==='true','enabled button interaction');
  for(const node of document.querySelectorAll('nav button,h2,h3,.state,.kpi-head,.chart-legend,.card>span'))
   check(getComputedStyle(node).userSelect==='none','selectable static label');
  const probe=document.createElement('label');

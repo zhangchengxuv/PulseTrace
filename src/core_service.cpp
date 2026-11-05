@@ -9,6 +9,10 @@
 namespace pulsetrace {
 namespace {
 void validate_config(const Json &c) {
+    for(const char *key:{"usage_enabled","usage_icons"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean usage setting");
+    for(const auto &[key,lo,hi]:{std::tuple{"usage_idle_seconds",15,3600},std::tuple{"usage_retention_days",1,365}})if(!c.at(key).is_number_integer()||c.at(key)<lo||c.at(key)>hi)throw std::invalid_argument("Invalid usage setting");
+    if(!c.at("usage_exclusions").is_array()||c.at("usage_exclusions").size()>128)throw std::invalid_argument("Invalid usage exclusions");
+    for(const auto &v:c.at("usage_exclusions"))if(!v.is_string()||v.get<std::string>().empty()||v.get<std::string>().size()>2048)throw std::invalid_argument("Invalid usage exclusion");
     for(const char *key:{"ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean ranking setting");
     if(!c.at("ranking_retention_days").is_number_integer()||c.at("ranking_retention_days")<1||c.at("ranking_retention_days")>365)throw std::invalid_argument("Invalid ranking retention");
     validate_controller(c.at("mihomo_controller").get<std::string>());
@@ -42,7 +46,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
                {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false},
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
                {"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
-               {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""}};
+               {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {
@@ -59,6 +63,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
     if(migrate){const auto directory=data_/"backups";std::filesystem::create_directories(directory);std::filesystem::copy_file(data_/"config.json",directory/("config.pre-v0-"+std::to_string(utc_now_ms())+".json"));save_config();}
     session_ = std::to_string(utc_now_ms()) + "-" + std::to_string(GetCurrentProcessId());
     rankings_=std::make_unique<TrafficRankings>(data_);
+    usage_=std::make_unique<AppUsageMonitor>();
     state_ = {{"input_ready", false},      {"input_error", ""},
               {"storage_error", ""},       {"network", Json::object()},
               {"session", session_},       {"last_flush_ms", 0},
@@ -115,12 +120,13 @@ void CoreService::retry_final_flush() {
         rows = unsaved_rows_;
         events = unsaved_events_;
     }
-    if (rows.empty() && events.empty() && unsaved_rankings_.empty())
+    if (rows.empty() && events.empty() && unsaved_rankings_.empty() && unsaved_usage_.empty())
         return;
     try {
         DatabaseManager db(data_ / "monitor.db");
         db.save(session_, rows, events);
         db.save_rankings(session_,unsaved_rankings_);
+        db.save_usage(session_,unsaved_usage_);unsaved_usage_=Json::array();
         unsaved_rankings_=Json::array();
         MonthlyTrafficStore monthly(data_ / "network-months");
         monthly.recover(db);
@@ -301,6 +307,24 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         return {{"pong", true}};
     if (type == "get_status")
         return status();
+    if(type=="get_app_usage"||type=="export_app_usage"){
+        const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
+        const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
+        for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
+        auto values=db.usage(from,to,session_,floor);
+        for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)values.push_back(r);
+        if(type=="export_app_usage"){
+            const auto name="pulsetrace-app-usage-"+std::to_string(utc_now_ms())+".csv";std::ofstream out(data_/name,std::ios::binary);
+            const auto field=[](std::string text){if(!text.empty()&&std::string("=+-@\t\r").find(text.front())!=std::string::npos)text="'"+text;std::string result="\"";for(char c:text){if(c=='"')result+='"';result+=c;}return result+'"';};
+            out<<"utc_minute,application,name,foreground_ms,active_ms\r\n";for(const auto &r:values)out<<r["minute"]<<','<<field(r["key"])<<','<<field(r["name"])<<','<<r["foreground_ms"]<<','<<r["active_ms"]<<"\r\n";
+            out.close();if(!out)throw std::runtime_error("Usage export failed");return {{"file",name}};
+        }return {{"rows",values},{"status",usage_->status()},{"precision","minute"}};
+    }
+    if(type=="get_usage_icon"){
+        const auto key=p.at("key").get<std::string>();std::string path;for(const auto &r:usage_->rows())if(r["key"]==key){path=r["path"];break;}
+        if(path.empty())path=db.usage_icon_path(key);
+        return {{"icon",config_.value("usage_icons",true)?application_icon(path):""}};
+    }
     if(type=="get_ranking_status")return rankings_->status();
     if(type=="get_ranking_icon"){
         const std::string source=p.at("source"),key=p.at("key");const auto cache=source+"/"+key;
@@ -357,6 +381,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
             capture_window_.stop.store(capture_clock());
         enabled_.store(active);
         rankings_->configure(config_,active&&!session_locked_.load());
+        usage_->configure(config_,active&&!session_locked_.load());
         return status();
     }
     if (type == "get_statistics") {
@@ -455,6 +480,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
             throw;
         }
         rankings_->configure(config_,enabled_.load()&&!session_locked_.load());
+        usage_->configure(config_,enabled_.load()&&!session_locked_.load());
         return config_;
     }
     if(type=="backup_database"){
@@ -515,7 +541,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         }
         monthly_->clear();
         db.clear();
-        rankings_->clear(false);
+        rankings_->clear(false);usage_->clear();unsaved_usage_=Json::array();
         {std::lock_guard lock(mutex_);unsaved_rows_=Json::array();unsaved_events_=Json::array();unsaved_rankings_=Json::array();state_["pending_retry_rows"]=0;}
         clear_requested_ = true;
         return {{"cleared", true}};
@@ -551,7 +577,8 @@ void CoreService::worker() {
                 done = stopping_.load() && input_done_;
             }
             rankings_->configure(cfg,enabled_.load()&&!session_locked_.load());
-            if(done)rankings_->stop();
+            usage_->configure(cfg,enabled_.load()&&!session_locked_.load());
+            if(done){rankings_->stop();usage_->stop();}
             if (done || std::chrono::steady_clock::now() - last_network >= std::chrono::seconds(1))
                 try {
                     auto sample = network.sample(utc_now_ms() / 60000, enabled_.load(),
@@ -599,6 +626,7 @@ void CoreService::worker() {
                     if (!changed.empty() || !network_events_.empty())
                         db.save(session_, changed, network_events_);
                     monthly_->save(session_, changed);
+                    db.save_usage(session_,usage_->rows());usage_->persisted_before(utc_now_ms()/60000-119);
                     db.save_rankings(session_,rankings_->rows());
                     rankings_->persisted_before(utc_now_ms()/60000-119);
                     for (const auto &[k, v] : updates)
@@ -614,6 +642,7 @@ void CoreService::worker() {
                             ++it;
                     if (now - last_prune > std::chrono::hours(1)) {
                         db.prune(utc_now_ms() / 60000 - cfg.value("retention_days", 30) * 1440);
+                        db.prune_usage(utc_now_ms()/60000-cfg.value("usage_retention_days",30)*1440);
                         db.prune_rankings(utc_now_ms()/60000-cfg.value("ranking_retention_days",30)*1440);
                         last_prune = now;
                     }
@@ -623,17 +652,19 @@ void CoreService::worker() {
                     state_["storage_error"] = "";
                     unsaved_rows_ = Json::array();
                     unsaved_events_ = Json::array();
+                    unsaved_usage_=Json::array();
                     unsaved_rankings_=Json::array();
                     state_["pending_retry_rows"] = 0;
                 } catch (const std::exception &e) {
                     disable_capture();
-                    rankings_->configure(cfg,false);
+                    rankings_->configure(cfg,false);usage_->configure(cfg,false);
                     retry_seconds = std::min(60, retry_seconds * 2);
                     std::lock_guard lock(mutex_);
                     state_["storage_error"] = e.what();
                     state_["pending_retry_rows"] = retry_rows.size();
                     unsaved_rows_ = changed;
                     unsaved_events_ = network_events_;
+                    unsaved_usage_=usage_->rows();
                     unsaved_rankings_=rankings_->rows();
                 }
             }
@@ -677,7 +708,7 @@ void CoreService::worker() {
         }
     } catch (const std::exception &e) {
         disable_capture();
-        rankings_->stop();
+        rankings_->stop();usage_->stop();
         std::lock_guard lock(mutex_);
         state_["storage_error"] = e.what();
         for (auto &[request, reply] : requests_)

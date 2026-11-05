@@ -89,8 +89,9 @@ void validate_request(const Json &r) {
         allowed = {"enabled"};
         if (!p.contains("enabled") || !p["enabled"].is_boolean())
             throw std::invalid_argument("enabled must be boolean");
-    } else if (type == "get_statistics" || type == "export_csv") {
+    } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="export_app_usage" || type=="get_usage_icon") {
         allowed = {"from", "to", "bucket"};
+        if(type=="get_usage_icon"){allowed.insert("key");if(!p.contains("key")||!p["key"].is_string()||p["key"].get<std::string>().size()>2048)throw std::invalid_argument("Invalid usage icon key");}
         if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
             !p["to"].is_number_integer())
             throw std::invalid_argument("Range needs integer UTC minutes");
@@ -102,7 +103,7 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("Invalid aggregation bucket");
     } else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else
