@@ -18,7 +18,7 @@ inline std::uint32_t widget_over(COLORREF foreground, unsigned coverage, COLORRE
 class WidgetSurface {
     HDC color_dc_{},mask_dc_{};HBITMAP color_bitmap_{},mask_bitmap_{};
     HGDIOBJ old_color_{},old_mask_{},old_font_{};HFONT font_{};
-    std::uint32_t *color_{},*mask_{};int width_{},height_{};UINT dpi_{};
+    std::uint32_t *color_{},*mask_{};int width_{},height_{};UINT dpi_{};std::wstring face_;int points_{};
     void reset() noexcept {
         if(old_font_)SelectObject(mask_dc_,old_font_);
         if(font_)DeleteObject(font_);
@@ -36,9 +36,9 @@ public:
     WidgetSurface()=default;
     WidgetSurface(const WidgetSurface &)=delete;WidgetSurface &operator=(const WidgetSurface &)=delete;
     ~WidgetSurface(){reset();}
-    bool prepare(int width,int height,UINT dpi) {
-        if(width==width_&&height==height_&&dpi==dpi_&&color_)return true;
-        reset();if(width<=0||height<=0||width>4096||height>1024||dpi<72||dpi>768)return false;
+    bool prepare(int width,int height,UINT dpi,const wchar_t *face=L"Segoe UI Variable Text",int points=10) {
+        if(width==width_&&height==height_&&dpi==dpi_&&face_==face&&points_==points&&color_)return true;
+        reset();if(width<=0||height<=0||width>4096||height>1024||dpi<72||dpi>768||points<8||points>12)return false;
         BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=width;
         info.bmiHeader.biHeight=-height;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
         color_dc_=CreateCompatibleDC(nullptr);mask_dc_=CreateCompatibleDC(nullptr);
@@ -46,27 +46,27 @@ public:
         mask_bitmap_=CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,reinterpret_cast<void **>(&mask_),nullptr,0);
         if(!color_dc_||!mask_dc_||!color_bitmap_||!mask_bitmap_){reset();return false;}
         old_color_=SelectObject(color_dc_,color_bitmap_);old_mask_=SelectObject(mask_dc_,mask_bitmap_);
-        const auto make=[&](const wchar_t *face){return CreateFontW(-MulDiv(10,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
-            DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,face);};
-        font_=make(L"Segoe UI Variable Text");if(!font_){reset();return false;}
-        old_font_=SelectObject(mask_dc_,font_);wchar_t face[128]{};GetTextFaceW(mask_dc_,128,face);
-        if(wcsncmp(face,L"Segoe UI",8)){SelectObject(mask_dc_,old_font_);DeleteObject(font_);font_=make(L"Segoe UI");if(!font_){reset();return false;}SelectObject(mask_dc_,font_);}
+        const auto make=[&](const wchar_t *name){return CreateFontW(-MulDiv(points,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+            DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,name);};
+        font_=make(face);if(!font_){reset();return false;}
+        old_font_=SelectObject(mask_dc_,font_);wchar_t actual_face[128]{};GetTextFaceW(mask_dc_,128,actual_face);
+        if(!actual_face[0]){SelectObject(mask_dc_,old_font_);DeleteObject(font_);font_=make(L"Segoe UI");if(!font_){reset();return false;}SelectObject(mask_dc_,font_);}
         SetBkMode(mask_dc_,TRANSPARENT);SetTextColor(mask_dc_,RGB(255,255,255));
-        width_=width;height_=height;dpi_=dpi;return true;
+        width_=width;height_=height;dpi_=dpi;face_=face;points_=points;return true;
     }
-    void draw(const std::wstring &first,const std::wstring &second,bool dark,unsigned background_alpha=0) {
+    void draw(const std::wstring &first,const std::wstring &second,bool dark,unsigned background_alpha=0,COLORREF upload=RGB(52,152,219),COLORREF download=RGB(139,196,234)) {
         std::fill(mask_,mask_+width_*height_,0u);
         const std::wstring *lines[]={&first,&second};bool arrow[2]{};const int gutter=MulDiv(24,dpi_,96),pad=MulDiv(5,dpi_,96);
         for(int row=0;row<2;++row){RECT r{pad,row*height_/2,width_-pad,(row+1)*height_/2};const auto &line=*lines[row];
             arrow[row]=line.size()>1&&(line[0]==L'\x2193'||line[0]==L'\x2191');
-            if(arrow[row]){RECT icon=r;icon.right=gutter;DrawTextW(mask_dc_,line.c_str(),1,&icon,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);r.left=gutter;DrawTextW(mask_dc_,line.c_str()+2,-1,&r,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS);}
+            if(arrow[row]){RECT icon=r;icon.right=gutter;DrawTextW(mask_dc_,line.c_str(),1,&icon,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);r.left=gutter;DrawTextW(mask_dc_,line.c_str()+2,-1,&r,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS);}
             else DrawTextW(mask_dc_,line.c_str(),-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS);
         }
         GdiFlush();transparent=opaque=partial=0;
         const auto background=dark?RGB(10,38,57):RGB(232,241,247),text=dark?RGB(241,245,249):RGB(10,38,57);
         for(int y=0;y<height_;++y)for(int x=0;x<width_;++x){const int index=y*width_+x,row=y<height_/2?0:1;
             const auto c=mask_[index];const unsigned coverage=((c&255)+((c>>8)&255)+((c>>16)&255)+1)/3;
-            const auto ink=arrow[row]&&x<gutter?(dark?(row==0?RGB(139,196,234):RGB(52,152,219)):RGB(25,96,144)):text;
+            const auto ink=arrow[row]&&x<gutter?(row==0?(!dark&&download==RGB(139,196,234)?RGB(25,96,144):download):(!dark&&upload==RGB(52,152,219)?RGB(25,96,144):upload)):text;
             color_[index]=widget_over(ink,coverage,background,background_alpha);const auto a=color_[index]>>24;
             if(a==0)++transparent;else if(a==255)++opaque;else ++partial;
         }

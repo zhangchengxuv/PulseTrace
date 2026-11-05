@@ -521,5 +521,18 @@
   "network.interface_trend": "Selected egress traffic trend",
   "network.archives": "Monthly archive totals",
   "network.events_limit": "At most 500 saved connection records plus current-session events.",
-  "network.more": "More records"
+  "network.more": "More records",
+  "widget.font": "Font",
+  "widget.font_size": "Font size (pt, 8–12)",
+  "widget.unit": "Rate units",
+  "widget.auto": "Automatic",
+  "widget.precision": "Decimal places",
+  "widget.download_color": "Download arrow color",
+  "widget.upload_color": "Upload arrow color",
+  "widget.offset_x": "Horizontal offset (DIP)",
+  "widget.offset_y": "Vertical offset (DIP)",
+  "widget.preview": "Style preview",
+  "widget.reset": "Restore default style",
+  "widget.style_hint": "Changes preview and save immediately. Offsets must avoid taskbar items; unavailable positions use the safe fallback. Preview uses the real rate snapshot at entry.",
+  "widget.invalid_style": "Check the font, size, units and position limits."
 }

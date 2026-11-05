@@ -8,3 +8,5 @@ console.log(checks+' bilingual resource checks passed');
 const context=vm.createContext({});vm.runInContext(fs.readFileSync(__dirname+'/../web/desktop/widget-view.js','utf8'),context);
 for(const [status,expected]of [[{mode:'embedded',visibility:0},'widget.verifying'],[{mode:'embedded',visibility:1},'widget.visible'],[{mode:'embedded',visibility:3},'widget.occluded'],[{mode:'tray',reason:'Tray-only selected'},'widget.tray'],[{mode:'tray',reason:'Insufficient verified free taskbar space'},'widget.no_space'],[{mode:'floating',visibility:0},'widget.verifying']])assert.equal(context.widgetStatusKey(status),expected);
 console.log('6 widget display-state regression checks passed');
+
+for(const [value,unit,precision,expected]of [[1024,'bytes',0,'1024 B/s'],[1024,'kib',2,'1.00 KiB/s'],[1048576,'mib',1,'1.0 MiB/s'],[1024,'auto',1,'1.0 KiB/s'],[0,'mib',3,'0.000 MiB/s']])assert.equal(context.PulseWidgetStyle.rate(value,unit,precision),expected);console.log('5 widget unit conversion/precision checks passed');

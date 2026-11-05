@@ -20,6 +20,10 @@ void validate_config(const Json &c) {
     if(!c.at("config_version").is_number_integer()||c.at("config_version")!=1)throw std::invalid_argument("Unsupported configuration version; original file preserved");
     const auto channel=c.at("update_channel").get<std::string>();if(channel!="stable"&&channel!="preview")throw std::invalid_argument("Invalid update channel");
     const auto source=c.at("update_source").get<std::string>();if(source!="auto"&&source!="github"&&source!="gitee")throw std::invalid_argument("Invalid update source");
+    for(const auto &[key,lo,hi]:{std::tuple{"taskbar_font_size",8,12},std::tuple{"taskbar_precision",0,3},std::tuple{"taskbar_offset_x",-200,200},std::tuple{"taskbar_offset_y",-200,200}})if(!c.at(key).is_number_integer()||c.at(key)<lo||c.at(key)>hi)throw std::invalid_argument("Invalid taskbar style number");
+    const auto font=c.at("taskbar_font").get<std::string>();if(font!="Segoe UI Variable Text"&&font!="Segoe UI"&&font!="Microsoft YaHei UI"&&font!="Consolas")throw std::invalid_argument("Unsupported taskbar font");
+    const auto unit=c.at("taskbar_unit").get<std::string>();if(unit!="auto"&&unit!="bytes"&&unit!="kib"&&unit!="mib")throw std::invalid_argument("Invalid taskbar unit");
+    for(const char *key:{"taskbar_upload_color","taskbar_download_color"}){const auto value=c.at(key).get<std::string>();if(value.size()!=7||value[0]!='#'||value.substr(1).find_first_not_of("0123456789abcdefABCDEF")!=std::string::npos)throw std::invalid_argument("Invalid taskbar color");}
     const auto mode=c.at("taskbar_mode").get<std::string>();if(mode!="embedded"&&mode!="floating"&&mode!="tray")throw std::invalid_argument("Invalid taskbar mode");
     const auto background=c.at("taskbar_background").get<std::string>();if(background!="transparent"&&background!="subtle")throw std::invalid_argument("Invalid taskbar background");
     if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
@@ -45,7 +49,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
     config_ = {{"theme", "system"},       {"retention_days", 30},  {"flush_seconds", 30},
                {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false},
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
-               {"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
+               {"taskbar_font","Segoe UI Variable Text"},{"taskbar_font_size",10},{"taskbar_unit","auto"},{"taskbar_precision",1},{"taskbar_upload_color","#3498db"},{"taskbar_download_color","#8bc4ea"},{"taskbar_offset_x",0},{"taskbar_offset_y",0},{"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
                {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
     std::ifstream in(data_ / "config.json");
     bool migrate=false;

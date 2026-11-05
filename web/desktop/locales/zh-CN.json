@@ -521,5 +521,18 @@
   "network.interface_trend": "所选出口流量趋势",
   "network.archives": "月度累计归档",
   "network.events_limit": "最多显示最近 500 条已保存连接记录；实时会话记录另计。",
-  "network.more": "更多记录"
+  "network.more": "更多记录",
+  "widget.font": "字体",
+  "widget.font_size": "字号（pt，8–12）",
+  "widget.unit": "流量速率单位",
+  "widget.auto": "自动",
+  "widget.precision": "小数位数",
+  "widget.download_color": "下载箭头颜色",
+  "widget.upload_color": "上传箭头颜色",
+  "widget.offset_x": "水平偏移（DIP）",
+  "widget.offset_y": "垂直偏移（DIP）",
+  "widget.preview": "样式预览",
+  "widget.reset": "恢复默认样式",
+  "widget.style_hint": "样式改变即时预览并保存。偏移不得遮挡任务栏；位置不可用时保持安全回退。预览使用进入设置时的真实速率快照。",
+  "widget.invalid_style": "请检查字体、字号、单位或位置范围。"
 }

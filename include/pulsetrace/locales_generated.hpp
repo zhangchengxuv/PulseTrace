@@ -196,5 +196,18 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"network.interface_trend",L"所选出口流量趋势",L"Selected egress traffic trend"},
 {"network.archives",L"月度累计归档",L"Monthly archive totals"},
 {"network.events_limit",L"最多显示最近 500 条已保存连接记录；实时会话记录另计。",L"At most 500 saved connection records plus current-session events."},
-{"network.more",L"更多记录",L"More records"}
+{"network.more",L"更多记录",L"More records"},
+{"widget.font",L"字体",L"Font"},
+{"widget.font_size",L"字号（pt，8–12）",L"Font size (pt, 8–12)"},
+{"widget.unit",L"流量速率单位",L"Rate units"},
+{"widget.auto",L"自动",L"Automatic"},
+{"widget.precision",L"小数位数",L"Decimal places"},
+{"widget.download_color",L"下载箭头颜色",L"Download arrow color"},
+{"widget.upload_color",L"上传箭头颜色",L"Upload arrow color"},
+{"widget.offset_x",L"水平偏移（DIP）",L"Horizontal offset (DIP)"},
+{"widget.offset_y",L"垂直偏移（DIP）",L"Vertical offset (DIP)"},
+{"widget.preview",L"样式预览",L"Style preview"},
+{"widget.reset",L"恢复默认样式",L"Restore default style"},
+{"widget.style_hint",L"样式改变即时预览并保存。偏移不得遮挡任务栏；位置不可用时保持安全回退。预览使用进入设置时的真实速率快照。",L"Changes preview and save immediately. Offsets must avoid taskbar items; unavailable positions use the safe fallback. Preview uses the real rate snapshot at entry."},
+{"widget.invalid_style",L"请检查字体、字号、单位或位置范围。",L"Check the font, size, units and position limits."}
 };}

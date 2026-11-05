@@ -78,6 +78,10 @@ int main() {
             return Json{{"minute", minute}, {"module", "keyboard"}, {"metric", "30"}, {"value", value}};
         };
         {
+            std::filesystem::create_directories(dir/"style-config");CoreService styles(dir/"style-config");styles.start();rpc(styles,"set_config",{{"taskbar_unit","kib"},{"taskbar_font_size",12},{"taskbar_precision",3},{"taskbar_offset_x",-8},{"taskbar_upload_color","#123456"}});rejects([&]{rpc(styles,"set_config",{{"taskbar_font_size",99}});},"invalid widget font size rejected");rejects([&]{rpc(styles,"set_config",{{"taskbar_upload_color","bad"}});},"invalid widget color rejected");styles.stop();
+            CoreService restored(dir/"style-config");require(restored.status()["config"]["taskbar_unit"]=="kib"&&restored.status()["config"]["taskbar_font_size"]==12,"taskbar style persists across restart");
+        }
+        {
             DatabaseManager db(dir / "test.db");
             db.save("a", Json::array({row(59, 2), row(60, 3)}));
             db.save("a", Json::array({row(59, 2), row(60, 3)}));

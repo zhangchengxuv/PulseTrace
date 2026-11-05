@@ -4,6 +4,8 @@
 #include <sddl.h>
 #include <vector>
 #include <chrono>
+#include <array>
+#include <algorithm>
 namespace pulsetrace {
 TaskbarWidgetHost::TaskbarWidgetHost(HWND owner,const std::filesystem::path &directory):owner_(owner){
  try{
@@ -24,6 +26,9 @@ TaskbarWidgetHost::~TaskbarWidgetHost(){stop();}
 void TaskbarWidgetHost::stop() noexcept{if(shared_){WidgetSnapshot s;s.owner_pid=GetCurrentProcessId();s.tick=GetTickCount64();s.flags=0x80000000;publish_snapshot(shared_->data_sequence,shared_->data,s);}if(process_){WaitForSingleObject(process_,4000);CloseHandle(process_);process_=nullptr;}if(shared_){UnmapViewOfFile(shared_);shared_=nullptr;}if(mapping_){CloseHandle(mapping_);mapping_=nullptr;}}
 void TaskbarWidgetHost::update(const Json &status){if(!shared_)return;WidgetSnapshot s;s.owner_pid=GetCurrentProcessId();s.owner_window=reinterpret_cast<UINT_PTR>(owner_);s.tick=GetTickCount64();const auto cfg=status.value("config",Json::object());const auto mode=cfg.value("taskbar_mode","embedded");s.mode=mode=="floating"?1:mode=="tray"?2:0;s.monitor=cfg.value("taskbar_monitor",0u);
  s.language=effective_language(cfg.value("language","system"))=="zh-CN"?1:0;
+ const std::array<std::string,4> fonts={"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","Consolas"};const auto font=cfg.value("taskbar_font",fonts[0]);s.font=static_cast<unsigned>(std::find(fonts.begin(),fonts.end(),font)-fonts.begin());
+ s.font_size=cfg.value("taskbar_font_size",10u);const auto unit=cfg.value("taskbar_unit","auto");s.unit=unit=="bytes"?1:unit=="kib"?2:unit=="mib"?3:0;s.precision=cfg.value("taskbar_precision",1u);s.offset_x=cfg.value("taskbar_offset_x",0);s.offset_y=cfg.value("taskbar_offset_y",0);
+ const auto color=[&](const char *key,const char *fallback){const auto value=std::stoul(cfg.value(key,std::string(fallback)).substr(1),nullptr,16);return RGB((value>>16)&255,(value>>8)&255,value&255);};s.upload_color=color("taskbar_upload_color","#3498db");s.download_color=color("taskbar_download_color","#8bc4ea");
  s.background_alpha=cfg.value("taskbar_background","transparent")=="subtle"?32:0;
  const auto n=status.value("network",Json::object());s.upload=n.value("upload_bps",0.0);s.download=n.value("download_bps",0.0);
  if(status.value("monitoring",false))s.flags|=1;const auto selected=n.value("selected","");
