@@ -83,7 +83,8 @@ class DesktopApplication {
     bool tray_added_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
         preview_done_{}, preview_ok_{}, frame_captured_{};
     int self_stage_{}, ready_count_{}, ping_count_{}, cycles_{2}, recoveries_{}, core_seconds_{};
-    std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{};
+    std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{}, last_tray_attempt_{};
+    bool tray_recovery_checked_{};
     std::string diagnostic_, last_tray_state_, test_page_,pending_page_;
     UINT taskbar_message_{};
     bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{},picker_test_{},widget_test_{};
@@ -123,6 +124,7 @@ void DesktopApplication::save_window() {
     }
 }
 void DesktopApplication::tray() {
+    last_tray_attempt_=GetTickCount64();
     nid_ = {};
     nid_.cbSize = sizeof(nid_);
     nid_.hWnd = window_;
@@ -131,7 +133,11 @@ void DesktopApplication::tray() {
     nid_.uCallbackMessage = tray_message;
     nid_.hIcon = LoadIconW(instance_, MAKEINTRESOURCEW(IDI_PULSETRACE));
     wcscpy_s(nid_.szTip, ui_text("tray.paused"));
-    tray_added_ = Shell_NotifyIconW(NIM_ADD, &nid_) != FALSE;
+    // TaskbarCreated may be duplicated, or Explorer may not be ready on the first attempt.
+    // An existing icon is success as well; a failed duplicate ADD must not erase that state.
+    tray_added_ = Shell_NotifyIconW(NIM_MODIFY, &nid_) != FALSE ||
+                  Shell_NotifyIconW(NIM_ADD, &nid_) != FALSE;
+    last_tray_state_.clear();
 }
 void DesktopApplication::open() {
     if (exiting_)
@@ -148,6 +154,9 @@ void DesktopApplication::open() {
         pending_open_ = true;
 }
 void DesktopApplication::hide() {
+    if(exiting_)return;
+    if (!tray_added_)
+        tray();
     if (!tray_added_) {
         diagnostic("Tray unavailable; keeping window visible");
         return;
@@ -325,7 +334,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
     }
     if (taskbar_message_ && m == taskbar_message_) {
-        tray();
+        if(!exiting_){tray_added_=false;tray();}
         return 0;
     }
     switch (m) {
@@ -436,6 +445,8 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         if (exiting_)
             return 0;
+        if (!tray_added_ && GetTickCount64()-last_tray_attempt_>=5000)
+            tray();
         if(widget_)widget_->update(core_->status());
         set_ui_language(core_->status()["config"].value("language","system"));
         caption_.theme(core_->status()["config"].value("theme","system"));
@@ -522,6 +533,13 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     return 0;
                 }
                 if(core_->status()["config"].value("close_to_tray",true)){
+                    if(!tray_recovery_checked_){
+                        tray_recovery_checked_=true;
+                        Shell_NotifyIconW(NIM_DELETE,&nid_);tray_added_=false;
+                        tray();tray(); // Actual missing-icon recovery and idempotent registration.
+                        if(!tray_added_)throw std::runtime_error("Tray recovery unavailable");
+                        diagnostic("Tray registration recovered after own icon removal; duplicate registration preserved it");
+                    }
                     SendMessageW(window_,WM_SYSCOMMAND,SC_CLOSE,0);
                     if(IsWindowVisible(window_))throw std::runtime_error("Caption close did not hide to tray");
                     diagnostic("Caption close button: hidden to tray; monitoring core retained");
