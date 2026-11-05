@@ -98,6 +98,7 @@ Source: "{#StageDir}\web\desktop\*"; DestDir: "{app}\web\desktop"; Flags: ignore
 Source: "{#StageDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs
 Source: "{#StageDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\PulseTrace"; Filename: "{app}\PulseTrace.exe"

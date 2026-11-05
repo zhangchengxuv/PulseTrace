@@ -17,6 +17,8 @@ try {
  Copy-Item -LiteralPath (Join-Path $root 'web\desktop') -Destination (Join-Path $stage 'web') -Recurse
  Copy-Item -LiteralPath (Join-Path $root 'docs\desktop-guide.md') -Destination (Join-Path $stage 'README.md')
  Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination $stage
+ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
+ foreach($name in @('MinGW-w64-runtime-LICENSE.txt','MinGW-w64-LICENSE.txt','winpthreads-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $root "licenses\$name") -Destination (Join-Path $stage 'licenses')}
  foreach($name in @('development-status.md','taskbar-language-layout-rc2.md','changed-files-v0.3.0-rc2.md')){if(Test-Path -LiteralPath (Join-Path $root "docs\$name")){Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs')}}
  Copy-Item -LiteralPath (Join-Path $build 'version.json') -Destination $stage
  $sdk=Join-Path $root 'build\deps\webview2'
