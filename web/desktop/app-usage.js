@@ -17,7 +17,7 @@ function usageChart(title,values,daily=false){
  const draw=()=>{const width=canvas.clientWidth;if(!width)return;const height=180,dpr=devicePixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const css=getComputedStyle(document.documentElement),max=Math.max(...series.map(r=>r[1]))||1,left=42,right=width-12,span=(right-left)/series.length;
   ctx.font='11px Segoe UI';ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText((max/60000).toFixed(1)+' m',0,16);ctx.strokeStyle=css.getPropertyValue('--chart-grid');ctx.beginPath();ctx.moveTo(left,150);ctx.lineTo(right,150);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--data-time');for(let i=0;i<series.length;i++)ctx.fillRect(left+i*span+2,150-series[i][1]/max*120,Math.max(1,span-4),series[i][1]/max*120);
   ctx.fillStyle=css.getPropertyValue('--muted');ctx.textAlign='left';const label=m=>PulseI18n.date(m*60000,daily?{month:'short',day:'numeric'}:{month:'numeric',day:'numeric',hour:'2-digit',hourCycle:'h23'});ctx.fillText(label(series[0][0]),left,172);if(width>350&&series.length>1){ctx.textAlign='right';ctx.fillText(label(series.at(-1)[0]),right,172);}};
- requestAnimationFrame(draw);const observer=new ResizeObserver(draw);observer.observe(canvas);chartObservers.push(observer);return host;
+ chartObservers.push(PulseRender.observe(canvas,draw));return host;
 }
 function appUsage(c){
  const v=usageView,all=groupUsage(v.result.rows),todayRows=v.recent.filter(r=>r.minute>=today()),daily=groupUsage(todayRows),active=daily.reduce((n,r)=>n+r.active_ms,0),foreground=daily.reduce((n,r)=>n+r.foreground_ms,0),top=daily.sort((a,b)=>b.active_ms-a.active_ms||b.foreground_ms-a.foreground_ms)[0];

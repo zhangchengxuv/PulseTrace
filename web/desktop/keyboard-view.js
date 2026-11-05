@@ -13,7 +13,7 @@ function renderKeyboard(c){
   if(kind!=='missing'){const rgb=PulseViz.color(heatmapName,value,maximum);key.style.backgroundColor=PulseViz.css(rgb);key.style.color=PulseViz.foreground(rgb);}board.append(key);
  }
  stage.append(board);viewport.append(stage);const fit=()=>{if(!viewport.isConnected)return;const width=PulseKeyboard.width*46+32,height=PulseKeyboard.height*46+32,scale=Math.min(1,Math.max(.9,viewport.clientWidth/width));stage.style.width=(width*scale)+'px';stage.style.height=(height*scale)+'px';board.style.width=width+'px';board.style.height=height+'px';board.style.transform='scale('+scale+')';};
- requestAnimationFrame(fit);const observer=new ResizeObserver(fit);observer.observe(viewport);chartObservers.push(observer);
+ chartObservers.push(PulseRender.observe(viewport,fit));
  const chooser=el('select',{'aria-label':tr("ui.70988398e6eb")},...['arctic','viridis','inferno','magma','cividis'].map(name=>el('option',{value:name},name==='arctic'?'Arctic · Custom Colormap':name[0].toUpperCase()+name.slice(1))));chooser.value=heatmapName;chooser.onchange=()=>{heatmapName=chooser.value;renderKey='';refresh(true);};
  const legend=el('div',{class:'heat-legend arctic-legend'}),ramp=el('div',{class:'heat-ramp','aria-label':tr("ui.9f7bd5bef4e5")}),arctic=heatmapName==='arctic';
  const samples=Array.from({length:257},(_,i)=>arctic?PulseViz.arctic(i/256).map(Math.round):PulseViz.color(heatmapName,i,256));
