@@ -1,4 +1,6 @@
-param([string]$BuildDirectory='build\llvm-release',[switch]$Publish)
+param([string]$BuildDirectory='build\llvm-release',[switch]$Publish,
+ [string]$ReleaseDirectory='build\release',
+ [ValidateSet('github','gitee')][string[]]$Sources=@('github','gitee'))
 # No remote mutation, tag creation, credential lookup, or upload occurs without -Publish.
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
@@ -9,28 +11,30 @@ try {
  $commit=(git rev-parse HEAD).Trim()
  $tree=(git rev-parse 'HEAD^{tree}').Trim()
  $dirty=[bool](git status --porcelain)
+ $releaseRoot=if([IO.Path]::IsPathRooted($ReleaseDirectory)){$ReleaseDirectory}else{Join-Path $root $ReleaseDirectory}
  $targets=@(@{Name='github';Remote='PulseTrace';URL='https://github.com/zhangchengxuv/PulseTrace.git';API='https://api.github.com/repos/zhangchengxuv/PulseTrace'},@{Name='gitee';Remote='PulseTrace_gitee';URL='https://gitee.com/zhangchenxuv/pulse-trace.git';API='https://gitee.com/api/v5/repos/zhangchenxuv/pulse-trace'})
+ $targets=@($targets | Where-Object {$_.Name -in $Sources})
  foreach($t in $targets){$actual=(git remote get-url $t.Remote).Trim();if($LASTEXITCODE -ne 0 -or $actual -ne $t.URL){throw "Remote differs from the reviewed repository: $($t.Remote)"}}
  $names=@("PulseTrace-v$($v.version)-x64.zip","PulseTrace-v$($v.version)-x64.zip.sha256","PulseTrace-Setup-v$($v.version)-x64.exe","PulseTrace-Setup-v$($v.version)-x64.exe.sha256")
- $assets=foreach($n in $names){$file=Join-Path $root ('build\release\'+$n);if(-not(Test-Path -LiteralPath $file)){throw "Missing package: $n"};@{Name=$n;Path=$file;Size=(Get-Item -LiteralPath $file).Length;Sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower()}}
+ $assets=foreach($n in $names){$file=Join-Path $releaseRoot $n;if(-not(Test-Path -LiteralPath $file)){throw "Missing package: $n"};@{Name=$n;Path=$file;Size=(Get-Item -LiteralPath $file).Length;Sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower()}}
  foreach($a in $assets | Where-Object {$_.Name -notlike '*.sha256'}){$line=(Get-Content -LiteralPath ($a.Path+'.sha256') -Raw).Trim();if($line -ne ($a.Sha256+'  '+$a.Name)){throw "Checksum sidecar mismatch: $($a.Name)"}}
  $plan=@{Version=$v.version;Commit=$commit;Tree=$tree;Dirty=$dirty;DryRun=(-not $Publish);Targets=$targets;Assets=@($assets | ForEach-Object {@{Name=$_.Name;Size=$_.Size;Sha256=$_.Sha256}})}
  if(-not $Publish){$plan | ConvertTo-Json -Depth 8;Write-Verbose 'Dry run only. Review, commit, tag, validate the clean source, then invoke -Publish explicitly.';return}
  if($dirty){throw 'Commit reviewed source changes before explicit publication'}
  $tagCommit=git rev-parse ($tag+'^{commit}') 2>$null
  if($LASTEXITCODE -ne 0 -or $tagCommit.Trim() -ne $commit){throw 'Create a reviewed release tag pointing to HEAD before publishing'}
- $reportPath=Join-Path $root "build\release\validation-$tag.json"
+ $reportPath=Join-Path $releaseRoot "validation-$tag.json"
  $report=Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
  if($report.SourceCommit -ne $commit -or $report.SourceTree -ne $tree -or -not $report.ReleaseTestsPassed -or -not $report.DebugTestsPassed -or -not $report.InstallerTestsPassed){throw 'Validation report must bind this clean source and all required tests'}
  foreach($a in $assets){if($report.Artifacts.($a.Name) -ne $a.Sha256){throw "Validated artifact changed: $($a.Name)"}}
  $gh=$env:GH_TOKEN;if(-not $gh){$gh=$env:GITHUB_TOKEN};$gt=$env:GITEE_TOKEN
- if(-not $gh -or -not $gt){throw 'Explicit publication requires GitHub and Gitee tokens in process environment; none are stored in client packages'}
  $notesFile=Join-Path $root "docs\releases\$tag.md"
  $notes=[IO.File]::ReadAllText($notesFile,[Text.Encoding]::UTF8)
  $results=@();Add-Type -AssemblyName System.Net.Http
  foreach($t in $targets){
   $receipt=@{Source=$t.Name;Commit=$commit;Tag=$tag;Success=$false;Assets=@()}
   try {
+   if(($t.Name -eq 'github' -and -not $gh) -or ($t.Name -eq 'gitee' -and -not $gt)){throw ('Missing '+$t.Name+' release API credentials; other sources remain independent')}
    & git push $t.Remote 'HEAD:refs/heads/main' ('refs/tags/'+$tag+':refs/tags/'+$tag)
    if($LASTEXITCODE -ne 0){throw 'Non-forced Git push failed; history was not overwritten'}
    $heads=git ls-remote $t.Remote refs/heads/main ('refs/tags/'+$tag) ('refs/tags/'+$tag+'^{}')
@@ -78,7 +82,8 @@ try {
   }catch{$receipt.Error=$_.Exception.Message}
   $results+=$receipt
  }
- $results | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $root "build\release\publish-$tag.json") -Encoding UTF8
+ $receiptName='publish-'+$tag+'-'+($Sources -join '-')+'.json'
+ $results | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $releaseRoot $receiptName) -Encoding UTF8
  $results | ConvertTo-Json -Depth 8
  if($results | Where-Object {-not $_.Success}){throw 'Publication incomplete; inspect per-source receipt. No force push or asset replacement was attempted.'}
 } finally {$gh=$null;$gt=$null;Pop-Location}

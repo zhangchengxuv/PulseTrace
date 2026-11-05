@@ -40,7 +40,7 @@
 
 远程地址：GitHub `zhangchengxuv/PulseTrace`，Gitee `zhangchenxuv/pulse-trace`。客户端没有令牌。GitHub Releases 的 assets 与 Gitee 独立 `attach_files` 分开解析。HTTPS 跳转仅允许固定项目来源及代码列出的下载 CDN；新域名会拒绝并报告，不自动放宽。
 
-远程写入需要显式 `tools/publish-dual.ps1 -Publish`、干净且已标记的提交、绑定提交/树及安装包哈希的验证报告，以及发布进程环境中的两个令牌。脚本不创建提交、不强推、不覆盖已发布附件。两源分别记录分支/标签 SHA 与附件结果；Gitee 无 GitHub 式 draft，本脚本先创建预发布，完整附件核验后再按版本设置通道。部分成功时保留回执，不宣称两源均成功。
+远程写入需要显式 `tools/publish-dual.ps1 -Publish`、干净且已标记的提交、绑定提交/树及安装包哈希的验证报告，以及发布进程环境中对应来源的 API 令牌。可用 `-ReleaseDirectory` 指定已验证附件目录，用 `-Sources github` 或 `-Sources gitee` 单独发布/重试，避免一个来源缺少凭据阻塞另一个。脚本不创建提交、不强推、不覆盖已发布附件。两源分别记录分支/标签 SHA 与附件结果；Gitee 无 GitHub 式 draft，本脚本先创建预发布，完整附件核验后再按版本设置通道。部分成功时保留回执，不宣称两源均成功。Git 仓库可推送不代表 Release API 令牌有效。
 
 ## 验证边界
 
