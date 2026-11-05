@@ -1,44 +1,53 @@
 # PulseTrace
 
-面向 Windows 的本地键盘、鼠标与网络活动统计工具。
+面向 Windows 的本地键鼠、应用使用与网络活动统计工具。
 
 **简体中文** · [English](README_EN.md)
 
 ## 功能特性
 
-- **键盘**：按键次数、频率和 ANSI 104 热力图，仅保存聚合计数。
-- **鼠标**：五键、时间双击、垂直/水平滚轮事件与累计滚动量。
-- **应用使用**：前台停留与有效活跃时长、排行、小时/日期趋势、排除列表和 CSV；[统计说明](docs/app-usage.md)。
-- **网络**：接口状态、切换历史、上传/下载速率及物理接口 IPv4/IPv6 流量观测。
-- **流量排行**：可选 Mihomo 应用/连接域名排行，支持协议族、时间范围、搜索和排序；域名历史单独授权。
-- **任务栏网速**：Windows 11 原生组件、透明背景、上传/下载双行显示，支持悬浮窗或托盘回退。
-- **历史分析**：分钟/小时/天及自定义范围、SQLite 持久化、月度网络归档、导出与备份。
+- **键盘**：按键聚合统计、ANSI 104 布局及 Arctic 连续热力图。
+- **鼠标**：二维五键热力图与排行，Mouse4 后退、Mouse5 前进；时间双击、滚轮事件与 delta 分开统计。
+- **应用使用**：前台停留与有效活跃时长、排行、小时/日期趋势、排除列表及 CSV 导出。
+- **网络**：出口上传/下载、物理接口 IPv4/IPv6 观测、自然月每日流量热力图、接口与连接历史。
+- **流量排行**：可选 Mihomo 应用/连接域名排行，支持协议族、范围、搜索与排序；域名历史单独授权。
+- **任务栏网速**：原生透明双行组件，支持字体、字号、单位、精度、颜色及位置设置，提供悬浮窗/托盘回退。
+- **历史与设置**：默认全部数据、分钟/小时/天及自定义范围，SQLite、月度归档、备份与导出；中英双语、Deep Ocean / Pearl Mist、托盘后台及双源更新检查。
 
-支持中英双语、深浅色主题与后台托盘运行，首次启动默认暂停。不记录输入文本或鼠标轨迹。IPv4/IPv6 观测及排行受权限、采样与数据质量限制，不代表系统全量流量或校园网计费；[统计边界](docs/traffic-rankings.md)。
+首次启动默认暂停，不记录输入文本、窗口标题或鼠标轨迹。活跃时长使用空闲阈值；IPv4/IPv6 与排行受权限、采样及质量限制，不代表全系统流量或校园网计费。未签名更新包只支持校验后手动安装。[统计边界](docs/traffic-rankings.md) · [应用使用说明](docs/app-usage.md)
 
 ## 软件截图
 
-真实 Release 构建，采用独立空数据目录与暂停状态，未填充模拟统计或展示个人记录。页面统一为 1600×900 DIP；任务栏为原尺寸局部。
+main `b3a2cbf` 的真实 x64 Release 开发构建；独立空数据目录、暂停状态，无模拟统计或个人历史。页面为 1600×900 DIP，任务栏为实际局部。
 
-| 总览 | 网络与排行 |
+| 总览 | 网络 |
 | --- | --- |
-| ![总览](docs/screenshots/dashboard.png) | ![网络与排行](docs/screenshots/network.png) |
+| ![总览](docs/screenshots/dashboard.png) | ![网络](docs/screenshots/network.png) |
 | **ANSI 104 键盘热力图** | **任务栏组件（暂停）** |
 | ![键盘热力图](docs/screenshots/keyboard.png) | ![任务栏组件](docs/screenshots/taskbar.png) |
 
+<details>
+<summary>鼠标与应用使用统计</summary>
+
+| 鼠标 | 应用使用 |
+| --- | --- |
+| ![鼠标](docs/screenshots/mouse.png) | ![应用使用](docs/screenshots/usage.png) |
+
+</details>
+
 ## 性能占用
 
-2026-11-05，Windows 11 26300、Ryzen 5 5600（12 逻辑核）、31.92 GiB RAM、WebView2 156.0.4314.58。测试 main `14f4f1f` 的 x64 Release 构建，监测启用、无主动输入/网络负载，排行来源关闭。每种状态运行 45 秒，取第 10–40 秒均值。
+实测 main `d414ecf`：Windows 11 26300、Ryzen 5 5600（12 逻辑核）、31.92 GiB RAM、125% DPI、WebView2 156.0.4314.58。每组 45 秒，取第 10–40 秒均值；启用监测，未主动生成输入或网络负载，排行来源关闭。
 
 | 运行状态 | CPU（整机归一化） | Private Bytes | Working Set |
 | --- | ---: | ---: | ---: |
-| 后台监测，仅托盘 | 0.031% | 8.30 MiB | 34.58 MiB |
-| 主界面打开，含 WebView2 子进程 | 0.095% | 261.07 MiB | 456.77 MiB |
-| 后台监测 + 任务栏网速 | 0.049% | 9.38 MiB | 40.47 MiB |
+| 后台监测，仅托盘 | 0.039% | 8.54 MiB | 34.69 MiB |
+| 主界面打开，含 WebView2 子进程 | 0.111% | 262.10 MiB | 460.99 MiB |
+| 后台监测 + 任务栏网速 | 0.022% | 9.20 MiB | 40.37 MiB |
 
-任务栏组件进程单独为 **2.81 MiB Private Bytes / 17.73 MiB Working Set**，此短测未分辨到 CPU 时间增量。仅托盘模式也保留 helper，因此组件进程内存不等于两行总量之差。Private Bytes 是私有提交量；Working Set 是驻留工作集，进程求和会重复计算共享页。
+以上均包含原生 helper；任务栏 helper 单独为 **2.81 MiB Private Bytes / 17.55 MiB Working Set**。Private Bytes 是私有提交量；Working Set 是驻留工作集，进程求和会重复计算共享页。短测不代表长期上限或性能提升。
 
-实际安装程序文件 **17.39 MiB**（含卸载器，不含系统 WebView2 Runtime 和 `data`）。45 秒后数据目录：后台约 **0.10 MiB**，首次打开界面约 **10.72 MiB**，主要为 WebView2 缓存。以上为文件大小总和，不是物理写入量或长期增长预测。[采样方法与完整数据](docs/performance.md)。
+当前安装清单中的程序文件合计 **11.07 MiB**，不含卸载器、系统 Runtime 和 `data`；含卸载器的当前安装体积待测。45 秒后数据文件：后台/任务栏约 **0.12 MiB**，界面约 **10.73 MiB**，包含 WebView2 缓存；排除测量报告，不是磁盘写入量。[完整口径与实测](docs/performance.md)
 
 ## 下载安装
 
@@ -46,10 +55,10 @@
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
-- **安装版**：运行 `PulseTrace-Setup-*.exe`，选择安装位置；数据位于安装目录的 `data`，卸载默认保留。
-- **便携版**：完整解压 ZIP 后运行 `PulseTrace.exe`，保留同目录的 Web 资源、DLL 和 helper。
+- **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
+- **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-当前候选版 **v0.3.0-rc3** 已在两源提供相同附件。main 可能领先于发布包；截图和性能对应上述开发构建。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)。
+公开候选版 **v0.3.0-rc3** 两源附件一致；本页新增界面与设置目前在 main，尚未重发安装包。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
@@ -60,5 +69,5 @@ C++20 · Win32 / Raw Input · WebView2 · SQLite · CMake
 PulseTrace 是一个使用 OpenAI Codex 辅助开发的开源项目。主要代码、界面和文档由 OpenAI 模型辅助生成，并经过实际构建与测试。本项目并非 OpenAI 官方产品。
 
 - **AI 工具**：OpenAI Codex。
-- **可确认模型**：GPT-6；历史会话没有完整模型清单，未核实的模型不列出。
-- **协议**：PulseTrace 自有源码及文档采用 [MIT License](LICENSE)；第三方组件保留各自许可，见 [第三方声明](THIRD-PARTY-NOTICES.md)。TrafficMonitor 仅作任务栏机制参考，未移植其代码。
+- **可核实模型**：GPT-6；未确认的历史模型不列出。
+- **协议**：自有源码及文档采用 [MIT License](LICENSE)；第三方组件保留各自许可，见 [第三方声明](THIRD-PARTY-NOTICES.md)。TrafficMonitor 仅作机制参考，未移植其代码。

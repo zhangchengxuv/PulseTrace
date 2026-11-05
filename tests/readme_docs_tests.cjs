@@ -11,7 +11,7 @@ for(const [file,text]of [['README.md',zh],['README_EN.md',en]]){
  check(text.includes('OpenAI Codex')&&text.includes('GPT-6'),'tool and confirmed model kept distinct');
 }
 assert.deepEqual(zh.match(/\d+(?:\.\d+)?(?:%| MiB)/g),en.match(/\d+(?:\.\d+)?(?:%| MiB)/g),'bilingual performance figures agree');checks++;
-const images=['dashboard','network','keyboard','taskbar'];
+const images=['dashboard','network','keyboard','mouse','usage','taskbar'];
 for(const image of images){const name='docs/screenshots/'+image+'.png',bytes=fs.readFileSync(path.join(root,name));check(bytes.subarray(1,4).toString()==='PNG','valid PNG '+name);if(image!=='taskbar')check(bytes.readUInt32BE(16)===2018&&bytes.readUInt32BE(20)===1172,'uniform native page dimensions');
  for(let offset=8;offset+12<=bytes.length;){const length=bytes.readUInt32BE(offset),chunk=bytes.toString('ascii',offset+4,offset+8);check(!['tEXt','iTXt','zTXt','eXIf'].includes(chunk),'no metadata in screenshot');offset+=12+length;}
 }
