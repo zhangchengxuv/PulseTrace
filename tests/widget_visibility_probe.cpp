@@ -1,0 +1,18 @@
+// Developer-only visual/Win32 verification. Captures only the taskbar strip.
+#include <windows.h>
+#include <objidl.h>
+#include <objbase.h>
+#include <gdiplus.h>
+#include <fstream>
+#include <iostream>
+#include <filesystem>
+#include "pulsetrace/json.hpp"
+#include "pulsetrace/desktop/widget_ipc.hpp"
+using namespace pulsetrace;
+Json rect(const RECT &r){return {r.left,r.top,r.right,r.bottom};}
+void capture(const RECT &r,const std::filesystem::path &file,HWND window=nullptr){auto screen=GetDC(nullptr);auto dc=CreateCompatibleDC(screen);auto bitmap=CreateCompatibleBitmap(screen,r.right-r.left,r.bottom-r.top);auto old=SelectObject(dc,bitmap);if(window)PrintWindow(window,dc,PW_CLIENTONLY);else BitBlt(dc,0,0,r.right-r.left,r.bottom-r.top,screen,r.left,r.top,SRCCOPY|CAPTUREBLT);CLSID png;CLSIDFromString(L"{557CF406-1A04-11D3-9A73-0000F81EF32E}",&png);{Gdiplus::Bitmap image(bitmap,nullptr);if(image.Save(file.c_str(),&png,nullptr)!=Gdiplus::Ok)throw std::runtime_error("PNG save failed");}SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(nullptr,screen);}
+int wmain(int argc,wchar_t **argv){try{if(argc<2||argc>3)return 2;SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);Gdiplus::GdiplusStartupInput input;ULONG_PTR token;Gdiplus::GdiplusStartup(&token,&input,nullptr);const std::filesystem::path dir=argv[1];std::filesystem::create_directories(dir);auto bar=FindWindowW(L"Shell_TrayWnd",nullptr);RECT bounds;GetWindowRect(bar,&bounds);Json result={{"bar",reinterpret_cast<UINT_PTR>(bar)},{"bounds",rect(bounds)},{"widgets",Json::array()}};
+ EnumChildWindows(bar,[](HWND h,LPARAM p)->BOOL{wchar_t cls[128]{};GetClassNameW(h,cls,128);if(wcscmp(cls,L"PulseTrace.TrafficWidget"))return TRUE;auto &out=*reinterpret_cast<Json*>(p);RECT r{},c{};GetWindowRect(h,&r);GetClientRect(h,&c);POINT center{(r.left+r.right)/2,(r.top+r.bottom)/2};const auto hit=WindowFromPoint(center);BYTE alpha=255;DWORD flags=0;COLORREF key=0;GetLayeredWindowAttributes(h,&key,&alpha,&flags);out["widgets"].push_back({{"hwnd",reinterpret_cast<UINT_PTR>(h)},{"parent",reinterpret_cast<UINT_PTR>(GetParent(h))},{"rect",rect(r)},{"client",rect(c)},{"visible",IsWindowVisible(h)!=0},{"style",GetWindowLongPtrW(h,GWL_STYLE)},{"exstyle",GetWindowLongPtrW(h,GWL_EXSTYLE)},{"hit",reinterpret_cast<UINT_PTR>(hit)},{"alpha",alpha},{"layer_flags",flags}});return TRUE;},reinterpret_cast<LPARAM>(&result));
+ if(argc==3){const auto pid=wcstoul(argv[2],nullptr,10);auto mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,widget_mapping_name(pid).c_str());if(mapping){auto shared=static_cast<WidgetShared*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(WidgetShared)));if(shared){WidgetSnapshot s;if(read_snapshot(shared->data_sequence,shared->data,s))result["snapshot"]={{"upload_bps",s.upload},{"download_bps",s.download},{"flags",s.flags},{"tick",s.tick}};WidgetFeedback f;if(read_snapshot(shared->feedback_sequence,shared->feedback,f))result["feedback"]={{"visibility",f.visibility},{"paint_count",f.paint_count},{"text_samples",f.text_samples},{"screen_matches",f.screen_matches}};UnmapViewOfFile(shared);}CloseHandle(mapping);}}
+ capture(bounds,dir/L"taskbar-screen.png");for(const auto &w:result["widgets"]){RECT r{w["rect"][0],w["rect"][1],w["rect"][2],w["rect"][3]};capture(r,dir/(L"widget-own-"+std::to_wstring(w["hwnd"].get<UINT_PTR>())+L".png"),reinterpret_cast<HWND>(w["hwnd"].get<UINT_PTR>()));}
+ std::ofstream file(dir/L"visibility.json");file<<result.dump(2);std::cout<<result.dump(2)<<'\n';Gdiplus::GdiplusShutdown(token);return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}
