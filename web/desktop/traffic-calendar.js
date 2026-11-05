@@ -17,7 +17,7 @@ async function refreshTrafficCalendar(){const v=calendarView,month=v.month||cale
 function renderTrafficCalendar(container){
  const v=calendarView,month=v.month||calendarMonth(),[year,number]=month.split('-').map(Number),data=new Map((v.result?.days||[]).map(d=>[d.date,d])),host=panel(tr('calendar.title'));v.root=host;
  const choose=el('select',{'aria-label':tr('calendar.month')},...[...new Set([month,calendarMonth(),...(monthlyTraffic?.months||[])])].sort().reverse().map(m=>el('option',{value:m},m)));choose.value=month;
- const change=()=>{v.key='';renderKey='';refresh(true);};choose.onchange=()=>{v.month=choose.value;change();};
+ const change=()=>{viewGeneration++;v.key='';renderKey='';refresh(true);};choose.onchange=()=>{v.month=choose.value;change();};
  const move=delta=>{const d=new Date(Date.UTC(year,number-1+delta,1));if(d.getUTCFullYear()<1970||d.getUTCFullYear()>9998)return;v.month=d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');change();};
  const family=el('select',{'aria-label':tr('calendar.family')},...['all','4','6'].map(id=>el('option',{value:id},id==='all'?tr('range.all'):'IPv'+id))),direction=el('select',{'aria-label':tr('calendar.direction')},...['total','up','down'].map(id=>el('option',{value:id},tr('calendar.'+id))));family.value=v.family;direction.value=v.direction;
  const drawing=el('div',{class:'traffic-calendar-body'});const draw=()=>{
