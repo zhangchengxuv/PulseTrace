@@ -209,5 +209,12 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"widget.preview",L"样式预览",L"Style preview"},
 {"widget.reset",L"恢复默认样式",L"Restore default style"},
 {"widget.style_hint",L"样式改变即时预览并保存。偏移不得遮挡任务栏；位置不可用时保持安全回退。预览使用进入设置时的真实速率快照。",L"Changes preview and save immediately. Offsets must avoid taskbar items; unavailable positions use the safe fallback. Preview uses the real rate snapshot at entry."},
-{"widget.invalid_style",L"请检查字体、字号、单位或位置范围。",L"Check the font, size, units and position limits."}
+{"widget.invalid_style",L"请检查字体、字号、单位或位置范围。",L"Check the font, size, units and position limits."},
+{"settings.general",L"常规",L"General"},
+{"settings.monitoring",L"监测",L"Monitoring"},
+{"settings.taskbar",L"任务栏",L"Taskbar"},
+{"settings.data",L"数据",L"Data"},
+{"settings.updates",L"更新",L"Updates"},
+{"settings.about",L"关于",L"About"},
+{"settings.license",L"MIT 开源协议；第三方组件保留各自许可。",L"MIT License; third-party components retain their own licenses."}
 };}

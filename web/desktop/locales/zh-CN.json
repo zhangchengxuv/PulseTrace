@@ -534,5 +534,12 @@
   "widget.preview": "样式预览",
   "widget.reset": "恢复默认样式",
   "widget.style_hint": "样式改变即时预览并保存。偏移不得遮挡任务栏；位置不可用时保持安全回退。预览使用进入设置时的真实速率快照。",
-  "widget.invalid_style": "请检查字体、字号、单位或位置范围。"
+  "widget.invalid_style": "请检查字体、字号、单位或位置范围。",
+  "settings.general": "常规",
+  "settings.monitoring": "监测",
+  "settings.taskbar": "任务栏",
+  "settings.data": "数据",
+  "settings.updates": "更新",
+  "settings.about": "关于",
+  "settings.license": "MIT 开源协议；第三方组件保留各自许可。"
 }

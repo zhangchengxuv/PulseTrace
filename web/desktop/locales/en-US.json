@@ -534,5 +534,12 @@
   "widget.preview": "Style preview",
   "widget.reset": "Restore default style",
   "widget.style_hint": "Changes preview and save immediately. Offsets must avoid taskbar items; unavailable positions use the safe fallback. Preview uses the real rate snapshot at entry.",
-  "widget.invalid_style": "Check the font, size, units and position limits."
+  "widget.invalid_style": "Check the font, size, units and position limits.",
+  "settings.general": "General",
+  "settings.monitoring": "Monitoring",
+  "settings.taskbar": "Taskbar",
+  "settings.data": "Data",
+  "settings.updates": "Updates",
+  "settings.about": "About",
+  "settings.license": "MIT License; third-party components retain their own licenses."
 }

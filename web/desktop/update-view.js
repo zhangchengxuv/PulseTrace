@@ -1,6 +1,6 @@
 'use strict';
 let updatePoll=0;
-function renderUpdateSettings(c){
+function renderUpdateSettings(c,infoHost=c){
  clearTimeout(updatePoll);
  const cfg=state.config||{},channel=el('select',{'aria-label':tr("ui.b5260335fcac")},el('option',{value:'stable'},tr("ui.320e85714d07")),el('option',{value:'preview'},tr("ui.f8ba3e6e5825")));
  channel.value=cfg.update_channel||'stable';
@@ -19,7 +19,8 @@ function renderUpdateSettings(c){
   if(s.phase==='manual_install')result.append(el('p',{class:'muted'},tr("ui.198d9866b1cd")));
  }catch(e){if(result.isConnected)result.textContent=e.message;}if(result.isConnected&&page==='settings'&&!document.hidden&&nativeVisible)updatePoll=setTimeout(poll,1000);}
  c.append(panel(tr("ui.651f27447015"),el('div',{class:'settings-grid'},el('label',{},tr("ui.0c04098e48ab"),channel),el('label',{},tr("ui.a488e93d69cc"),source),el('label',{class:'checkbox'},startup,tr("ui.e8192e07126c"))),el('div',{class:'actions'},check,download,cancel,folder,el('button',{class:'secondary',onclick:()=>rpc('open_release_page').catch(error)},tr("ui.5c5a53a77586")),el('button',{class:'secondary',onclick:()=>save().then(()=>{result.textContent=tr("ui.1bd91a7d0c53");}).catch(error)},tr("ui.b2f5b0da3e67"))),progress,result));
- c.append(panel(tr("ui.0fe8acdee57b"),el('p',{},'PulseTrace '+state.version),el('p',{class:'muted'},state.installation_mode==='installed'?tr("ui.197d648a8b9a"):tr("ui.bd44514fa3e9")),help(tr("ui.4108a4d106f2"),el('p',{class:'release-notes'},state.data_directory||'')),el('p',{class:'muted'},tr("ui.9b67b1c8578b")+(state.database_schema??tr("ui.d80f8bbe1ddf"))),help(tr("ui.146b8706945f"),el('pre',{},JSON.stringify(state.database_migration||{},null,2))),el('div',{class:'actions'},el('button',{class:'secondary',onclick:()=>rpc('open_data_folder').catch(error)},tr("ui.da99ea1331dc")),el('button',{class:'secondary',onclick:async()=>{try{const r=await rpc('backup_database');result.textContent=tr("ui.f61a48aa6844")+r.directory;}catch(e){error(e);}}},tr("ui.4e7b4b14507c")))));
+ const infoFeedback=el('p',{class:'muted',role:'status'});infoHost.append(panel(tr("ui.0fe8acdee57b"),el('p',{},'PulseTrace '+state.version),el('p',{class:'muted'},state.installation_mode==='installed'?tr("ui.197d648a8b9a"):tr("ui.bd44514fa3e9")),help(tr("ui.4108a4d106f2"),el('p',{class:'release-notes'},state.data_directory||'')),el('p',{class:'muted'},tr("ui.9b67b1c8578b")+(state.database_schema??tr("ui.d80f8bbe1ddf"))),help(tr("ui.146b8706945f"),el('pre',{},JSON.stringify(state.database_migration||{},null,2))),el('div',{class:'actions'},el('button',{class:'secondary',onclick:()=>rpc('open_data_folder').catch(error)},tr("ui.da99ea1331dc")),el('button',{class:'secondary',onclick:async()=>{try{const r=await rpc('backup_database');infoFeedback.textContent=tr("ui.f61a48aa6844")+r.directory;}catch(e){error(e);}}},tr("ui.4e7b4b14507c")))));
+ infoHost.append(infoFeedback);
  // The panel is attached by the caller after this function returns.
  queueMicrotask(poll);
 }

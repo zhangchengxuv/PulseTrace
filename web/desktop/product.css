@@ -14,3 +14,5 @@ progress{width:min(100%,420px);height:8px;accent-color:var(--accent)}
 #startup-splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#071321;color:#eff7fc;font:400 28px/1.2 "Segoe UI Variable","Segoe UI",sans-serif;user-select:none}.booting>aside,.booting>main{visibility:hidden}
 
 .widget-style-preview{display:grid;gap:3px;max-width:280px;min-height:55px;padding:10px 14px;margin-block:16px;background:var(--hover);border:1px solid var(--line);border-radius:9px;font-variant-numeric:tabular-nums}.widget-style-preview>div{display:grid;grid-template-columns:24px 1fr;gap:8px}.widget-style-preview>div>span:last-child{text-align:right}.widget-settings input[type=color]{width:100%;height:38px;padding:3px}
+
+.settings-section{margin-top:24px;scroll-margin-top:calc(var(--toolbar-height,150px) + 14px)}.settings-group-title{font-size:16px;margin-bottom:12px;color:var(--accent)}.settings-section>.panel{margin-bottom:14px}.settings-jump{display:flex;flex-wrap:wrap;gap:8px;margin-block:0 14px}.settings-jump button{font-size:12px;padding:7px 12px}.settings-section .data-disclosure{margin-bottom:14px}.settings-section .panel{box-shadow:none}
