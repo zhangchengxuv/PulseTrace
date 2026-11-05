@@ -1,6 +1,7 @@
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/protocol.hpp"
 #include "pulsetrace/version.hpp"
+#include "pulsetrace/localization.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -8,6 +9,13 @@
 namespace pulsetrace {
 namespace {
 void validate_config(const Json &c) {
+    const auto language=c.at("language").get<std::string>();if(language!="system"&&language!="zh-CN"&&language!="en-US")throw std::invalid_argument("Invalid interface language");
+    if(!c.at("config_version").is_number_integer()||c.at("config_version")!=1)throw std::invalid_argument("Unsupported configuration version; original file preserved");
+    const auto channel=c.at("update_channel").get<std::string>();if(channel!="stable"&&channel!="preview")throw std::invalid_argument("Invalid update channel");
+    const auto source=c.at("update_source").get<std::string>();if(source!="auto"&&source!="github"&&source!="gitee")throw std::invalid_argument("Invalid update source");
+    const auto mode=c.at("taskbar_mode").get<std::string>();if(mode!="embedded"&&mode!="floating"&&mode!="tray")throw std::invalid_argument("Invalid taskbar mode");
+    if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
+    for(const char *key:{"close_to_tray","capture_on_launch","check_updates_on_start"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean setting");
     const auto theme = c.at("theme").get<std::string>();
     if (theme != "light" && theme != "dark" && theme != "system")
         throw std::invalid_argument("Invalid theme");
@@ -27,23 +35,29 @@ Json row(std::int64_t minute, const char *module, std::string metric, std::uint6
 } // namespace
 CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
     config_ = {{"theme", "system"},       {"retention_days", 30},  {"flush_seconds", 30},
-               {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false}};
+               {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false},
+               {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
+               {"taskbar_mode","embedded"},{"taskbar_monitor",0},{"language","system"}};
     std::ifstream in(data_ / "config.json");
+    bool migrate=false;
     if (in) {
         Json c;
         in >> c;
-        for (auto it = config_.begin(); it != config_.end(); ++it)
-            if (c.contains(it.key()) && (c[it.key()].type() == it.value().type() ||
-                                         (c[it.key()].is_number_integer() && it.value().is_number_integer())))
-                it.value() = c[it.key()];
+        if(!c.is_object())throw std::invalid_argument("Configuration must be an object");
+        if(c.contains("config_version")&&(!c["config_version"].is_number_integer()||c["config_version"]>1||c["config_version"]<0))throw std::invalid_argument("Configuration from a newer version; original preserved");
+        migrate=c.value("config_version",0)==0;c["config_version"]=1;
+        for(auto it=config_.begin();it!=config_.end();++it)if(!c.contains(it.key()))c[it.key()]=it.value();
+        config_=std::move(c);
     }
+    if(in.is_open())in.close();
     validate_config(config_);
+    if(migrate){const auto directory=data_/"backups";std::filesystem::create_directories(directory);std::filesystem::copy_file(data_/"config.json",directory/("config.pre-v0-"+std::to_string(utc_now_ms())+".json"));save_config();}
     session_ = std::to_string(utc_now_ms()) + "-" + std::to_string(GetCurrentProcessId());
     state_ = {{"input_ready", false},      {"input_error", ""},
               {"storage_error", ""},       {"network", Json::object()},
               {"session", session_},       {"last_flush_ms", 0},
               {"mouse_clicks_session", 0}, {"keyboard_presses_session", 0},
-              {"version", app_version}};
+              {"version", app_version},{"config_version",1},{"config_migration",migrate?"v0 -> v1; backup retained":"current"}};
 }
 CoreService::~CoreService() { stop(); }
 void CoreService::start() {
@@ -400,6 +414,18 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         }
         return config_;
     }
+    if(type=="backup_database"){
+        const auto folder=data_/"backups"/("manual-"+std::to_string(utc_now_ms()));std::filesystem::create_directories(folder);
+        db.backup(folder/"monitor.db");
+        if(std::filesystem::exists(data_/"network-months"))for(const auto &item:std::filesystem::directory_iterator(data_/"network-months")){
+            if(!item.is_regular_file())continue;const auto ext=item.path().extension();
+            std::filesystem::create_directories(folder/"network-months");
+            if(ext==".sqlite3")DatabaseManager::backup_file(item.path(),folder/"network-months"/item.path().filename());
+            else if(ext==".json")std::filesystem::copy_file(item.path(),folder/"network-months"/item.path().filename());
+        }
+        {std::ofstream cfg(folder/"config.json");cfg<<config_.dump(2);if(!cfg)throw std::runtime_error("Cannot backup configuration");}
+        const auto name=folder.u8string();return {{"directory",std::string(name.begin(),name.end())},{"basis","committed SQLite snapshots"}};
+    }
     if (type == "export_csv") {
         auto name = "pulsetrace-export-" + std::to_string(utc_now_ms()) + ".csv";
         auto report = execute({{"type", "get_statistics"},
@@ -454,6 +480,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
 void CoreService::worker() {
     try {
         DatabaseManager db(data_ / "monitor.db");
+        {std::lock_guard lock(mutex_);state_["database_schema"]=DatabaseManager::supported_schema;state_["database_migration"]=db.migration_info();}
         monthly_ = std::make_unique<MonthlyTrafficStore>(data_ / "network-months");
         monthly_->recover(db);
         NetworkMonitor network(&capture_window_);

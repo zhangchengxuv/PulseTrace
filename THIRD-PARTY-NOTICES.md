@@ -8,3 +8,6 @@
 - Matplotlib v3.10.0 的 Viridis、Inferno、Magma、Cividis 完整色图查找表；官方来源与 SHA-256 见 docs/ui-design.md，完整许可见 web/desktop/assets/Matplotlib-LICENSE.txt。只有静态色图数据随包提供，不需要安装 Python 或 Matplotlib。
 
 应用不会自动上传监测数据，不使用外部 CDN 或 Node/Python 后台服务。WebView2 Runtime 本身由 Microsoft 维护，其系统组件行为不等同于本应用的数据采集与持久化策略。
+
+- Inno Setup 7.1.0 用于生成 EXE 安装包，Copyright (C) 1997–2026 Jordan Russell，Portions Copyright (C) 2000–2026 Martijn Laan。保留原始安装器版权与网站信息；完整许可在构建工具 `tools/license.txt`，发行副本见 `licenses/InnoSetup-LICENSE.txt`。来源 https://jrsoftware.org/ 。编译器仅在构建时使用，不随程序启动。
+- TrafficMonitor 六个任务栏相关源文件仅用于理解 Windows 任务栏集成机制；本项目独立实现，没有复制其代码，不含 MFC 或其二进制组件。参考 https://github.com/zhongyang219/TrafficMonitor ，原项目许可 Anti-996。

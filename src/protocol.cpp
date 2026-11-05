@@ -49,11 +49,13 @@ void validate_request(const Json &r) {
     const auto type = r["type"].get<std::string>();
     const auto &p = r["params"];
     std::set<std::string> allowed;
-    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide" || type == "open_monthly_folder") {
+    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update") {
+    } else if (type == "selftest_failure") {
+        allowed={"message"};if(!p.contains("message")||!p["message"].is_string()||p["message"].get<std::string>().size()>512)throw std::invalid_argument("Invalid selftest failure");
     } else if (type == "selftest_snapshot") {
         allowed={"phase","metrics"};
         const auto phase=p.value("phase",std::string());
-        if(phase!="top"&&phase!="scrolled"&&phase!="opaque")throw std::invalid_argument("Invalid selftest phase");
+        if(phase!="top"&&phase!="scrolled"&&phase!="opaque"&&phase!="calendar-en"&&phase!="calendar-zh")throw std::invalid_argument("Invalid selftest phase");
         if(p.contains("metrics")){
             const std::set<std::string> keys={"frames","mean_ms","p95_ms","fps","scroll_px","toolbar_top","blur_enabled","opacity_fallback"};
             if(!p["metrics"].is_object()||p["metrics"].size()>keys.size())throw std::invalid_argument("Invalid selftest metrics");
@@ -89,7 +91,7 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("Invalid aggregation bucket");
     } else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","language"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else
