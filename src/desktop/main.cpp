@@ -331,7 +331,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     LRESULT caption_result{};
     if(caption_.message(m,w,l,caption_result))return caption_result;
     if(web_&&(m==WM_ACTIVATE||m==WM_SETTINGCHANGE)){
-        web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
+        web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));web_->post({{"type","appearance"},{"data",appearance()}});
     }
     if (taskbar_message_ && m == taskbar_message_) {
         if(!exiting_){tray_added_=false;tray();}
@@ -365,14 +365,23 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         auto dc = BeginPaint(h, &p);
         RECT r{};
         GetClientRect(h, &r);
-        auto brush=CreateSolidBrush(caption_.background());
+        const bool starting=!web_||!web_->ready();
+        auto brush=CreateSolidBrush(starting?RGB(7,19,33):caption_.background());
         FillRect(dc, &r, brush);DeleteObject(brush);
         caption_.paint(dc);
         SetTextColor(dc,caption_.foreground());SetBkMode(dc,TRANSPARENT);
         r.left += 24;
         r.top += caption_.height()+24;
-        const std::wstring text=failure_observed_&&(!web_||!web_->ready())?std::wstring(ui_text("native.ui_failed"))+L"\n"+widen(diagnostic_):ui_text("native.initializing");
-        DrawTextW(dc, text.c_str(), -1, &r, DT_LEFT | DT_WORDBREAK);
+        if(failure_observed_&&starting){
+            SetTextColor(dc,RGB(239,247,252));const auto text=std::wstring(ui_text("native.ui_failed"))+L"\n"+widen(diagnostic_);
+            DrawTextW(dc,text.c_str(),-1,&r,DT_LEFT|DT_WORDBREAK);
+        }else if(starting){
+            GetClientRect(h,&r);SetTextColor(dc,RGB(239,247,252));
+            const auto font=CreateFontW(-MulDiv(28,GetDpiForWindow(h),96),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,L"Segoe UI Variable");
+            const auto previous=font?SelectObject(dc,font):nullptr;
+            DrawTextW(dc,L"PulseTrace",-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+            if(font){SelectObject(dc,previous);DeleteObject(font);}
+        }
         EndPaint(h, &p);
         return 0;
     }
@@ -451,7 +460,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         set_ui_language(core_->status()["config"].value("language","system"));
         caption_.theme(core_->status()["config"].value("theme","system"));
         if(web_&&caption_.consume_changed()){
-            web_->set_background(caption_.background());web_->post({{"type","appearance"},{"data",appearance()}});
+            web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));web_->post({{"type","appearance"},{"data",appearance()}});
         }
         if (core_seconds_ > 0 &&
             GetTickCount64() - start_tick_ >= static_cast<std::uint64_t>(core_seconds_) * 1000) {
@@ -748,7 +757,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         },
         [this](std::string message) { diagnostic(message); });
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
-    web_->set_background(caption_.background());
+    web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));
     tray();
     if(!selftest_||widget_test_){widget_=std::make_unique<TaskbarWidgetHost>(window_,exe_);widget_->update(core_->status());}
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);

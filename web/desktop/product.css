@@ -10,3 +10,5 @@ progress{width:min(100%,420px);height:8px;accent-color:var(--accent)}
 .settings-grid label.checkbox input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:0}
 
 .update-notice{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:16px;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:24px;box-shadow:0 12px 42px #0005;overflow:auto}.update-notice::backdrop{background:#0006}.update-notice .release-notes{max-height:40vh;overflow:auto;padding:12px;background:var(--bg);border-radius:9px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}.update-notice progress{width:100%;accent-color:var(--accent)}
+
+#startup-splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#071321;color:#eff7fc;font:400 28px/1.2 "Segoe UI Variable","Segoe UI",sans-serif;user-select:none}.booting>aside,.booting>main{visibility:hidden}
