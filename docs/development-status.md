@@ -1,5 +1,17 @@
 # PulseTrace 开发状态
 
+## 最新开发：应用与连接域名流量排行（2026-11-05）
+
+- Network 页加入中英双榜、来源/协议族/排序/搜索/前 5、10、20、全部及当前采样速率；只用真实数据，无演示填充。Mihomo 与域名记录均显式启用；Windows 进程 ETW 为可选来源。原物理接口统计独立，不累加三个来源。
+- 后台两秒回环 API 采样、DPAPI 凭据、暂停与在途样本失效、PID 生命周期检查、稳定 EXE 聚合、未知域名、重置/缺口/关闭尾量质量标记；Schema v4 在线备份迁移和批量 UPSERT，保留旧数据及月档。清除同步丢弃对应待重试快照，防止退出时恢复已清除的数据。
+- Release/Debug 实际构建、各 15/15 CTest，通过 85 项排行模型/数据库/回环 HTTP 检查、16 项前端筛选检查、2,598 项双语资源检查；全部原键鼠、物理网络、月档、更新、WebView2 回归保留。最终日志 `build/ranking-ctest-{release,debug}-verified.log`。此前 Debug 的原生“关闭立即隐藏”断言有一次失败，独立及全套复跑均通过；保留 `build/ranking-ctest-debug-final.log` 和 `ranking-debug-desktop-recheck.log`，未改写生命周期来隐藏失败，仍需留意真实窗口交互时序。
+- 已安装的 Mihomo v1.19.33 独立回环实例验证 TCP/UDP IPv4/IPv6、两个 node 进程同路径聚合、DIRECT、域名与未知目标；没有读写现有 Clash 配置/凭据或更改 TUN/代理/路由。真实 Network 页两次释放重开、安全退出通过。TCP+UDP 参考 295141/426262 B，观测 295141/385302 B，下载未观测尾量 40960 B；保持采样不完整，未宣称完整准确。
+- 六页面×两语言×深浅色、排行 app/domain×All/v4/v6 RPC/DOM、五种尺寸 800×600、1024×768、1280×800、1600×900、1920×1080 DIP（当前 125% DPI）及额外浅色 Network 窗口均通过。截图/结果：`build/ranking-ui-final-1793878909665`；真实采样 UI：`build/mihomo-ranking-controlled-1793878599476/ui/logs`；UDP 证据：`build/mihomo-ranking-controlled-1793878741399/summary.json`。截图、凭据、数据不提交。
+- 十秒 64,735 快照×32 连接压力重放计数相符，热身后/结束 Private Bytes 均 1,212,416；约 12 秒独立 provider CPU 0.13% 单核、Private Bytes 峰值 2,514,944。范围和口径见[使用与实测](traffic-rankings.md)，不把压力 CPU 或短测当长期后台承诺。
+- 补充真实双应用：Node 的两个进程保持一个身份，同时 PowerShell 独立为第二个身份；TCP/UDP 双向传输和原生双榜查询/关闭重开通过。证据 `build/mihomo-ranking-controlled-1793879557540/summary.json`，脚本支持 `--multi-app`。
+- 外部限制：当前 ETW StartTrace=0、EnableTraceEx2=5（拒绝访问）；没有自动提权辅助服务，不宣称 Windows 全进程字节采集验收。更多应用/共享服务、QUIC、现有 Clash TUN 开关/实际代理出口、独立抓包、高吞吐和 24/72 小时仍待验收。未扫描控制端口、读取第三方凭据或自动产生公网测试流量。
+- 本轮只交付开发构建 `build/llvm-release/PulseTrace.exe` 和源码提交双仓同步，不创建 Tag/Release，不覆盖已发布 RC2 附件。后续任务优先处理已获授权环境中的 ETW 采集参考与短连接尾量能力，避免将 Mihomo 采样下界当物理计费。
+
 当前：**0.3.0-rc2 / Windows x64 候选版**（2026-11-05）。任务栏实际可见性、中英双语、安装目录/data 统一和安装器启动修复已按功能提交。用户已明确授权本版双源 Release；实际发布结果以发布回执和远程附件核验为准。
 
 ## 最新：透明任务栏修复

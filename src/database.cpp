@@ -55,7 +55,8 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
                 // Some early schema-v2 fixtures contain counts only. Preserve them and add the missing v2 table.
                 exec("CREATE TABLE IF NOT EXISTS network_events(session TEXT NOT NULL,sequence INTEGER NOT NULL,observed_ms INTEGER NOT NULL,kind TEXT NOT NULL,interface_id TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(session,sequence)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS network_events_range ON network_events(observed_ms);");
                 if(from<3)exec("CREATE TABLE IF NOT EXISTS protocol_samples(session TEXT NOT NULL,minute INTEGER NOT NULL,interface_id TEXT NOT NULL,source TEXT NOT NULL,basis TEXT NOT NULL,quality TEXT NOT NULL,ipv4_up INTEGER NOT NULL,ipv4_down INTEGER NOT NULL,ipv6_up INTEGER NOT NULL,ipv6_down INTEGER NOT NULL,accepted INTEGER NOT NULL,rejected INTEGER NOT NULL,unsupported INTEGER NOT NULL,events_lost INTEGER NOT NULL,buffers_lost INTEGER NOT NULL,PRIMARY KEY(session,minute,interface_id,source,basis)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS protocol_samples_range ON protocol_samples(minute,interface_id);PRAGMA user_version=3;");
-                {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");}
+                if(from<4)exec("CREATE TABLE traffic_rankings(session TEXT NOT NULL,minute INTEGER NOT NULL,source TEXT NOT NULL,kind TEXT NOT NULL,identity TEXT NOT NULL,family INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,attribution TEXT NOT NULL,upload INTEGER NOT NULL,download INTEGER NOT NULL,quality INTEGER NOT NULL,PRIMARY KEY(session,minute,source,kind,identity,family)) WITHOUT ROWID;CREATE INDEX traffic_rankings_range ON traffic_rankings(minute,source,kind);PRAGMA user_version=4;");
+                {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");Statement r(db_,"SELECT identity,upload,download,quality FROM traffic_rankings LIMIT 0");}
                 {Statement check(db_,"PRAGMA quick_check");if(sqlite3_step(check.p)!=SQLITE_ROW||std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p,0)))!="ok")throw std::runtime_error("Migration integrity check failed");}
                 exec("COMMIT");
                 std::ofstream receipt(std::filesystem::path(file.wstring()+L".migration.json"));receipt<<migration_.dump(2);
@@ -195,7 +196,7 @@ void DatabaseManager::prune(std::int64_t cutoff) {
 }
 void DatabaseManager::clear() {
     exec(
-        "BEGIN IMMEDIATE;DELETE FROM counts;DELETE FROM network_events;DELETE FROM protocol_samples;COMMIT;");
+        "BEGIN IMMEDIATE;DELETE FROM counts;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;COMMIT;");
 }
 Json DatabaseManager::traffic_summary() const {
     Json out = {{"upload_bytes", 0}, {"download_bytes", 0}, {"has_totals", false},
@@ -305,6 +306,25 @@ Json DatabaseManager::protocol_samples(std::int64_t from, std::int64_t to, int b
         throw std::runtime_error(sqlite3_errmsg(db_));
     return out;
 }
+std::string DatabaseManager::ranking_icon_path(const std::string &source,const std::string &identity)const{
+ Statement s(db_,"SELECT path FROM traffic_rankings WHERE source=? AND kind='app' AND identity=? ORDER BY minute DESC LIMIT 1");bind_text(s.p,1,source);bind_text(s.p,2,identity);const auto rc=sqlite3_step(s.p);if(rc==SQLITE_ROW)return reinterpret_cast<const char*>(sqlite3_column_text(s.p,0));if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));return {};
+}
+void DatabaseManager::save_rankings(const std::string &session,const Json &rows){
+ if(rows.empty())return;exec("BEGIN IMMEDIATE");
+ try{Statement s(db_,"INSERT INTO traffic_rankings VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(session,minute,source,kind,identity,family) DO UPDATE SET upload=excluded.upload,download=excluded.download,quality=excluded.quality,name=excluded.name,path=excluded.path,attribution=excluded.attribution");
+  for(const auto &r:rows){bind_text(s.p,1,session);sqlite3_bind_int64(s.p,2,r.at("minute").get<std::int64_t>());int col=3;for(const char *k:{"source","kind","key"})bind_text(s.p,col++,r.at(k));sqlite3_bind_int(s.p,col++,r.at("family"));for(const char *k:{"name","path","attribution"})bind_text(s.p,col++,r.at(k));for(const char *k:{"upload","download","quality"})sqlite3_bind_int64(s.p,col++,r.at(k).get<std::int64_t>());
+   if(sqlite3_step(s.p)!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));sqlite3_reset(s.p);sqlite3_clear_bindings(s.p);}
+  exec("COMMIT");}catch(...){exec("ROLLBACK");throw;}
+}
+Json DatabaseManager::rankings(std::int64_t from,std::int64_t to,const std::string &source,const std::string &kind,const std::string &exclude,std::int64_t floor)const{
+ if(from<0||to<=from||to-from>527040)throw std::invalid_argument("Invalid ranking range");
+ Statement s(db_,"SELECT identity,family,MAX(name),MAX(path),MAX(attribution),SUM(upload),SUM(download),MAX(quality&1)+MAX(quality&2)+MAX(quality&4)+MAX(quality&8)+MAX(quality&16)+MAX(quality&32) FROM traffic_rankings WHERE minute>=? AND minute<? AND source=? AND kind=? AND NOT(session=? AND minute>=?) GROUP BY identity,family ORDER BY identity,family");
+ sqlite3_bind_int64(s.p,1,from);sqlite3_bind_int64(s.p,2,to);bind_text(s.p,3,source);bind_text(s.p,4,kind);bind_text(s.p,5,exclude);sqlite3_bind_int64(s.p,6,floor);
+ Json rows=Json::array();int rc{};while((rc=sqlite3_step(s.p))==SQLITE_ROW){Json r={{"source",source},{"kind",kind},{"key",reinterpret_cast<const char*>(sqlite3_column_text(s.p,0))},{"family",sqlite3_column_int(s.p,1)}};int c=2;for(const char *k:{"name","path","attribution"})r[k]=reinterpret_cast<const char*>(sqlite3_column_text(s.p,c++));for(const char *k:{"upload","download","quality"})r[k]=sqlite3_column_int64(s.p,c++);rows.push_back(std::move(r));if(rows.size()>65536)throw std::runtime_error("ranking_result_capacity");}
+ if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));return rows;
+}
+void DatabaseManager::clear_rankings(bool domains){exec(domains?"DELETE FROM traffic_rankings WHERE kind='domain'":"DELETE FROM traffic_rankings");}
+void DatabaseManager::prune_rankings(std::int64_t cutoff){Statement s(db_,"DELETE FROM traffic_rankings WHERE minute<?");sqlite3_bind_int64(s.p,1,cutoff);if(sqlite3_step(s.p)!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db_));}
 void DatabaseManager::export_csv(const std::filesystem::path &path, std::int64_t from,
                                  std::int64_t to) const {
     auto rows = query(from, to, 1);

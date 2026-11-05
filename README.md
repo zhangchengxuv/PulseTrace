@@ -4,6 +4,8 @@
 
 > 历史开发版本：**0.3.0-rc1**。自定义日期选择器、任务栏原生网速、双源更新与每用户 EXE 安装器说明见 [使用和升级说明](docs/upgrade-and-taskbar.md)。实际验证见 [开发状态](docs/development-status.md)。以下保留此前版本记录。
 
+开发分支新增 [应用与连接域名流量排行](docs/traffic-rankings.md)：Network 页启用可选 Mihomo 来源、独立域名历史、范围筛选和排序；默认关闭。Schema v4 自动备份迁移。真实回环 TCP/UDP IPv4/IPv6 已测试，连接关闭尾量仍可能漏采；当前账户 ETW 权限不足，不代表系统全部流量或校园网计费。运行本轮构建：`build/llvm-release/PulseTrace.exe`（需保留同目录 web 和 DLL）。已发布 RC2 附件没有被替换。
+
 开发流程：每项修改验证后提交并同步 GitHub/Gitee，规则见 [AGENTS.md](AGENTS.md)。`tools/sync-remotes.ps1` 默认只读，推送后核对两个实际远程 SHA。
 
 # PulseTrace 0.2.0-rc3

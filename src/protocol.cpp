@@ -74,6 +74,17 @@ void validate_request(const Json &r) {
                 m.substr(0,4)<"1970" || m.substr(5)<"01" || m.substr(5)>"12"))
                 throw std::invalid_argument("Invalid calendar month");
         }
+    } else if(type=="get_rankings"){
+        allowed={"from","to","source","kind","family"};
+        if(!p.contains("from")||!p.contains("to")||!p["from"].is_number_integer()||!p["to"].is_number_integer()||p["from"]<0||p["from"].get<double>()>9007199254740991.0||p["to"].get<double>()>9007199254740991.0||p["to"]<=p["from"]||p["to"].get<std::int64_t>()-p["from"].get<std::int64_t>()>527040)throw std::invalid_argument("Invalid ranking range");
+        if((p.value("source","")!="windows_etw"&&p.value("source","")!="mihomo")||(p.value("kind","")!="app"&&p.value("kind","")!="domain")||!p.contains("family")||!p["family"].is_number_integer()||(p["family"]!=0&&p["family"]!=4&&p["family"]!=6))throw std::invalid_argument("Invalid ranking source or filter");
+    } else if(type=="get_ranking_icon"){
+        allowed={"source","key"};if((p.value("source","")!="windows_etw"&&p.value("source","")!="mihomo")||!p.contains("key")||!p["key"].is_string()||p["key"].get<std::string>().size()>2304)throw std::invalid_argument("Invalid application icon identity");
+    } else if(type=="set_mihomo_secret"){
+        allowed={"secret"};if(!p.contains("secret")||!p["secret"].is_string()||p["secret"].get<std::string>().size()>1024)throw std::invalid_argument("Invalid controller credential");
+    } else if(type=="get_ranking_status"){
+    } else if(type=="clear_ranking_domains"){
+        allowed={"confirmation"};if(p.value("confirmation","")!="DELETE")throw std::invalid_argument("Confirmation required");
     } else if (type == "set_monitoring" || type == "set_autostart") {
         allowed = {"enabled"};
         if (!p.contains("enabled") || !p["enabled"].is_boolean())
@@ -91,7 +102,7 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("Invalid aggregation bucket");
     } else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","taskbar_background","language"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else

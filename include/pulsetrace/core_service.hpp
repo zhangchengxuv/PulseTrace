@@ -4,6 +4,7 @@
 #include "pulsetrace/network_monitor.hpp"
 #include "pulsetrace/monthly_traffic.hpp"
 #include "pulsetrace/raw_input_host.hpp"
+#include "pulsetrace/traffic_rankings.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -46,6 +47,9 @@ class CoreService final : public InputCallbacks {
     }
     std::filesystem::path data_;
     std::unique_ptr<MonthlyTrafficStore> monthly_;
+    std::unique_ptr<TrafficRankings> rankings_;
+    Json unsaved_rankings_=Json::array();
+    std::map<std::string,std::string> ranking_icons_;
     std::string session_;
     std::atomic<bool> enabled_{false}, stopping_{false};
     std::atomic<bool> session_locked_{false};

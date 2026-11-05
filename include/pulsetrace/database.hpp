@@ -21,7 +21,13 @@ class DatabaseManager {
     void export_csv(const std::filesystem::path &file, std::int64_t from, std::int64_t to) const;
     Json traffic_summary() const;
     void visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const;
-    static constexpr int supported_schema=3;
+    void save_rankings(const std::string &session,const Json &rows);
+    Json rankings(std::int64_t from,std::int64_t to,const std::string &source,const std::string &kind,
+                  const std::string &exclude_session="",std::int64_t exclude_from=0) const;
+    void clear_rankings(bool domains_only);
+    void prune_rankings(std::int64_t cutoff);
+    std::string ranking_icon_path(const std::string &source,const std::string &identity)const;
+    static constexpr int supported_schema=4;
     void backup(const std::filesystem::path &destination) const;
     static void backup_file(const std::filesystem::path &source,const std::filesystem::path &destination);
     Json migration_info() const{return migration_;}
