@@ -63,11 +63,12 @@ void validate_request(const Json &r) {
                 if(!keys.contains(it.key())||!it->is_number()||!std::isfinite(it->get<double>())||it->get<double>()< -10000||it->get<double>()>1e9)
                     throw std::invalid_argument("Invalid selftest metric");
         }
-    } else if (type == "get_monthly_traffic") {
+    } else if (type == "get_monthly_traffic" || type == "get_network_calendar") {
         allowed = {"month"};
         if (p.contains("month")) {
             if (!p["month"].is_string()) throw std::invalid_argument("month must be YYYY-MM or all");
             const auto m = p["month"].get<std::string>();
+            if(type=="get_network_calendar"&&m=="all")throw std::invalid_argument("Daily calendar requires one month");
             if (!m.empty() && m != "all" && (m.size()!=7 || m[4]!='-' ||
                 m.substr(0,4).find_first_not_of("0123456789")!=std::string::npos ||
                 m.substr(5).find_first_not_of("0123456789")!=std::string::npos ||

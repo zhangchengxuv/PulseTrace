@@ -26,6 +26,11 @@ int main(){try{
  check(t["ipv4_up"]==44&&t["ipv4_down"]==88&&t["ipv6_up"]==64&&t["ipv6_down"]==128,"four protocol directions archived once");
  check(t["quality"]=="incomplete_observation"&&t["rejected"]==2&&!t["reference_validated"].get<bool>(),"quality not lost");
  check(store.query("2026-12")["totals"]["upload_bytes"]==300,"new month isolated");
+ auto daily=store.daily("2026-11");check(daily["days"].size()==30&&daily["days"][29]["upload_bytes"]==100&&daily["days"][29]["ipv4_up"]==44,"calendar natural-day aggregation without TUN duplicate");
+ check(!daily["days"][0]["has_totals"].get<bool>()&&daily["days"][29]["observed_minutes"]==1,"missing day differs from partial observation");
+ check(store.daily("2024-02")["days"].size()==29&&!std::filesystem::exists(dir/"months/2024-02.sqlite3"),"leap calendar does not create empty archive");
+ store.save("zero",Json::array({network(dec+60,"interface_download_bytes",0)}));
+ check(store.daily("2026-12")["days"][0]["has_totals"].get<bool>(),"observed zero persists");
  store.save("a",Json::array({network(nov,"interface_upload_bytes",150)}));store.save("b",Json::array({network(nov,"interface_upload_bytes",20)}));
  check(store.query("2026-11")["totals"]["upload_bytes"]==170,"absolute counter update and multiple sessions");
  check(store.query("all")["totals"]["upload_bytes"]==470,"all months cumulative total");

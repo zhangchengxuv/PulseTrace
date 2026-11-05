@@ -20,7 +20,7 @@ class DatabaseManager {
     Json protocol_samples(std::int64_t from, std::int64_t to, int bucket,
                           const std::string &exclude_session = "", std::int64_t exclude_from = 0) const;
     void export_csv(const std::filesystem::path &file, std::int64_t from, std::int64_t to) const;
-    Json traffic_summary() const;
+    Json traffic_summary(std::int64_t from=0,std::int64_t to=4223371680LL) const;
     void visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const;
     void save_rankings(const std::string &session,const Json &rows);
     Json rankings(std::int64_t from,std::int64_t to,const std::string &source,const std::string &kind,

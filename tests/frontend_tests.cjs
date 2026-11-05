@@ -3,6 +3,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=path.resolve(__dirname,'..');require(path.join(root,'web/desktop/colormaps.js'));require(path.join(root,'web/desktop/visualization.js'));
 const v=PulseViz;let checks=0;function check(ok,message){checks++;assert.ok(ok,message);}
 check(PulseRange.bucket(240)===1&&PulseRange.bucket(241)===60&&PulseRange.bucket(14400)===60&&PulseRange.bucket(14401)===1440,'all-data granularity adapts to saved span');
+require('../web/desktop/traffic-calendar.js');
+for(const [y,m,count]of [[2024,2,29],[2100,2,28],[2026,11,30],[2026,12,31]]){const cells=PulseCalendar.cells(y,m);check(cells.length===count&&new Set(cells.map(c=>c.column+'/'+c.row)).size===count,'calendar leap/count/unique day mapping');check(cells.every(c=>c.row<7&&c.column<6),'calendar week bounds');}
+check(PulseCalendar.value(null,'all','total').state==='missing','calendar missing is not zero');
+const day={has_totals:true,has_ip:true,upload_bytes:10,download_bytes:20,ipv4_up:2,ipv4_down:3,ipv6_up:0,ipv6_down:0,observed_minutes:1440,ip_minutes:1440,expected_minutes:1440,quality:'observed_unverified_reference'};
+check(PulseCalendar.value(day,'all','total').bytes===30&&PulseCalendar.value(day,'4','up').bytes===2,'calendar never sums interface and IP counters');
+check(PulseCalendar.value(day,'6','total').state==='zero','known zero family is distinct');
+check(PulseCalendar.value({...day,ip_minutes:1},'4','total').state==='partial','partial coverage retains actual bytes and quality');
+check(PulseCalendar.value({...day,has_ip:false},'4','total').bytes===null,'unknown family never replaced with zero');
 require('../web/desktop/mouse-view.js');
 check(!PulseMouse.model([]).has,'mouse missing coverage stays missing');
 const mouse=PulseMouse.model([{module:'coverage',metric:'observed_ms',value:60000},{module:'mouse',metric:'mouse4',value:1},{module:'mouse',metric:'mouse5',value:3}]);

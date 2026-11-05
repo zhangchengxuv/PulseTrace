@@ -493,5 +493,20 @@
   "mouse.no_data": "没有采集数据",
   "mouse.share": "{name}：{count} 次 · {share}",
   "mouse.legend": "零 → 高频 · 最大 {count} 次",
-  "range.all": "全部数据"
+  "range.all": "全部数据",
+  "calendar.title": "月度流量热力图",
+  "calendar.month": "月份",
+  "calendar.family": "协议族",
+  "calendar.direction": "流量方向",
+  "calendar.total": "总流量",
+  "calendar.up": "上传",
+  "calendar.down": "下载",
+  "calendar.missing": "没有数据",
+  "calendar.zero": "零流量",
+  "calendar.partial": "部分时段 / 采集不完整",
+  "calendar.observed": "有监测数据",
+  "calendar.max": "当月最大",
+  "calendar.octets": "全部：所选出口接口字节，不叠加 TUN 与物理网卡。",
+  "calendar.ip": "IPv4/IPv6：IP 长度观测，未经独立对照验收。",
+  "calendar.persisted": "已保存的自然日聚合；虚线或纹理标记缺失、非全天或不完整采集。"
 }

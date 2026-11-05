@@ -10,6 +10,7 @@ class MonthlyTrafficStore {
     void save(const std::string &session, const Json &rows);
     void recover(const DatabaseManager &source);
     Json query(const std::string &month = "") const;
+    Json daily(const std::string &month = "") const;
     void clear();
     std::string month_at(std::int64_t utc_minute) const;
   private:

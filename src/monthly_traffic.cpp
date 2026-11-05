@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <memory>
 namespace pulsetrace {
 namespace {
 std::string utf8(const std::filesystem::path &p){const auto s=p.u8string();return {s.begin(),s.end()};}
@@ -65,6 +66,29 @@ Json MonthlyTrafficStore::query(const std::string &requested) const {
     }
     if(totals["quality"]!="incomplete_observation"&&totals["has_ip"].get<bool>())totals["quality"]="observed_unverified_reference";
     result["totals"]=totals;result["database_file"]=month=="all"?utf8(directory_):utf8(directory_/(month+".sqlite3"));result["summary_file"]=month=="all"?utf8(directory_):utf8(directory_/(month+".json"));return result;
+}
+Json MonthlyTrafficStore::daily(const std::string &requested) const {
+    const auto month=requested.empty()?month_at(utc_now_ms()/60000):requested;
+    if(!valid_month(month))throw std::invalid_argument("Invalid calendar month");
+    const int year=std::stoi(month.substr(0,4)),mon=std::stoi(month.substr(5));
+    const int lengths[]={31,28,31,30,31,30,31,31,30,31,30,31};
+    const int count=lengths[mon-1]+(mon==2&&year%4==0&&(year%100!=0||year%400==0));
+    const auto boundary=[&](int day){SYSTEMTIME local{},utc{};local.wYear=year;local.wMonth=mon;local.wDay=day;
+        if(day>count){local.wDay=1;if(++local.wMonth>12){local.wMonth=1;++local.wYear;}}
+        FILETIME ft{};if(!TzSpecificLocalTimeToSystemTimeEx(&zone_,&local,&utc)||!SystemTimeToFileTime(&utc,&ft))throw std::runtime_error("Cannot convert daily archive boundary");
+        ULARGE_INTEGER n{};n.LowPart=ft.dwLowDateTime;n.HighPart=ft.dwHighDateTime;return static_cast<std::int64_t>(n.QuadPart/10000000ULL-11644473600ULL)/60;};
+    const auto file=directory_/(month+".sqlite3");std::unique_ptr<DatabaseManager> db;
+    if(std::filesystem::exists(file))db=std::make_unique<DatabaseManager>(file);
+    Json days=Json::array();
+    for(int day=1;day<=count;day++){
+        const auto from=boundary(day),to=boundary(day+1);Json data=db?db->traffic_summary(from,to):Json{{"has_totals",false},{"has_ip",false},{"quality","no_data"}};
+        std::ostringstream date;date<<month<<'-'<<std::setfill('0')<<std::setw(2)<<day;
+        data["date"]=date.str();data["from"]=from;data["to"]=to;data["expected_minutes"]=to-from;
+        // Different packet-length bases cannot become a comparable family total.
+        if(data.value("basis_count",0)>1){data["has_ip"]=false;data["quality"]="incomparable_bases";}
+        days.push_back(std::move(data));
+    }
+    return {{"month",month},{"days",days},{"windows_timezone",zone_key_},{"persisted_only",true},{"sources_additive",false},{"reference_validated",false}};
 }
 void MonthlyTrafficStore::clear(){
     for(const auto &entry:std::filesystem::directory_iterator(directory_)){const auto p=entry.path();auto name=p.filename().string();

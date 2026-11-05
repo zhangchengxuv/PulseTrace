@@ -366,6 +366,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         Json result=Json::array();for(auto &[key,r]:grouped){r["family"]=family;r["total"]=r["upload"].get<std::uint64_t>()+r["download"].get<std::uint64_t>();result.push_back(std::move(r));}
         return {{"rows",result},{"status",rankings_->status()},{"source",source},{"basis",source=="mihomo"?"connection_payload_counters":"etw_reported_size"},{"quality_flags",flags},{"reference_validated",false},{"sources_additive",false},{"time_basis",source=="mihomo"?"sample_end_minute":"event_minute"}};
     }
+    if (type == "get_network_calendar") {auto result=monthly_->daily(p.value("month",""));result["last_flush_ms"]=status()["last_flush_ms"];return result;}
     if (type == "get_monthly_traffic") {
         auto result = monthly_->query(p.value("month", ""));
         result["last_flush_ms"] = status()["last_flush_ms"];

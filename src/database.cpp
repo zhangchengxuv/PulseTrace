@@ -204,26 +204,28 @@ void DatabaseManager::clear() {
     exec(
         "BEGIN IMMEDIATE;DELETE FROM counts;DELETE FROM app_usage;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;COMMIT;");
 }
-Json DatabaseManager::traffic_summary() const {
+Json DatabaseManager::traffic_summary(std::int64_t from,std::int64_t to) const {
     Json out = {{"upload_bytes", 0}, {"download_bytes", 0}, {"has_totals", false},
                 {"ipv4_up", 0}, {"ipv4_down", 0}, {"ipv6_up", 0}, {"ipv6_down", 0},
                 {"accepted", 0}, {"rejected", 0}, {"unsupported", 0},
                 {"events_lost", 0}, {"buffers_lost", 0}, {"has_ip", false},
                 {"quality", "no_data"}, {"reference_validated", false},
                 {"total_basis", "selected_interface_octets"}, {"ip_basis", "validated_ip_packet_lengths"}};
-    Statement s(db_, "SELECT metric,SUM(value) FROM counts WHERE module='network' AND "
+    Statement s(db_, "SELECT metric,SUM(value),COUNT(DISTINCT minute) FROM counts WHERE minute>=? AND minute<? AND module='network' AND "
                      "metric IN ('interface_upload_bytes','interface_download_bytes') GROUP BY metric");
-    int rc;
+    sqlite3_bind_int64(s.p,1,from);sqlite3_bind_int64(s.p,2,to);
+    out["observed_minutes"]=0;int rc;
     while ((rc = sqlite3_step(s.p)) == SQLITE_ROW) {
         const std::string metric = reinterpret_cast<const char *>(sqlite3_column_text(s.p, 0));
         out[metric == "interface_upload_bytes" ? "upload_bytes" : "download_bytes"] = sqlite3_column_int64(s.p, 1);
-        out["has_totals"] = true;
+        out["has_totals"] = true;out["observed_minutes"]=std::max(out["observed_minutes"].get<std::int64_t>(),sqlite3_column_int64(s.p,2));
     }
     if (rc != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
     Statement ip(db_, "SELECT COALESCE(SUM(ipv4_up),0),COALESCE(SUM(ipv4_down),0),"
                       "COALESCE(SUM(ipv6_up),0),COALESCE(SUM(ipv6_down),0),COALESCE(SUM(accepted),0),"
                       "COALESCE(SUM(rejected),0),COALESCE(SUM(unsupported),0),COALESCE(MAX(events_lost),0),"
-                      "COALESCE(MAX(buffers_lost),0),COALESCE(MAX(quality='incomplete_observation'),0) FROM protocol_samples");
+                      "COALESCE(MAX(buffers_lost),0),COALESCE(MAX(quality='incomplete_observation'),0),COUNT(DISTINCT minute),COUNT(DISTINCT source||char(31)||basis),MAX(source),MAX(basis) FROM protocol_samples WHERE minute>=? AND minute<?");
+    sqlite3_bind_int64(ip.p,1,from);sqlite3_bind_int64(ip.p,2,to);
     if (sqlite3_step(ip.p) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
     int col=0;
     for (const char *key : {"ipv4_up","ipv4_down","ipv6_up","ipv6_down","accepted","rejected","unsupported","events_lost","buffers_lost"})
@@ -231,6 +233,9 @@ Json DatabaseManager::traffic_summary() const {
     out["has_ip"] = out["accepted"].get<std::int64_t>() > 0;
     out["quality"] = sqlite3_column_int(ip.p, 9) ? "incomplete_observation" :
                        out["has_ip"].get<bool>() ? "observed_unverified_reference" : "no_data";
+    out["ip_minutes"]=sqlite3_column_int64(ip.p,10);
+    out["basis_count"]=sqlite3_column_int(ip.p,11);
+    for(const auto &[key,column]:{std::pair{"source",12},std::pair{"basis",13}})out[key]=sqlite3_column_type(ip.p,column)==SQLITE_NULL?"":reinterpret_cast<const char*>(sqlite3_column_text(ip.p,column));
     return out;
 }
 void DatabaseManager::visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const {
