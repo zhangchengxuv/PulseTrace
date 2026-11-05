@@ -92,6 +92,10 @@ int main() {
             require(db.query(100, 102, 1).empty(), "transaction rollback atomic");
             db.export_csv(dir / "export.csv", 0, 61);
             require(std::filesystem::file_size(dir / "export.csv") > 30, "CSV export written");
+            require(db.history_bounds()["first_minute"]==59,"bounds cover saved history");
+            require(db.query(0,30000000,1440)[0]["value"]==9,"all-data query reaches records older than 366 days");
+            require(parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":0,"to":30000000,"bucket":1440}})")["type"]=="get_statistics","all-data bridge accepts epoch sentinel");
+            rejects([&]{parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":1,"to":30000000}})");},"custom range remains bounded");
             db.prune(60);
             require(db.query(0, 61, 1).size() == 1, "retention cleanup");
             rejects([&] { db.query(1, 1, 1); }, "invalid range rejected");

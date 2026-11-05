@@ -2,6 +2,7 @@ require('../web/desktop/locales.js');require('../web/desktop/i18n.js');PulseI18n
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');require(path.join(root,'web/desktop/colormaps.js'));require(path.join(root,'web/desktop/visualization.js'));
 const v=PulseViz;let checks=0;function check(ok,message){checks++;assert.ok(ok,message);}
+check(PulseRange.bucket(240)===1&&PulseRange.bucket(241)===60&&PulseRange.bucket(14400)===60&&PulseRange.bucket(14401)===1440,'all-data granularity adapts to saved span');
 require('../web/desktop/mouse-view.js');
 check(!PulseMouse.model([]).has,'mouse missing coverage stays missing');
 const mouse=PulseMouse.model([{module:'coverage',metric:'observed_ms',value:60000},{module:'mouse',metric:'mouse4',value:1},{module:'mouse',metric:'mouse5',value:3}]);

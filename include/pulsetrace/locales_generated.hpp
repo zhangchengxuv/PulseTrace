@@ -167,5 +167,6 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"mouse.mapping",L"Arctic · Custom Colormap · 平方根归一化",L"Arctic · Custom Colormap · Square-root scale"},
 {"mouse.no_data",L"没有采集数据",L"No observations"},
 {"mouse.share",L"{name}：{count} 次 · {share}",L"{name}: {count} clicks · {share}"},
-{"mouse.legend",L"零 → 高频 · 最大 {count} 次",L"Zero → high · Maximum {count} clicks"}
+{"mouse.legend",L"零 → 高频 · 最大 {count} 次",L"Zero → high · Maximum {count} clicks"},
+{"range.all",L"全部数据",L"All Data"}
 };}

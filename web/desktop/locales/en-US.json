@@ -492,5 +492,6 @@
   "mouse.mapping": "Arctic · Custom Colormap · Square-root scale",
   "mouse.no_data": "No observations",
   "mouse.share": "{name}: {count} clicks · {share}",
-  "mouse.legend": "Zero → high · Maximum {count} clicks"
+  "mouse.legend": "Zero → high · Maximum {count} clicks",
+  "range.all": "All Data"
 }

@@ -11,6 +11,7 @@ class DatabaseManager {
     ~DatabaseManager();
     DatabaseManager(const DatabaseManager &) = delete;
     void save(const std::string &session, const Json &rows, const Json &events = Json::array());
+    Json history_bounds() const;
     Json query(std::int64_t from, std::int64_t to, int bucket, const std::string &exclude_session = "",
                std::int64_t exclude_from = 0) const;
     void prune(std::int64_t cutoff);
@@ -28,7 +29,7 @@ class DatabaseManager {
     void prune_rankings(std::int64_t cutoff);
     std::string ranking_icon_path(const std::string &source,const std::string &identity)const;
     void save_usage(const std::string &session,const Json &rows);
-    Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0)const;
+    Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0,int bucket=1)const;
     void prune_usage(std::int64_t cutoff);
     std::string usage_icon_path(const std::string &identity)const;
     static constexpr int supported_schema=5;

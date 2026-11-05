@@ -1,5 +1,5 @@
 'use strict';
-let monthlyTraffic=null,selectedTrafficMonth='';
+let monthlyTraffic=null,selectedTrafficMonth='all';
 function archiveFolderButton(){return el('button',{class:'secondary',onclick:async()=>{try{await rpc('open_monthly_folder');}catch(e){error(e);}}},tr("ui.fcf8b4bff0df"));}
 function renderMonthlyTraffic(c){
  const data=monthlyTraffic,t=data?.totals||{},month=data?.month||'',chooser=el('select',{'aria-label':tr("ui.a27822d13506")},el('option',{value:''},tr("ui.0eeecd26f2ba")),el('option',{value:'all'},tr("ui.660f69de1a7f")),...(data?.months||[]).slice().reverse().map(m=>el('option',{value:m},m)));

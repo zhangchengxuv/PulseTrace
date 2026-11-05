@@ -65,3 +65,6 @@ globalThis.PulseViz = (() => {
     }
     return {color, css, foreground, contrast, aggregate, binWidth, heatState, arctic, normalized, toLab, fromLab, arcticStops};
 })();
+
+// One shared default for all statistic pages; data refresh never changes a draft.
+globalThis.PulseRange={bucket(span){return span<=240?1:span<=14400?60:1440;}};

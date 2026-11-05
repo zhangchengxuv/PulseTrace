@@ -492,5 +492,6 @@
   "mouse.mapping": "Arctic · Custom Colormap · 平方根归一化",
   "mouse.no_data": "没有采集数据",
   "mouse.share": "{name}：{count} 次 · {share}",
-  "mouse.legend": "零 → 高频 · 最大 {count} 次"
+  "mouse.legend": "零 → 高频 · 最大 {count} 次",
+  "range.all": "全部数据"
 }

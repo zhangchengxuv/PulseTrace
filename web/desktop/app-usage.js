@@ -5,7 +5,7 @@ function usageDuration(ms){const minutes=Math.floor(ms/60000);if(ms<60000)return
 function groupUsage(values){const result=new Map();for(const r of values){if(!result.has(r.key))result.set(r.key,{...r,active_ms:0,foreground_ms:0});const v=result.get(r.key);v.active_ms+=r.active_ms;v.foreground_ms+=r.foreground_ms;}return [...result.values()];}
 function usageBins(values,daily=false,metric='active_ms'){const bins=new Map();for(const r of values){const d=new Date(r.minute*60000);daily?d.setHours(0,0,0,0):d.setMinutes(0,0,0);const key=d.getTime()/60000;bins.set(key,(bins.get(key)||0)+r[metric]);}return [...bins].sort((a,b)=>a[0]-b[0]);}
 async function refreshUsage(){
- const selected=await rpc('get_app_usage',{from:range.from,to:range.to});
+ const selected=await rpc('get_app_usage',{from:range.from,to:range.to,bucket:range.bucket});
  const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-6);
  const recent=await rpc('get_app_usage',{from:d.getTime()/60000,to:Math.floor(Date.now()/60000)+1});
  usageView.result=selected;usageView.recent=recent.rows;
@@ -35,7 +35,7 @@ function appUsage(c){
   for(const daily of [true,false]){const active=usageBins(selected,daily),foreground=new Map(usageBins(selected,daily,'foreground_ms'));contents.push(table([usageText(daily?'day':'hour'),usageText('active'),usageText('foreground')],active.slice(detailPage*100,detailPage*100+100).map(([m,n])=>[daily?PulseI18n.date(m*60000,{year:'numeric',month:'2-digit',day:'2-digit'}):formatTime(m),usageDuration(n),usageDuration(foreground.get(m)||0)])));}
   const count=usageBins(selected).length;contents.push(el('div',{class:'actions'},el('button',{class:'secondary',disabled:detailPage===0,onclick:()=>{detailPage--;details();}},tr('ui.c9b9ae7a6144')),el('span',{},String(detailPage+1)),el('button',{class:'secondary',disabled:(detailPage+1)*100>=count,onclick:()=>{detailPage++;details();}},tr('ui.8a8542f69648'))));detail.append(panel(name,...contents));};
  limit.onchange=()=>{v.limit=Number(limit.value);draw();};sort.onchange=()=>{v.sort=sort.value;draw();};
- c.append(panel(usageText('ranking'),el('div',{class:'actions'},limit,sort,el('button',{class:'secondary',onclick:async()=>{try{await rpc('export_app_usage',{from:range.from,to:range.to});}catch(e){error(e);}}},usageText('export'))),host),detail,el('div',{class:'chart-grid'},usageChart(usageText('hourly'),v.result.rows),usageChart(usageText('weekly'),v.recent,true)));draw();details();
+ c.append(panel(usageText('ranking'),el('div',{class:'actions'},limit,sort,el('button',{class:'secondary',onclick:async()=>{try{await rpc('export_app_usage',{from:range.from,to:range.to});}catch(e){error(e);}}},usageText('export'))),host),detail,el('div',{class:'chart-grid'},usageChart(usageText(range.bucket===1440?'day':'hourly'),v.result.rows,range.bucket===1440),usageChart(usageText('weekly'),v.recent,true)));draw();details();
 }
 function renderUsageSettings(c){
  const cfg=state.config,enabled=el('input',{type:'checkbox',checked:cfg.usage_enabled}),idle=el('input',{type:'number',min:15,max:3600,value:cfg.usage_idle_seconds}),icons=el('input',{type:'checkbox',checked:cfg.usage_icons}),retention=el('input',{type:'number',min:1,max:365,value:cfg.usage_retention_days}),excluded=el('textarea',{rows:3,'aria-label':usageText('excluded')});excluded.value=(cfg.usage_exclusions||[]).join('\n');

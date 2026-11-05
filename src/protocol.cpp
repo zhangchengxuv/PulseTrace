@@ -49,7 +49,7 @@ void validate_request(const Json &r) {
     const auto type = r["type"].get<std::string>();
     const auto &p = r["params"];
     std::set<std::string> allowed;
-    if (type == "ping" || type == "get_status" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update") {
+    if (type == "ping" || type == "get_status" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update") {
     } else if (type == "selftest_failure") {
         allowed={"message"};if(!p.contains("message")||!p["message"].is_string()||p["message"].get<std::string>().size()>512)throw std::invalid_argument("Invalid selftest failure");
     } else if (type == "selftest_snapshot") {
@@ -76,7 +76,7 @@ void validate_request(const Json &r) {
         }
     } else if(type=="get_rankings"){
         allowed={"from","to","source","kind","family"};
-        if(!p.contains("from")||!p.contains("to")||!p["from"].is_number_integer()||!p["to"].is_number_integer()||p["from"]<0||p["from"].get<double>()>9007199254740991.0||p["to"].get<double>()>9007199254740991.0||p["to"]<=p["from"]||p["to"].get<std::int64_t>()-p["from"].get<std::int64_t>()>527040)throw std::invalid_argument("Invalid ranking range");
+        if(!p.contains("from")||!p.contains("to")||!p["from"].is_number_integer()||!p["to"].is_number_integer()||p["from"]<0||p["from"].get<double>()>9007199254740991.0||p["to"].get<double>()>9007199254740991.0||p["to"]<=p["from"]||p["to"].get<std::int64_t>()>4223371680LL||(p["from"]!=0&&p["to"].get<std::int64_t>()-p["from"].get<std::int64_t>()>527040))throw std::invalid_argument("Invalid ranking range");
         if((p.value("source","")!="windows_etw"&&p.value("source","")!="mihomo")||(p.value("kind","")!="app"&&p.value("kind","")!="domain")||!p.contains("family")||!p["family"].is_number_integer()||(p["family"]!=0&&p["family"]!=4&&p["family"]!=6))throw std::invalid_argument("Invalid ranking source or filter");
     } else if(type=="get_ranking_icon"){
         allowed={"source","key"};if((p.value("source","")!="windows_etw"&&p.value("source","")!="mihomo")||!p.contains("key")||!p["key"].is_string()||p["key"].get<std::string>().size()>2304)throw std::invalid_argument("Invalid application icon identity");
@@ -96,8 +96,8 @@ void validate_request(const Json &r) {
             !p["to"].is_number_integer())
             throw std::invalid_argument("Range needs integer UTC minutes");
         auto from = p["from"].get<std::int64_t>(), to = p["to"].get<std::int64_t>();
-        if (from < 0 || to <= from || to - from > 527040)
-            throw std::invalid_argument("Range must be 1 minute..366 days");
+        if (from < 0 || to <= from || to > 4223371680LL || (from != 0 && to - from > 527040))
+            throw std::invalid_argument("Custom range must be 1 minute..366 days; from=0 selects all saved data");
         if (p.contains("bucket") && (!p["bucket"].is_number_integer() ||
                                      (p["bucket"] != 1 && p["bucket"] != 60 && p["bucket"] != 1440)))
             throw std::invalid_argument("Invalid aggregation bucket");

@@ -20,9 +20,10 @@ void DatabaseManager::save_usage(const std::string &session,const Json &rows){
         }exec("COMMIT");
     }catch(...){sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr);throw;}
 }
-Json DatabaseManager::usage(std::int64_t from,std::int64_t to,const std::string &exclude,std::int64_t floor)const{
-    UsageStatement s(db_,"SELECT minute,identity,MAX(name),MAX(path),SUM(foreground_ms),SUM(active_ms) FROM app_usage WHERE minute>=? AND minute<? AND NOT(session=? AND minute>=?) GROUP BY minute,identity ORDER BY minute,identity");
-    sqlite3_bind_int64(s.p,1,from);sqlite3_bind_int64(s.p,2,to);s.text(3,exclude);sqlite3_bind_int64(s.p,4,floor);Json result=Json::array();int rc;
+Json DatabaseManager::usage(std::int64_t from,std::int64_t to,const std::string &exclude,std::int64_t floor,int bucket)const{
+    if(bucket!=1&&bucket!=60&&bucket!=1440)throw std::invalid_argument("Invalid usage bucket");
+    UsageStatement s(db_,"SELECT (minute/?)*?,identity,MAX(name),MAX(path),SUM(foreground_ms),SUM(active_ms) FROM app_usage WHERE minute>=? AND minute<? AND NOT(session=? AND minute>=?) GROUP BY 1,identity ORDER BY 1,identity");
+    sqlite3_bind_int(s.p,1,bucket);sqlite3_bind_int(s.p,2,bucket);sqlite3_bind_int64(s.p,3,from);sqlite3_bind_int64(s.p,4,to);s.text(5,exclude);sqlite3_bind_int64(s.p,6,floor);Json result=Json::array();int rc;
     while((rc=sqlite3_step(s.p))==SQLITE_ROW){if(result.size()>=100000)throw std::runtime_error("Usage query too large; narrow the range");
         const auto text=[&](int c){return std::string(reinterpret_cast<const char*>(sqlite3_column_text(s.p,c)));};
         result.push_back({{"minute",sqlite3_column_int64(s.p,0)},{"key",text(1)},{"name",text(2)},{"path",text(3)},{"foreground_ms",sqlite3_column_int64(s.p,4)},{"active_ms",sqlite3_column_int64(s.p,5)}});

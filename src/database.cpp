@@ -155,9 +155,14 @@ void DatabaseManager::save(const std::string &session, const Json &rows, const J
         throw;
     }
 }
+Json DatabaseManager::history_bounds() const {
+    Statement s(db_, "SELECT MIN(m) FROM (SELECT MIN(minute) m FROM counts UNION ALL SELECT MIN(minute) FROM protocol_samples UNION ALL SELECT MIN(minute) FROM app_usage UNION ALL SELECT MIN(minute) FROM traffic_rankings)");
+    if(sqlite3_step(s.p)!=SQLITE_ROW)throw std::runtime_error(sqlite3_errmsg(db_));
+    return {{"first_minute",sqlite3_column_type(s.p,0)==SQLITE_NULL?Json(nullptr):Json(sqlite3_column_int64(s.p,0))}};
+}
 Json DatabaseManager::query(std::int64_t from, std::int64_t to, int bucket,
                             const std::string &exclude_session, std::int64_t exclude_from) const {
-    if (from < 0 || to <= from || (bucket != 1 && bucket != 60 && bucket != 1440) || to - from > 527040)
+    if (from < 0 || to <= from || (bucket != 1 && bucket != 60 && bucket != 1440) || to > 4223371680LL || (from != 0 && to - from > 527040))
         throw std::invalid_argument("Invalid minute range (maximum 366 days) or bucket");
     Statement s(db_, "SELECT (minute/?)*?,module,metric,SUM(value) FROM counts WHERE minute>=? AND minute<? "
                      "AND NOT(session=? AND minute>=?) GROUP BY 1,module,metric ORDER BY 1,module,metric");
@@ -274,7 +279,7 @@ Json DatabaseManager::network_events(std::int64_t from, std::int64_t to) const {
 }
 Json DatabaseManager::protocol_samples(std::int64_t from, std::int64_t to, int bucket,
                                        const std::string &exclude, std::int64_t floor) const {
-    if (from < 0 || to <= from || to - from > 527040 || (bucket != 1 && bucket != 60 && bucket != 1440))
+    if (from < 0 || to <= from || to > 4223371680LL || (from != 0 && to - from > 527040) || (bucket != 1 && bucket != 60 && bucket != 1440))
         throw std::invalid_argument("Invalid protocol range");
     Statement s(
         db_,
@@ -318,7 +323,7 @@ void DatabaseManager::save_rankings(const std::string &session,const Json &rows)
   exec("COMMIT");}catch(...){exec("ROLLBACK");throw;}
 }
 Json DatabaseManager::rankings(std::int64_t from,std::int64_t to,const std::string &source,const std::string &kind,const std::string &exclude,std::int64_t floor)const{
- if(from<0||to<=from||to-from>527040)throw std::invalid_argument("Invalid ranking range");
+ if(from<0||to<=from||to>4223371680LL||(from!=0&&to-from>527040))throw std::invalid_argument("Invalid ranking range");
  Statement s(db_,"SELECT identity,family,MAX(name),MAX(path),MAX(attribution),SUM(upload),SUM(download),MAX(quality&1)+MAX(quality&2)+MAX(quality&4)+MAX(quality&8)+MAX(quality&16)+MAX(quality&32) FROM traffic_rankings WHERE minute>=? AND minute<? AND source=? AND kind=? AND NOT(session=? AND minute>=?) GROUP BY identity,family ORDER BY identity,family");
  sqlite3_bind_int64(s.p,1,from);sqlite3_bind_int64(s.p,2,to);bind_text(s.p,3,source);bind_text(s.p,4,kind);bind_text(s.p,5,exclude);sqlite3_bind_int64(s.p,6,floor);
  Json rows=Json::array();int rc{};while((rc=sqlite3_step(s.p))==SQLITE_ROW){Json r={{"source",source},{"kind",kind},{"key",reinterpret_cast<const char*>(sqlite3_column_text(s.p,0))},{"family",sqlite3_column_int(s.p,1)}};int c=2;for(const char *k:{"name","path","attribution"})r[k]=reinterpret_cast<const char*>(sqlite3_column_text(s.p,c++));for(const char *k:{"upload","download","quality"})r[k]=sqlite3_column_int64(s.p,c++);rows.push_back(std::move(r));if(rows.size()>65536)throw std::runtime_error("ranking_result_capacity");}

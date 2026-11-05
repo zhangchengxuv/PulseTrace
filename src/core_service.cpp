@@ -307,12 +307,20 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         return {{"pong", true}};
     if (type == "get_status")
         return status();
+    if(type=="get_history_bounds")return db.history_bounds();
     if(type=="get_app_usage"||type=="export_app_usage"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
         const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
         for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
-        auto values=db.usage(from,to,session_,floor);
+        const int bucket=type=="export_app_usage"?1:p.value("bucket",1);
+        auto values=db.usage(from,to,session_,floor,bucket);
         for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)values.push_back(r);
+        if(type!="export_app_usage"){
+            std::map<std::pair<std::int64_t,std::string>,Json> grouped;
+            for(auto r:values){r["minute"]=r["minute"].get<std::int64_t>()/bucket*bucket;const auto key=std::make_pair(r["minute"].get<std::int64_t>(),r["key"].get<std::string>());
+                if(!grouped.contains(key))grouped[key]=r;else for(const char *f:{"foreground_ms","active_ms"})grouped[key][f]=grouped[key][f].get<std::uint64_t>()+r[f].get<std::uint64_t>();}
+            values=Json::array();for(const auto &[key,r]:grouped)values.push_back(r);
+        }
         if(type=="export_app_usage"){
             const auto name="pulsetrace-app-usage-"+std::to_string(utc_now_ms())+".csv";std::ofstream out(data_/name,std::ios::binary);
             const auto field=[](std::string text){if(!text.empty()&&std::string("=+-@\t\r").find(text.front())!=std::string::npos)text="'"+text;std::string result="\"";for(char c:text){if(c=='"')result+='"';result+=c;}return result+'"';};

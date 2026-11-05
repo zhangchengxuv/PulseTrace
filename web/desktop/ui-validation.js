@@ -18,6 +18,7 @@ async function validateStaticInteractions(){
   check(document.activeElement===select&&select.value==='B'&&!select.disabled,'select operation');
  }finally{probe.remove();}
  if(page!=='settings'&&rangeFields){
+  check(rangePreset==='all'&&range.from===0&&rangeFields.preset.value==='all','default all-data range');
   rangeFields.from.click();const picker=PulseDatePicker.current;
   check(picker?.dialog.open,'date button click');picker.hour.focus();picker.hour.select();
   check(document.activeElement===picker.hour&&getComputedStyle(picker.hour).userSelect==='text','date editor');
@@ -25,7 +26,7 @@ async function validateStaticInteractions(){
  }
  // Range selection uses actual browser Selection, independent of styling.
  const copy=document.createElement('pre');copy.textContent='export/path';document.getElementById('content').append(copy);
- const range=document.createRange();range.selectNodeContents(copy);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
+ const selectionRange=document.createRange();selectionRange.selectNodeContents(copy);const selection=getSelection();selection.removeAllRanges();selection.addRange(selectionRange);
  check(selection.toString()==='export/path'&&getComputedStyle(copy).userSelect==='text','export copying');selection.removeAllRanges();copy.remove();
  window.pulseStaticInteractionReport={passed:true};
 }
