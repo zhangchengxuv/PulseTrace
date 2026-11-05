@@ -21,9 +21,16 @@ class DatabaseManager {
     void export_csv(const std::filesystem::path &file, std::int64_t from, std::int64_t to) const;
     Json traffic_summary() const;
     void visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const;
+    static constexpr int supported_schema=3;
+    void backup(const std::filesystem::path &destination) const;
+    static void backup_file(const std::filesystem::path &source,const std::filesystem::path &destination);
+    Json migration_info() const{return migration_;}
 
   private:
+    struct ReadOnlyTag{};
+    explicit DatabaseManager(ReadOnlyTag){}
     sqlite3 *db_{};
+    Json migration_;
     void exec(const char *sql) const;
 };
 } // namespace pulsetrace

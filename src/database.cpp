@@ -2,6 +2,8 @@
 #include <fstream>
 #include <sqlite3.h>
 #include <stdexcept>
+#include <windows.h>
+#include <chrono>
 namespace pulsetrace {
 namespace {
 struct Statement {
@@ -37,26 +39,30 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
     }
     try {
         sqlite3_busy_timeout(db_, 2000);
+        int from=0;
+        {Statement version(db_, "PRAGMA user_version");if(sqlite3_step(version.p)!=SQLITE_ROW)throw std::runtime_error("Cannot read database schema");from=sqlite3_column_int(version.p,0);}
+        if(from>supported_schema||from<0)throw std::runtime_error("Database schema is newer than supported; update PulseTrace or restore a compatible backup. Original database preserved.");
+        migration_={{"from",from},{"to",supported_schema},{"status",from==supported_schema?"current":"created"},{"backup",""}};
+        if(from<supported_schema){
+            bool populated=false;{Statement tables(db_,"SELECT count(*) FROM sqlite_schema WHERE type='table'");populated=sqlite3_step(tables.p)==SQLITE_ROW&&sqlite3_column_int(tables.p,0)>0;}
+            if(populated){const auto stamp=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                const auto dest=file.parent_path()/"backups"/(file.filename().string()+".pre-v"+std::to_string(from)+"-"+std::to_string(stamp)+".sqlite3");
+                backup(dest);const auto path=dest.generic_u8string();migration_["backup"]=std::string(path.begin(),path.end());migration_["status"]="migrated";}
+            exec("BEGIN IMMEDIATE");
+            try{
+                if(from<1)exec("CREATE TABLE IF NOT EXISTS counts(session TEXT NOT NULL,minute INTEGER NOT NULL,module TEXT NOT NULL,metric TEXT NOT NULL,value INTEGER NOT NULL,PRIMARY KEY(session,minute,module,metric)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS counts_range ON counts(minute,module);PRAGMA user_version=1;");
+                if(from<2)exec("CREATE TABLE IF NOT EXISTS network_events(session TEXT NOT NULL,sequence INTEGER NOT NULL,observed_ms INTEGER NOT NULL,kind TEXT NOT NULL,interface_id TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(session,sequence)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS network_events_range ON network_events(observed_ms);PRAGMA user_version=2;");
+                // Some early schema-v2 fixtures contain counts only. Preserve them and add the missing v2 table.
+                exec("CREATE TABLE IF NOT EXISTS network_events(session TEXT NOT NULL,sequence INTEGER NOT NULL,observed_ms INTEGER NOT NULL,kind TEXT NOT NULL,interface_id TEXT NOT NULL,name TEXT NOT NULL,PRIMARY KEY(session,sequence)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS network_events_range ON network_events(observed_ms);");
+                if(from<3)exec("CREATE TABLE IF NOT EXISTS protocol_samples(session TEXT NOT NULL,minute INTEGER NOT NULL,interface_id TEXT NOT NULL,source TEXT NOT NULL,basis TEXT NOT NULL,quality TEXT NOT NULL,ipv4_up INTEGER NOT NULL,ipv4_down INTEGER NOT NULL,ipv6_up INTEGER NOT NULL,ipv6_down INTEGER NOT NULL,accepted INTEGER NOT NULL,rejected INTEGER NOT NULL,unsupported INTEGER NOT NULL,events_lost INTEGER NOT NULL,buffers_lost INTEGER NOT NULL,PRIMARY KEY(session,minute,interface_id,source,basis)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS protocol_samples_range ON protocol_samples(minute,interface_id);PRAGMA user_version=3;");
+                {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");}
+                {Statement check(db_,"PRAGMA quick_check");if(sqlite3_step(check.p)!=SQLITE_ROW||std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p,0)))!="ok")throw std::runtime_error("Migration integrity check failed");}
+                exec("COMMIT");
+                std::ofstream receipt(std::filesystem::path(file.wstring()+L".migration.json"));receipt<<migration_.dump(2);
+            }catch(...){sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr);std::ofstream log(file.parent_path()/"migration-errors.log",std::ios::app);log<<"Schema migration rolled back from v"<<from<<"; compatible backup retained\n";throw;}
+        }
+        if(from==supported_schema){try{std::ifstream in(std::filesystem::path(file.wstring()+L".migration.json"));Json previous;if(in>>previous)migration_["previous"]=std::move(previous);}catch(...) {}}
         exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA wal_autocheckpoint=256;");
-        Statement version(db_, "PRAGMA user_version");
-        sqlite3_step(version.p);
-        if (sqlite3_column_int(version.p, 0) > 3)
-            throw std::runtime_error("Database created by a newer PulseTrace version");
-        exec("BEGIN;CREATE TABLE IF NOT EXISTS counts(session TEXT NOT NULL,minute INTEGER NOT NULL,module "
-             "TEXT NOT NULL,metric TEXT NOT NULL,value INTEGER NOT NULL,PRIMARY "
-             "KEY(session,minute,module,metric)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS counts_range ON "
-             "counts(minute,module);CREATE TABLE IF NOT EXISTS network_events(session TEXT NOT NULL,sequence "
-             "INTEGER NOT NULL,observed_ms INTEGER NOT NULL,kind TEXT NOT NULL,interface_id TEXT NOT "
-             "NULL,name TEXT NOT NULL,PRIMARY KEY(session,sequence)) WITHOUT ROWID;CREATE INDEX IF NOT "
-             "EXISTS network_events_range ON network_events(observed_ms);"
-             "CREATE TABLE IF NOT EXISTS protocol_samples(session TEXT NOT NULL,minute INTEGER NOT "
-             "NULL,interface_id TEXT NOT NULL,source TEXT NOT NULL,basis TEXT NOT NULL,quality TEXT NOT "
-             "NULL,ipv4_up INTEGER NOT NULL,ipv4_down INTEGER NOT NULL,ipv6_up INTEGER NOT NULL,ipv6_down "
-             "INTEGER NOT NULL,accepted INTEGER NOT NULL,rejected INTEGER NOT NULL,unsupported INTEGER NOT "
-             "NULL,events_lost INTEGER NOT NULL,buffers_lost INTEGER NOT NULL,PRIMARY "
-             "KEY(session,minute,interface_id,source,basis)) WITHOUT ROWID;"
-             "CREATE INDEX IF NOT EXISTS protocol_samples_range ON "
-             "protocol_samples(minute,interface_id);PRAGMA user_version=3;COMMIT;");
         Statement check(db_, "PRAGMA quick_check");
         if (sqlite3_step(check.p) != SQLITE_ROW ||
             std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p, 0))) != "ok")
@@ -70,6 +76,26 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
 DatabaseManager::~DatabaseManager() {
     if (db_)
         sqlite3_close(db_);
+}
+void DatabaseManager::backup(const std::filesystem::path &destination) const {
+    std::filesystem::create_directories(destination.parent_path());
+    HANDLE reserved=CreateFileW(destination.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(reserved==INVALID_HANDLE_VALUE)throw std::runtime_error("Backup destination exists or is not writable");CloseHandle(reserved);
+    sqlite3 *target=nullptr;const auto name=destination.u8string();
+    try{
+        if(sqlite3_open_v2(reinterpret_cast<const char *>(name.c_str()),&target,SQLITE_OPEN_READWRITE,nullptr)!=SQLITE_OK)throw std::runtime_error("Cannot open backup destination");
+        auto *b=sqlite3_backup_init(target,"main",db_,"main");if(!b)throw std::runtime_error("Cannot begin SQLite online backup");
+        int rc=SQLITE_OK;const auto deadline=GetTickCount64()+10000;
+        do{rc=sqlite3_backup_step(b,256);if(rc==SQLITE_BUSY||rc==SQLITE_LOCKED)Sleep(20);}while((rc==SQLITE_OK||rc==SQLITE_BUSY||rc==SQLITE_LOCKED)&&GetTickCount64()<deadline);
+        const int finish=sqlite3_backup_finish(b);if(rc!=SQLITE_DONE||finish!=SQLITE_OK)throw std::runtime_error("SQLite backup interrupted or storage unavailable");
+        {Statement check(target,"PRAGMA quick_check");if(sqlite3_step(check.p)!=SQLITE_ROW||std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p,0)))!="ok")throw std::runtime_error("Backup integrity check failed");}
+        sqlite3_close(target);target=nullptr;
+    }catch(...){if(target)sqlite3_close(target);std::filesystem::remove(destination);throw;}
+}
+void DatabaseManager::backup_file(const std::filesystem::path &source,const std::filesystem::path &destination){
+    DatabaseManager snapshot(ReadOnlyTag{}); // Private read-only connection: no migration or PRAGMA writes.
+    const auto name=source.u8string();if(sqlite3_open_v2(reinterpret_cast<const char *>(name.c_str()),&snapshot.db_,SQLITE_OPEN_READONLY,nullptr)!=SQLITE_OK)throw std::runtime_error("Cannot open backup source read-only");
+    sqlite3_busy_timeout(snapshot.db_,2000);snapshot.backup(destination);
 }
 void DatabaseManager::save(const std::string &session, const Json &rows, const Json &events) {
     exec("BEGIN IMMEDIATE");
