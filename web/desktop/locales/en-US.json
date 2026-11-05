@@ -514,5 +514,12 @@
   "update.now": "Update now",
   "update.versions": "Current {current} → Latest {latest}",
   "update.source": "Source: {source} · Installer {size}",
-  "update.no_notes": "No release notes"
+  "update.no_notes": "No release notes",
+  "network.range": "Selected range · Cumulative traffic",
+  "network.current": "Current live rates",
+  "network.ip_scope": "Current interface {name} · Observed IP total",
+  "network.interface_trend": "Selected egress traffic trend",
+  "network.archives": "Monthly archive totals",
+  "network.events_limit": "At most 500 saved connection records plus current-session events.",
+  "network.more": "More records"
 }

@@ -514,5 +514,12 @@
   "update.now": "立即更新",
   "update.versions": "当前 {current} → 最新 {latest}",
   "update.source": "来源：{source} · 安装包 {size}",
-  "update.no_notes": "暂无更新说明"
+  "update.no_notes": "暂无更新说明",
+  "network.range": "所选时间范围 · 累计流量",
+  "network.current": "当前实时速率",
+  "network.ip_scope": "当前接口 {name} · IP 观测累计",
+  "network.interface_trend": "所选出口流量趋势",
+  "network.archives": "月度累计归档",
+  "network.events_limit": "最多显示最近 500 条已保存连接记录；实时会话记录另计。",
+  "network.more": "更多记录"
 }

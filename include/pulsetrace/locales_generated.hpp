@@ -189,5 +189,12 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"update.now",L"立即更新",L"Update now"},
 {"update.versions",L"当前 {current} → 最新 {latest}",L"Current {current} → Latest {latest}"},
 {"update.source",L"来源：{source} · 安装包 {size}",L"Source: {source} · Installer {size}"},
-{"update.no_notes",L"暂无更新说明",L"No release notes"}
+{"update.no_notes",L"暂无更新说明",L"No release notes"},
+{"network.range",L"所选时间范围 · 累计流量",L"Selected range · Cumulative traffic"},
+{"network.current",L"当前实时速率",L"Current live rates"},
+{"network.ip_scope",L"当前接口 {name} · IP 观测累计",L"Current interface {name} · Observed IP total"},
+{"network.interface_trend",L"所选出口流量趋势",L"Selected egress traffic trend"},
+{"network.archives",L"月度累计归档",L"Monthly archive totals"},
+{"network.events_limit",L"最多显示最近 500 条已保存连接记录；实时会话记录另计。",L"At most 500 saved connection records plus current-session events."},
+{"network.more",L"更多记录",L"More records"}
 };}
