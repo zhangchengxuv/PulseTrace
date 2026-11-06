@@ -49,9 +49,74 @@ class PortalServer{
   SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},reject_{};std::atomic<unsigned> revision_{},requests_{};std::thread worker_;
 };
 }
-int wmain(){
+// Explicit opt-in only: default CTest remains loopback-only. Never print account
+// values, page text, selectors, URLs or portal diagnostics from a live session.
+int live_portal_test(const std::string &url){
+  if(campus_origin(url).empty())throw std::runtime_error("Invalid live portal URL");
+  const auto root=executable_data_directory()/("campus-live-"+std::to_string(GetTickCount64()));
+  std::filesystem::create_directories(root);
+  Json candidates=nullptr,snapshot=nullptr;bool failed=false,auth=false;unsigned ready_count{};std::string ready_field;
+  CampusPortalHost host(GetModuleHandleW(nullptr),root,executable_data_directory().parent_path(),
+    [&](Json event){
+      const auto type=event.value("type","");
+      if(type=="campus_candidates")candidates=event["candidates"];
+      else if(type=="campus_snapshot")snapshot=event["snapshot"];
+      else if(type=="campus_auth_required")auth=true;
+      else if(type=="campus_error"||type=="campus_picker_failed")failed=true;
+      else if(type=="campus_picker_ready"){++ready_count;ready_field=event.value("field","");}
+    },[](std::string){});
+  MSG message{};
+  const auto pump=[&](auto done,unsigned timeout){
+    const auto end=GetTickCount64()+timeout;
+    while(GetTickCount64()<end&&!done()){
+      while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}Sleep(20);
+    }
+    return done();
+  };
+  host.open(url,5,nullptr,{campus_origin(url)},true);
+  if(!pump([&]{return auth||failed||!candidates.is_null();},30000)||failed)
+    throw std::runtime_error("Live portal navigation/scan failed or timed out (details withheld)");
+  if(auth){host.close();std::cout<<"Live portal requires local login; no credentials supplied\n";return 2;}
+  // Let all delayed recognition rounds observe the dynamic page, without
+  // clicking any page control or submitting a form.
+  pump([]{return false;},6000);
+  if(failed||auth)throw std::runtime_error("Live portal became unavailable during recognition");
+  std::cout<<"Live portal recognized fields (values withheld):";
+  Json fields=Json::object();
+  for(const auto field:campus_field_names){
+    const std::string key(field);
+    if(!candidates.contains(key)||!candidates[key].is_array()||candidates[key].empty())continue;
+    std::cout<<' '<<key;
+    const auto &item=candidates[key][0];
+    fields[key]={{"selector",item.at("selector")},{"kind",item.at("kind")},{"unit",item.at("unit")}};
+  }
+  std::cout<<'\n';
+  for(const auto field:campus_field_names){
+    host.hide();const auto before=ready_count;
+    const auto request=parse_message(Json{{"type","campus_pick_field"},{"request_id",51},{"params",{{"field",field}}}}.dump());
+    host.pick(request["params"]["field"].get<std::string>());
+    if(!pump([&]{return failed||ready_count>before;},5000)||failed||!host.visible()||ready_field!=field)
+      throw std::runtime_error("Live portal picker failed (details withheld)");
+    std::cout<<"Picker open/armed: "<<field<<'\n';
+  }
+  host.hide();
+  if(!fields.empty()){
+    // An in-memory test rule only. No confirmation or account data is saved.
+    host.update_rule({{"fields",fields}});host.rescan();
+    if(!pump([&]{return failed||!snapshot.is_null();},5000)||failed||snapshot.at("mapped_fields").size()!=fields.size())
+      throw std::runtime_error("Live candidate selector replay failed (details withheld)");
+    std::cout<<"In-memory selector replay passed; fields="<<fields.size()<<'\n';
+  }
+  host.close();std::cout<<"Live portal test passed; no page controls clicked or user database opened\n";
+  return 0;
+}
+int wmain(int argc,wchar_t **argv){
   try{
     CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+    if(argc==3&&std::wstring_view(argv[1])==L"--live-url"){
+      const auto result=live_portal_test(narrow(argv[2]));CoUninitialize();return result;
+    }
+    if(argc!=1)throw std::runtime_error("Usage: campus_portal_native_tests [--live-url URL]");
     PortalServer server;const auto root=executable_data_directory()/("campus-portal-native-"+std::to_string(GetTickCount64()));
     std::filesystem::create_directories(root);
     Json candidates=nullptr,snapshot=nullptr,manual=nullptr,error=nullptr;unsigned picker_ready_count{};std::string ready_field;

@@ -100,6 +100,30 @@
         const c=candidate(field,cells[1],elements[1],stableSelector(elements[1]),.82);if(c)candidates.push(c);
       }
     }
+    // Legacy portals often position label and value in separate columns. Match
+    // visible leaf values on the same visual line; keep these as suggestions
+    // requiring confirmation, and replay the value selector rather than layout.
+    const leaves=nodes.filter(element=>visible(element)&&!element.children?.length&&
+      !/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|INPUT|TEXTAREA|OPTION)$/.test(element.tagName))
+      .map(element=>({element,text:normalize(element.textContent),rect:element.getBoundingClientRect?.()}))
+      .filter(item=>item.text&&item.text.length<=80&&item.rect?.width>0&&item.rect.height>0);
+    const labels=leaves.filter(item=>Object.values(patterns).some(pattern=>pattern.test(item.text))).slice(0,120);
+    const values=leaves.filter(item=>!Object.values(patterns).some(pattern=>pattern.test(item.text))&&
+      /\d/.test(item.text)).slice(0,300);
+    for(const label of labels)for(const [field,pattern]of Object.entries(patterns)){
+      if(!pattern.test(label.text)||!specific(field,label.text))continue;
+      const kind=kindFor(field);
+      // A label already containing its value is handled by the DOM paths above.
+      if(kind==='currency'&&/\d/.test(label.text)||kind==='bytes'&&parseBytes(label.text)||kind==='text'&&/\d/.test(label.text))continue;
+      const nearby=values.filter(item=>{
+        const gap=item.rect.left-label.rect.right;
+        const dy=Math.abs((item.rect.top+item.rect.bottom-label.rect.top-label.rect.bottom)/2);
+        return gap>=-4&&gap<=320&&dy<=Math.max(3,Math.min(item.rect.height,label.rect.height)*.45)&&
+          (kind!=='currency'||/^(?:[¥￥]\s*)?\d[\d,，]*(?:\.\d+)?\s*(?:元|CNY|RMB)?$/i.test(item.text))&&
+          parseKind(kind,item.text);
+      }).sort((a,b)=>a.rect.left-b.rect.left);
+      if(nearby.length){const item=nearby[0],c=candidate(field,item.text,item.element,stableSelector(item.element),.56);if(c)candidates.push(c);}
+    }
   }
   function scan(document,rule){
     const login=[...document.querySelectorAll('input[type="password"]')].some(visible);

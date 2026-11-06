@@ -10,11 +10,11 @@
 
 设置分为基础设置、校园网概览、计费设置和高级设置。用户无需编写公式、选择器或字段模式；旧版已保存的手动值及安全公式继续兼容。计费只填写免费额度、单价、GB/GiB 和账期；免费额度优先消耗、账户余额可用于流量消费均需明确勾选确认，程序内置计算。参数留空则使用网页值。
 
-`http://202.204.48.66` 只作为可选测试占位地址，不是默认门户。本轮没有访问、验证或模拟任何真实高校账号。
+门户地址由用户配置，不内置学校地址。2026-11-06 已在用户指定的实际门户进行隔离只读测试，结果与限制见[实测记录](campus-navigation-validation.md#实际门户只读测试2026-11-06)。
 
 ## 识别与单位
 
-识别器分析可见文本、标签、表格、相邻 DOM 和 aria/class/id 提示，支持余额、已用、剩余、额度、费用和计费周期的中英文关键词。字节使用 B、KB、MB、GB、TB 与 KiB、MiB、GiB、TiB；金额使用元/¥/RMB/CNY。每个字段包含置信度，重复且接近的候选会标记为歧义。
+识别器分析可见文本、标签、表格、相邻 DOM 和 aria/class/id 提示，支持余额、已用、剩余、额度、费用和计费周期的中英文关键词。名称和数值分列时，也会检查同一视觉行右侧的临近可见数值，作为较低置信度候选供用户确认；确认后保存数值元素的选择器，后续无需重新推断布局。含义不明确的“流量”不会直接映射为已用或剩余流量。字节使用 B、KB、MB、GB、TB 与 KiB、MiB、GiB、TiB；金额使用元/¥/RMB/CNY。每个字段包含置信度，重复且接近的候选会标记为歧义。
 
 已确认规则保存字段类型、模式、选择器、单位、置信度和计算表达式。每次扫描只重新读取自动/映射字段；页面结构变化导致选择器失效时只显示“页面结构可能已变化”，不会用自动候选静默替换原规则。
 
@@ -55,4 +55,6 @@
 
 ## Validation
 
-The controlled test suite covers a table layout, card/proximity layout and definition-list layout, byte and currency units, ambiguity, stale selectors, rule replay, manual candidates, manual/formula fields, safe formulas, cycle reset, zero-price handling, navigation atomic replacement and configured-origin validation. No real campus service was contacted.
+The default controlled test suite contacts loopback fixtures only. It covers tables, cards, definition lists, separate visual columns, byte and currency units, ambiguity, stale selectors, rule replay, manual candidates, manual/formula fields, safe formulas, cycle reset, zero-price handling, navigation atomic replacement and configured-origin validation.
+
+An explicitly authorized real portal can be checked separately with `build/llvm-release/campus_portal_native_tests.exe --live-url <URL>` (Debug is also supported). This opt-in test uses a fresh isolated WebView2 profile, arms and cancels all 11 pickers, and replays candidate selectors in memory. It does not click page controls, submit forms, save rules or open the user database; output contains field names and test status, without account values or raw page diagnostics. A visible password form returns exit code 2 and requires local login outside this test. Passing this check does not validate billing semantics, manual value clicks or long-term authentication recovery.

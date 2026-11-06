@@ -3,6 +3,7 @@ class Element{
  constructor(tag,text='',attrs={},children=[]){this.nodeType=1;this.tagName=tag.toUpperCase();this.id=attrs.id||'';this.className=attrs.class||'';this.aria=attrs.aria||'';this.children=children;this.parentElement=null;this.listeners={};for(const child of children)child.parentElement=this;this.ownText=text;}
  get textContent(){return [this.ownText,...this.children.map(c=>c.textContent)].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();}
  getAttribute(name){return name==='aria-label'?this.aria:null;}
+ getBoundingClientRect(){return this.rect||{left:0,right:0,top:0,bottom:0,width:0,height:0};}
  closest(selector){const tags=new Set(selector.split(',').map(s=>s.trim().split('.')[0].toUpperCase()));for(let n=this;n;n=n.parentElement)if(tags.has(n.tagName)||[...tags].some(t=>this.className.split(/\s+/).includes(t)))return n;return null;}
  matches(selector){return selector===this.tagName.toLowerCase()||selector==='.'+this.className.split(' ')[0];}
  descendants(){return this.children.flatMap(c=>[c,...c.descendants()]);}
@@ -55,6 +56,21 @@ const loginDoc={...tableDoc,querySelectorAll:s=>s==='input[type="password"]'?[{h
 assert.equal(E.scan(loginDoc,{fields:nineFields}).snapshot,null,'expired authentication preserves the previous snapshot');
 const ambiguous=document([new Element('section','Balance ¥12.00',{id:'a'}),new Element('section','Balance ¥13.00',{id:'b'})]);context.document=ambiguous;const ambiguousResult=E.scan(ambiguous,null);assert.equal(ambiguousResult.candidates.balance.ambiguous,true);
 const login=document([new Element('form','Account Password Login',{id:'login'})]);context.document=login;assert.equal(Object.keys(E.scan(login,null).candidates).length,0);
+function positioned(tag,text,id,x,y,width=100){const e=new Element(tag,text,{id});e.rect={left:x,right:x+width,top:y,bottom:y+16,width,height:16};return e;}
+const spatialLabel=positioned('p','账户余额：','spatial-label',100,50),spatialValue=positioned('p','38.25','spatial-value',210,50);
+const spatialDoc=document([new Element('div','',{},[spatialValue]),new Element('div','',{},[spatialLabel]),
+ new Element('div','',{},[positioned('p','93.00','other-row',210,75)]),
+ new Element('div','',{},[positioned('p','Used data','spatial-used-label',100,100)]),
+ new Element('div','',{},[positioned('p','3 GiB','spatial-used',210,100)])]);
+context.document=spatialDoc;const spatial=E.scan(spatialDoc,null);
+assert.equal(spatial.candidates.balance[0].value,38.25,'separate columns use visual alignment rather than DOM order');
+assert.equal(spatial.candidates.balance[0].selector,'#spatial-value','persist the value element');
+assert.ok(spatial.candidates.balance[0].confidence<.8,'spatial suggestions require user confirmation');
+assert.equal(spatial.candidates.used_bytes[0].value,3*1024**3);
+spatialValue.hidden=true;assert.equal(E.scan(spatialDoc,null).candidates.balance,undefined,'hidden and adjacent-row values are not paired');
+spatialValue.hidden=false;spatialValue.rect.left=600;assert.equal(E.scan(spatialDoc,null).candidates.balance,undefined,'distant columns are not paired');
+const vague=document([new Element('section','流量(V4)： 2 GB',{id:'vague'})]);
+assert.equal(E.scan(vague,null).candidates.used_bytes,undefined,'an unspecified traffic counter is not assumed to be used data');
 let picked=null;context.document=tableDoc;E.installPicker(tableDoc,'balance',event=>picked=event);const target=tableDoc.querySelector('#balance');tableDoc.listeners.click({preventDefault(){},stopPropagation(){},target});assert.equal(picked.field,'balance');assert.ok(picked.candidate&&picked.candidate.manual);
 E.installPicker(tableDoc,'balance',()=>{});E.cancelPicker(tableDoc);assert.equal(tableDoc.listeners.click,undefined,'closing the portal cancels click interception');
 assert.equal(E.installPicker(loginDoc,'balance',()=>{}).picker,'login_required','picker never intercepts login form clicks');
