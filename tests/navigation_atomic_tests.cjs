@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 const source=fs.readFileSync('web/desktop/product.js','utf8');
 assert.match(source,/pendingScrollTop=pageScrollPositions\.get\(next\)/);
 assert.doesNotMatch(source,/page=next;window\.scrollTo/);
-const refreshSource=source.slice(source.indexOf('async function refresh('),source.indexOf('const pageRanges='));
+const refreshSource=source.slice(source.indexOf('function pageViewSignature('),source.indexOf('const pageRanges='));
 const node=()=>({dataset:{},classList:{remove(){},toggle(){},contains(){return false;}},replaceChildren(){},append(){}});
 let rendered=false,replacedAfterRender=false,replaceCalls=0;
 const stage={className:'page-stage',childNodes:[{kind:'settings'}]};
@@ -20,4 +20,9 @@ const context=vm.createContext({
  rpc:async type=>{if(type==='get_status')return {version:'test',config:{},monitoring:false,effective_language:'en-US'};if(type==='get_monthly_traffic')return null;throw new Error(type);}
 });
 vm.runInContext(refreshSource,context);
-(async()=>{await context.refresh(true);assert.equal(rendered,true);assert.equal(replaceCalls,1);assert.equal(replacedAfterRender,true,'content must be replaced only after detached rendering completes');assert.equal(content.children.length,2);console.log('Atomic page replacement check passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{await context.refresh(true);assert.equal(rendered,true);assert.equal(replaceCalls,1);assert.equal(replacedAfterRender,true,'content must be replaced only after detached rendering completes');assert.equal(content.children.length,2);
+ context.pendingScrollTop=42;context.renderKey='';let scrolled=false;
+ context.window.scrollTo=options=>{assert.equal(options.top,42);scrolled=true;};context.requestAnimationFrame=()=>{throw Error('scroll restoration was delayed until another frame');};
+ await context.refresh(true);assert.equal(scrolled,true,'scroll restoration finishes in the same render task');
+ await context.refresh(true);assert.equal(replaceCalls,2,'unchanged data must not reconstruct a page even for an explicit refresh');
+ console.log('Atomic page replacement, same-frame scroll and unchanged-data reuse checks passed');})().catch(e=>{console.error(e);process.exitCode=1;});

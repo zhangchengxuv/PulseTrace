@@ -1,4 +1,35 @@
 'use strict';
+async function validateNavigationTransitions(){
+ if(!state.self_test)return;
+ const c=$('content'),nav=$('navigation'),toolbar=$('dashboard-toolbar'),initial=page,initialScroll=window.scrollY;
+ const initialRange=JSON.stringify(range),nodes=new Map(),times=[];let reused=0,empty=0;
+ const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+ navigate('settings');const draft=c.querySelector('.campus-settings input[type=url]'),value=draft?.value;
+ if(draft)draft.value='https://pending.example';
+ navigate('dashboard');const probe=el('canvas',{width:32,height:8});c.append(probe);let paints=0;
+ const observer=PulseRender.observe(probe,()=>{++paints;probe.getContext('2d').fillRect(0,0,32,8);});chartObservers.push(observer);
+ const sequence=Array.from({length:4},()=>['dashboard','network','keyboard','mouse','usage','history','settings']).flat();
+ for(const next of sequence){
+  const start=performance.now();navigate(next);times.push(performance.now()-start);
+  if(c.dataset.page!==next)throw Error('Navigation did not present the selected page immediately');
+  if(nodes.has(next)){if(nodes.get(next)!==c.firstChild)throw Error('Cached page was reconstructed');++reused;}else nodes.set(next,c.firstChild);
+  await tick();if(!c.childElementCount)++empty;
+  if($('navigation')!==nav||$('dashboard-toolbar')!==toolbar)throw Error('Common navigation layout was reconstructed');
+ }
+ if(draft&&c.querySelector('.campus-settings input[type=url]')?.value!=='https://pending.example')throw Error('Settings draft lost on navigation');
+ if(draft)draft.value=value;
+ if(paints<2)throw Error('Cached chart did not redraw when reattached');
+ observer.disconnect();probe.remove();chartObservers=chartObservers.filter(item=>item!==observer);
+ for(const view of pageViews.values()){view.nodes=view.nodes.filter(node=>node!==probe);view.observers=view.observers.filter(item=>item!==observer);}
+ const motion=document.documentElement.dataset.motion;document.documentElement.dataset.motion='reduced';navigate('keyboard');
+ if(c.getAnimations().length)throw Error('Reduced-motion navigation animated');
+ document.documentElement.dataset.motion=motion;navigate(initial);
+ if(JSON.stringify(range)!==initialRange)throw Error('Page range lost on navigation');
+ window.scrollTo({top:initialScroll,behavior:'instant'});await tick();
+ if(empty)throw Error('Navigation produced an empty content frame');
+ const sorted=times.slice().sort((a,b)=>a-b),metrics={navigation_count:times.length,cached_count:reused,empty_frames:empty,dom_mean_ms:times.reduce((a,b)=>a+b,0)/times.length,dom_p95_ms:sorted[Math.floor((sorted.length-1)*.95)]};
+ window.pulseNavigationReport=metrics;await rpc('selftest_snapshot',{phase:'navigation',metrics});
+}
 async function validateStaticInteractions(){
  const check=(value,message)=>{if(!value)throw new Error('Static UI: '+message);};
  if(page==='settings')check(document.querySelectorAll('[data-settings-group]').length===6,'six settings groups');

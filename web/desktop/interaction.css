@@ -11,3 +11,7 @@ input,textarea,select,option,[contenteditable]:not([contenteditable=false]),
 pre,code,table,.selectable-text,.selectable-text *{
  -webkit-user-select:text;user-select:text;
 }
+html{scrollbar-gutter:stable}
+#content{overflow-anchor:none}
+#content[data-loading]{position:relative}
+#content[data-loading]:before{content:attr(data-loading);position:absolute;right:12px;top:8px;z-index:2;padding:3px 8px;border-radius:6px;background:var(--panel);color:var(--muted);font-size:11px;pointer-events:none}

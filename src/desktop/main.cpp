@@ -246,7 +246,7 @@ void DesktopApplication::command(Json request) {
         if(!selftest_)throw std::runtime_error("Selftest capture is disabled in normal operation");
         const auto phase=request["params"]["phase"].get<std::string>();
         if(request["params"].contains("metrics")){
-            std::ofstream out(data_/"logs"/"scroll-metrics.json");out<<request["params"]["metrics"].dump(2);
+            std::ofstream out(data_/"logs"/(phase=="navigation"?"navigation-metrics.json":"scroll-metrics.json"));out<<request["params"]["metrics"].dump(2);
             if(!out)throw std::runtime_error("Cannot save selftest metrics");
         }
         const auto id=request["request_id"];const auto generation=web_->generation();

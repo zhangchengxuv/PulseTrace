@@ -77,9 +77,9 @@ void validate_request(const Json &r) {
     } else if (type == "selftest_snapshot") {
         allowed={"phase","metrics"};
         const auto phase=p.value("phase",std::string());
-        if(phase!="top"&&phase!="scrolled"&&phase!="opaque"&&phase!="calendar-en"&&phase!="calendar-zh")throw std::invalid_argument("Invalid selftest phase");
+        if(phase!="top"&&phase!="scrolled"&&phase!="opaque"&&phase!="calendar-en"&&phase!="calendar-zh"&&phase!="navigation")throw std::invalid_argument("Invalid selftest phase");
         if(p.contains("metrics")){
-            const std::set<std::string> keys={"frames","mean_ms","p95_ms","fps","scroll_px","toolbar_top","blur_enabled","opacity_fallback"};
+            const std::set<std::string> keys={"frames","mean_ms","p95_ms","fps","scroll_px","toolbar_top","blur_enabled","opacity_fallback","navigation_count","cached_count","empty_frames","dom_mean_ms","dom_p95_ms"};
             if(!p["metrics"].is_object()||p["metrics"].size()>keys.size())throw std::invalid_argument("Invalid selftest metrics");
             for(auto it=p["metrics"].begin();it!=p["metrics"].end();++it)
                 if(!keys.contains(it.key())||!it->is_number()||!std::isfinite(it->get<double>())||it->get<double>()< -10000||it->get<double>()>1e9)
