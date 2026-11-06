@@ -52,14 +52,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.4.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.4.0) · [Gitee v0.4.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.4.0)
+[GitHub v0.5.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.5.0) · [Gitee v0.5.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.5.0)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Public release **v0.4.0** adds generic campus portal monitoring. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Public release **v0.5.0** improves campus field configuration, available-data calculations and page navigation. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
