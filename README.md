@@ -52,14 +52,14 @@ main `b3a2cbf` 的真实 x64 Release 开发构建；独立空数据目录、暂�
 
 ## 下载安装
 
-[GitHub v0.6.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.0) · [Gitee v0.6.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.0)
+[GitHub v0.6.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.1) · [Gitee v0.6.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.1)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-公开版本 **v0.6.0** 简化校园网设置，修复计费计算，支持后台同步及页面切换复用；同一源码、安装包及便携包发布到两个仓库。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+公开版本 **v0.6.1** 修复校园网点选按钮自动打开门户、窗口恢复及加载等待，保留后台同步和页面切换复用；同一源码、安装包及便携包发布到两个仓库。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
