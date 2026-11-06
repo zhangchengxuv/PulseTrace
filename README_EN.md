@@ -10,11 +10,12 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **Mouse**: a five-button diagram and ranking; Mouse4 Back, Mouse5 Forward; temporal double clicks, wheel events and deltas tracked separately.
 - **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV export.
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
+- **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
 - **Traffic rankings**: optional Mihomo application/connection-domain rankings with family, range, search and sorting filters; domain history requires separate consent.
 - **Taskbar speed**: a transparent native two-line widget with font, size, units, precision, color and position settings; floating/tray fallback.
 - **History and settings**: All Data by default, minute/hour/day and custom ranges, SQLite, monthly archives, backups and export; Chinese/English, Deep Ocean / Pearl Mist, tray operation and dual-source update checks.
 
-Collection starts paused. Input text, window titles and mouse trajectories are not recorded. Active time uses an idle threshold; IPv4/IPv6 and rankings depend on permissions, sampling and quality, and do not represent full-system traffic or campus billing. Unsigned update packages require manual installation after verification. [Measurement limits](docs/traffic-rankings.md) · [App Usage](docs/app-usage.md)
+Collection starts paused. Input text, window titles and mouse trajectories are not recorded. Active time uses an idle threshold; IPv4/IPv6 and rankings depend on permissions, sampling and quality, and do not represent full-system traffic or campus billing. Campus monitoring is disabled by default, and unconfirmed portal fields remain unknown. Unsigned update packages require manual installation after verification. [Measurement limits](docs/traffic-rankings.md) · [App Usage](docs/app-usage.md) · [Campus portal](docs/campus-portal.md)
 
 ## Screenshots
 
@@ -58,7 +59,7 @@ Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Public candidate **v0.3.0-rc5** includes the session-recovery and persistence fixes. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Public release **v0.4.0** adds generic campus portal monitoring. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 

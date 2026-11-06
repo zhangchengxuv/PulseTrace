@@ -49,7 +49,23 @@ void validate_request(const Json &r) {
     const auto type = r["type"].get<std::string>();
     const auto &p = r["params"];
     std::set<std::string> allowed;
-    if (type == "retry_persistence" || type == "ping" || type == "get_status" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update") {
+    if (type == "retry_persistence" || type == "ping" || type == "get_status" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update" || type=="get_campus_status" || type=="open_campus_portal" || type=="campus_rescan" || type=="delete_campus_rule") {
+    } else if(type=="campus_pick_field"){
+        allowed={"field"};const std::set<std::string> fields={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
+        if(!p.contains("field")||!p["field"].is_string()||!fields.contains(p["field"].get<std::string>()))throw std::invalid_argument("Invalid campus field");
+    } else if(type=="save_campus_mapping"){
+        allowed={"fields"};if(!p.contains("fields")||!p["fields"].is_object()||p["fields"].empty()||p["fields"].size()>6)throw std::invalid_argument("Invalid campus fields");
+        const std::set<std::string> fields={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"},keys={"selector","kind","unit","confidence"};
+        for(auto it=p["fields"].begin();it!=p["fields"].end();++it){
+            if(!fields.contains(it.key())||!it->is_object()||it->size()!=keys.size())throw std::invalid_argument("Invalid campus mapping");
+            for(auto value=it->begin();value!=it->end();++value){
+                if(!keys.contains(value.key()))throw std::invalid_argument("Invalid campus mapping key");
+                if(value.key()=="selector"&&(!value->is_string()||value->get<std::string>().empty()||value->get<std::string>().size()>2048))throw std::invalid_argument("Invalid campus selector");
+                if(value.key()=="kind"&&(!value->is_string()||(*value!="bytes"&&*value!="currency"&&*value!="text")))throw std::invalid_argument("Invalid campus kind");
+                if(value.key()=="unit"&&(!value->is_string()||value->get<std::string>().size()>16))throw std::invalid_argument("Invalid campus unit");
+                if(value.key()=="confidence"&&(!value->is_number()||value->get<double>()<0||value->get<double>()>1))throw std::invalid_argument("Invalid campus confidence");
+            }
+        }
     } else if (type == "selftest_failure") {
         allowed={"message"};if(!p.contains("message")||!p["message"].is_string()||p["message"].get<std::string>().size()>512)throw std::invalid_argument("Invalid selftest failure");
     } else if (type == "selftest_snapshot") {
@@ -104,7 +120,7 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("Invalid aggregation bucket");
     } else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days","campus_enabled","campus_portal_url","campus_allowed_origins","campus_refresh_minutes","campus_unit_price"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else

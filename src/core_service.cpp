@@ -3,6 +3,7 @@
 #include "pulsetrace/version.hpp"
 #include "pulsetrace/localization.hpp"
 #include "pulsetrace/pending_store.hpp"
+#include "pulsetrace/campus.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -33,6 +34,18 @@ void validate_config(const Json &c) {
     const auto background=c.at("taskbar_background").get<std::string>();if(background!="transparent"&&background!="subtle")throw std::invalid_argument("Invalid taskbar background");
     if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
     for(const char *key:{"close_to_tray","capture_on_launch","check_updates_on_start"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean setting");
+    if(!c.at("campus_enabled").is_boolean())throw std::invalid_argument("Expected boolean campus setting");
+    normalize_campus_portal_url(c.at("campus_portal_url").get<std::string>());
+    if(!c.at("campus_allowed_origins").is_array()||c.at("campus_allowed_origins").size()>8)throw std::invalid_argument("Invalid campus allowed origins");
+    for(const auto &origin:c.at("campus_allowed_origins")){
+        if(!origin.is_string())throw std::invalid_argument("Campus allowed origin must be text");
+        campus_origin(origin.get<std::string>());
+    }
+    if(!c.at("campus_refresh_minutes").is_number_integer()||c.at("campus_refresh_minutes")<5||c.at("campus_refresh_minutes")>1440)
+        throw std::invalid_argument("Campus refresh interval must be 5..1440 minutes");
+    if(!c.at("campus_unit_price").is_number()||!std::isfinite(c.at("campus_unit_price").get<double>())||
+       c.at("campus_unit_price").get<double>()<0||c.at("campus_unit_price").get<double>()>1000)
+        throw std::invalid_argument("Invalid campus unit price");
     const auto theme = c.at("theme").get<std::string>();
     if (theme != "light" && theme != "dark" && theme != "system")
         throw std::invalid_argument("Invalid theme");
@@ -56,6 +69,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
                {"taskbar_font","Segoe UI Variable Text"},{"taskbar_font_size",10},{"taskbar_unit","auto"},{"taskbar_precision",1},{"taskbar_upload_color","#3498db"},{"taskbar_download_color","#8bc4ea"},{"taskbar_offset_x",0},{"taskbar_offset_y",0},{"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
                {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
+    config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {
@@ -69,6 +83,10 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
     }
     if(in.is_open())in.close();
     validate_config(config_);
+    std::string campus_rule_error;
+    try{campus_rules_=load_campus_rules(data_);}catch(const std::exception &e){
+        campus_rule_error=e.what();campus_rules_={{"format",1},{"portals",Json::array()}};
+    }
     if(migrate){const auto directory=data_/"backups";std::filesystem::create_directories(directory);std::filesystem::copy_file(data_/"config.json",directory/("config.pre-v0-"+std::to_string(utc_now_ms())+".json"));save_config();}
     session_ = std::to_string(utc_now_ms()) + "-" + std::to_string(GetCurrentProcessId());
     rankings_=std::make_unique<TrafficRankings>(data_);
@@ -78,6 +96,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
               {"session", session_},       {"last_flush_ms", 0},
               {"mouse_clicks_session", 0}, {"keyboard_presses_session", 0},
               {"version", app_version},{"config_version",1},{"config_migration",migrate?"v0 -> v1; backup retained":"current"}};
+    if(!campus_rule_error.empty())state_["campus_rule_error"]=campus_rule_error;
 }
 CoreService::~CoreService() { stop(); }
 void CoreService::start() {
@@ -270,6 +289,19 @@ Json CoreService::status() const {
     result["config"] = config_;
     return result;
 }
+Json CoreService::campus_portal_context() const {
+    std::lock_guard lock(mutex_);
+    const auto url=config_.value("campus_portal_url",std::string());
+    std::vector<std::string> origins;
+    const auto primary=campus_origin(url);if(!primary.empty())origins.push_back(primary);
+    for(const auto &value:config_.value("campus_allowed_origins",Json::array())){
+        try{const auto origin=campus_origin(value.get<std::string>());if(std::find(origins.begin(),origins.end(),origin)==origins.end())origins.push_back(origin);}catch(...){}
+    }
+    return {{"enabled",config_.value("campus_enabled",false)},
+            {"portal_url",url},{"origin",campus_origin(url)},{"allowed_origins",origins},
+            {"refresh_minutes",config_.value("campus_refresh_minutes",5)},
+            {"rule",campus_rule_for(campus_rules_,campus_origin(url))}};
+}
 void CoreService::request(Json request, std::function<void(Json)> reply) {
     validate_request(request);
     if (request["type"] == "get_status") {
@@ -286,6 +318,13 @@ void CoreService::request(Json request, std::function<void(Json)> reply) {
     if (requests_.size() >= 32)
         throw std::runtime_error("Request queue busy");
     requests_.emplace_back(std::move(request), std::move(reply));
+    wake_.notify_one();
+}
+void CoreService::save_campus_snapshot(Json snapshot, std::function<void(Json)> reply){
+    std::lock_guard lock(mutex_);
+    if(worker_done_)throw std::runtime_error("Storage worker stopped: "+state_.value("storage_error",""));
+    if(requests_.size()>=32)throw std::runtime_error("Request queue busy");
+    requests_.emplace_back(Json{{"type","save_campus_snapshot"},{"request_id",0u},{"params",std::move(snapshot)}},std::move(reply));
     wake_.notify_one();
 }
 void CoreService::on_reset() noexcept {
@@ -324,6 +363,82 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         return {{"pong", true}};
     if (type == "get_status")
         return status();
+    if(type=="get_campus_status"){
+        Json config,rules;std::string rule_error;{std::lock_guard lock(mutex_);config=config_;rules=campus_rules_;rule_error=state_.value("campus_rule_error","");}
+        const auto url=config.value("campus_portal_url",std::string()),origin=campus_origin(url);
+        Json latest=nullptr;
+        if(connection&&!origin.empty())latest=connection->campus_latest(origin);
+        return {{"enabled",config.value("campus_enabled",false)},
+                {"configured",!url.empty()},{"portal_url",url},{"origin",origin},
+                {"refresh_minutes",config.value("campus_refresh_minutes",5)},
+                {"unit_price",config.value("campus_unit_price",0.0)},
+                {"rule",campus_rule_for(rules,origin)},{"latest",latest},
+                {"quality_basis","portal-confirmed mapping; values are not inferred from interface totals"},
+                {"rule_error",rule_error}};
+    }
+    if(type=="save_campus_mapping"){
+        const auto &fields=p.at("fields");validate_campus_mapping(fields);
+        std::string url;Json config;{std::lock_guard lock(mutex_);url=config_.value("campus_portal_url",std::string());config=config_;}
+        const auto origin=campus_origin(url);if(origin.empty())throw std::invalid_argument("Configure and save a campus portal URL first");
+        Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}
+        Json rule=nullptr;Json portals=Json::array();
+        for(const auto &old:rules["portals"]){
+            if(old.value("origin","")==origin)rule=old;else portals.push_back(old);
+        }
+        if(rule.is_null())rule={{"origin",origin},{"portal_url",url},{"format",1}};
+        rule["origin"]=origin;rule["portal_url"]=url;rule["fields"]=fields;rule["updated_ms"]=utc_now_ms();rule["adapter"]="generic_dom";
+        rule["allowed_origins"]=config.value("campus_allowed_origins",Json::array());
+        rule["refresh_minutes"]=config.value("campus_refresh_minutes",5);
+        rule["unit_price"]=config.value("campus_unit_price",0.0);
+        rule["last_status"]="confirmed";
+        portals.push_back(rule);rules["portals"]=std::move(portals);save_campus_rules(data_,rules);
+        {std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_error"]="";state_["campus_rule_updated_ms"]=utc_now_ms();}
+        return {{"saved",true},{"rule",rule}};
+    }
+    if(type=="delete_campus_rule"){
+        std::string url;{std::lock_guard lock(mutex_);url=config_.value("campus_portal_url",std::string());}
+        const auto origin=campus_origin(url);Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}
+        Json portals=Json::array();for(const auto &old:rules["portals"])if(old.value("origin","")!=origin)portals.push_back(old);
+        rules["portals"]=std::move(portals);save_campus_rules(data_,rules);
+        {std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_updated_ms"]=utc_now_ms();}
+        return {{"deleted",true}};
+    }
+    if(type=="save_campus_snapshot"){
+        std::string configured;{std::lock_guard lock(mutex_);configured=config_.value("campus_portal_url",std::string());}
+        const auto url=normalize_campus_portal_url(p.at("portal_url").get<std::string>());
+        const auto origin=campus_origin(url),configured_origin=campus_origin(configured);
+        if(origin.empty()||configured_origin.empty()||origin!=configured_origin)throw std::invalid_argument("Snapshot origin is not the configured campus portal");
+        for(const char *key:{"balance","used_bytes","remaining_bytes","quota_bytes","fee"}){
+            if(p.contains(key)&&!p[key].is_null()){
+                if(!p[key].is_number()||!std::isfinite(p[key].get<double>())||p[key].get<double>()<0)throw std::invalid_argument("Invalid campus snapshot value");
+            }
+        }
+        const auto quality=p.value("quality",std::string());
+        if(quality!="confirmed"&&quality!="auto_recognized"&&quality!="low_confidence"&&quality!="unknown")
+            throw std::invalid_argument("Invalid campus snapshot quality");
+        const auto confidence=p.value("confidence",0.0);
+        if(!std::isfinite(confidence)||confidence<0||confidence>1)throw std::invalid_argument("Invalid campus confidence");
+        const auto cycle=p.value("cycle_text",std::string());if(cycle.size()>128)throw std::invalid_argument("Billing cycle is too long");
+        Json mapped=Json::array();
+        if(p.contains("mapped_fields")){
+            if(!p["mapped_fields"].is_array()||p["mapped_fields"].size()>8)throw std::invalid_argument("Invalid mapped field summary");
+            for(const auto &field:p["mapped_fields"])if(field.is_string()&&field.get<std::string>().size()<=32)mapped.push_back(field);
+        }
+        Json snapshot={{"observed_ms",utc_now_ms()},{"portal_origin",origin},{"portal_url",url},
+                       {"balance",p.value("balance",Json(nullptr))},{"used_bytes",p.value("used_bytes",Json(nullptr))},
+                       {"remaining_bytes",p.value("remaining_bytes",Json(nullptr))},{"quota_bytes",p.value("quota_bytes",Json(nullptr))},
+                       {"fee",p.value("fee",Json(nullptr))},{"cycle_text",cycle},{"quality",quality},{"confidence",confidence},
+                       {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"}}}};
+        database().save_campus_snapshot(snapshot);
+        try{
+            Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}
+            bool found=false;for(auto &rule:rules["portals"])if(rule.value("origin","")==origin){
+                rule["last_status"]=quality;rule["last_sync_ms"]=snapshot["observed_ms"];found=true;break;
+            }
+            if(found){save_campus_rules(data_,rules);std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_updated_ms"]=utc_now_ms();}
+        }catch(const std::exception &e){std::lock_guard lock(mutex_);state_["campus_rule_error"]=e.what();}
+        return {{"saved",true},{"snapshot",snapshot}};
+    }
     if(type=="get_history_bounds")return database().history_bounds();
     if(type=="get_app_usage"||type=="export_app_usage"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
@@ -691,7 +806,13 @@ void CoreService::worker() {
                     response["data"]=execute(request,db.get());
                     if(transition){update_network(status()["config"]);response["data"]=status();}
                 }
-                catch(const std::exception &e){response["ok"]=false;response["error"]={{"code",(request["type"].get<std::string>().starts_with("get_")||dynamic_cast<const SQLiteError*>(&e))?"DATABASE_QUERY_FAILED":"REQUEST_FAILED"},{"message",e.what()}};}
+                catch(const std::exception &e){
+                    const auto kind=request["type"].get<std::string>();
+                    const bool sqlite=dynamic_cast<const SQLiteError*>(&e)!=nullptr;
+                    const bool save=kind.starts_with("save_")||kind=="set_config"||kind=="clear_data"||kind.starts_with("clear_");
+                    response["ok"]=false;
+                    response["error"]={{"code",sqlite&&save?"DATABASE_SAVE_FAILED":(kind.starts_with("get_")||sqlite)?"DATABASE_QUERY_FAILED":"REQUEST_FAILED"},{"message",e.what()}};
+                }
                 try{reply(std::move(response));}catch(...){}
             }
             if(clear_requested_){network=NetworkMonitor(&capture_window_);network_rows_=Json::array();network_events_=Json::array();saved.clear();retry_rows.clear();saved_usage=Json::array();saved_rankings=Json::array();clear_requested_=false;}

@@ -1,6 +1,7 @@
 #include <atomic>
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/desktop/webview_host.hpp"
+#include "pulsetrace/desktop/campus_portal_host.hpp"
 #include "pulsetrace/desktop/taskbar_host.hpp"
 #include "pulsetrace/desktop/caption_bar.hpp"
 #include "pulsetrace/probe_report.hpp"
@@ -36,6 +37,8 @@ class DesktopApplication {
             exit_thread_.join();
         if (core_)
             core_->stop();
+        if(portal_)
+            portal_->close();
         if (tray_added_)
             Shell_NotifyIconW(NIM_DELETE, &nid_);
         if (instance_mutex_)
@@ -67,6 +70,7 @@ class DesktopApplication {
     void menu();
     void quit();
     void command(Json request);
+    void campus_event(Json event);
     void diagnostic(const std::string &text);
     void save_window();
     Json appearance() const{return {{"transparency",caption_.transparency()},{"reduced_motion",caption_.reduced_motion()},{"active",caption_.active()},{"dark",caption_.dark()}};}
@@ -75,6 +79,7 @@ class DesktopApplication {
     std::filesystem::path data_, exe_;
     std::unique_ptr<CoreService> core_;
     std::unique_ptr<WebViewHost> web_;
+    std::unique_ptr<CampusPortalHost> portal_;
     std::unique_ptr<TaskbarWidgetHost> widget_;
     std::unique_ptr<UpdateService> updates_;
     CaptionBar caption_;
@@ -165,9 +170,31 @@ void DesktopApplication::hide() {
         return;
     }
     save_window();
+    if(portal_)portal_->close();
     web_->close();
     ShowWindow(window_, SW_HIDE);
     diagnostic("Window hidden; WebView2 controller closed; core retained");
+}
+void DesktopApplication::campus_event(Json event){
+    if(!web_)return;
+    if(event.value("type","")=="campus_snapshot"){
+        const auto generation=web_->generation();
+        const auto hwnd=window_;
+        try{
+            core_->save_campus_snapshot(event["snapshot"],[hwnd,generation](Json response){
+                Json payload={{"type","campus_event"},{"ok",response.value("ok",false)},
+                              {"data",{{"type",response.value("ok",false)?"snapshot_saved":"snapshot_failed"}}}};
+                if(response.value("ok",false))payload["data"]["snapshot"]=response["data"]["snapshot"];
+                else payload["data"]["error"]=response["error"]["message"];
+                auto *message=new Response{generation,std::move(payload)};
+                if(!PostMessageW(hwnd,response_message,0,reinterpret_cast<LPARAM>(message)))delete message;
+            });
+        }catch(const std::exception &e){
+            web_->post({{"type","campus_event"},{"ok",false},{"data",{{"kind","snapshot_failed"},{"error",e.what()}}}});
+        }
+        return;
+    }
+    web_->post({{"type","campus_event"},{"ok",true},{"data",std::move(event)}});
 }
 void DesktopApplication::menu() {
     HMENU m = CreatePopupMenu();
@@ -226,6 +253,30 @@ void DesktopApplication::command(Json request) {
         web_->capture_preview(data_/"logs"/("selftest-toolbar-"+phase+".png"),[this,id,generation](bool ok){
             if(web_&&web_->generation()==generation)web_->post({{"type","response"},{"request_id",id},{"ok",ok},{"data",{{"captured",ok}}},{"error",{{"message","Selftest capture failed"}}}});
         });return;
+    }
+    if(request["type"]=="open_campus_portal"||request["type"]=="campus_rescan"||request["type"]=="campus_pick_field"){
+        try{
+            if(request["type"]=="open_campus_portal"){
+                const auto context=core_->campus_portal_context();
+                if(!context.value("enabled",false))throw std::runtime_error("Enable campus monitoring and save the portal URL first");
+                if(context.value("portal_url",std::string()).empty())throw std::runtime_error("Configure a campus portal URL first");
+                if(!portal_)portal_=std::make_unique<CampusPortalHost>(instance_,data_,exe_,
+                    [this](Json event){campus_event(std::move(event));},[this](std::string text){diagnostic("Campus: "+text);});
+                std::vector<std::string> origins;
+                for(const auto &origin:context.value("allowed_origins",Json::array()))origins.push_back(origin.get<std::string>());
+                portal_->open(context.value("portal_url",std::string()),context.value("refresh_minutes",5u),context.value("rule",Json(nullptr)),origins);
+            }else if(request["type"]=="campus_rescan"){
+                if(!portal_)throw std::runtime_error("Open the campus portal first");
+                portal_->rescan();
+            }else{
+                if(!portal_)throw std::runtime_error("Open the campus portal first");
+                portal_->pick(request["params"].at("field").get<std::string>());
+            }
+            web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"opened",true}}}});
+        }catch(const std::exception &e){
+            web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",false},{"error",{{"code","CAMPUS_PORTAL_FAILED"},{"message",e.what()}}}});
+        }
+        return;
     }
     if (request["type"] == "exit") {
         quit();
@@ -313,6 +364,7 @@ void DesktopApplication::quit() {
     if (exiting_)
         return;
     exiting_ = true;
+    if(portal_)portal_->close();
     save_window();
     diagnostic("Stopping capture and flushing SQLite");
     if (exit_thread_.joinable())

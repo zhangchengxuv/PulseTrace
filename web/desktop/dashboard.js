@@ -48,7 +48,7 @@ function renderDashboard(c){
  const comparison=change==null?tr("ui.702023aefc26"):el('span',{class:change>=0?'positive':'negative',title:tr("ui.2c1ada410244")},tr("ui.07f310dd48d2")+(change>=0?'+':'')+(change*100).toFixed(1)+'%');
  c.append(el('div',{class:'kpi-grid'},
   kpi('keyboard',tr("ui.dd544c02ab73"),fmt(d.total(rows,'keyboard')),keyboardSpark,comparison),kpi('mouse',tr("ui.361881b8b343"),fmt(clicks),mouseSide,tr("ui.702023aefc26")),kpi('wheel',tr("ui.5faa29113975"),fmt(wheel),wheelSide,tr("ui.8461f0798e3d")),
-  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),tr("ui.5c4d2a0e0434")),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,tr("ui.cba5020e0dad")),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality+tr("ui.5103fa12b45d")))));
+  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),tr("ui.5c4d2a0e0434")),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,tr("ui.cba5020e0dad")),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality+tr("ui.5103fa12b45d"))),PulseCampus.dashboardCard()));
  if(state.network_error)c.append(el('div',{class:'capture-error',role:'alert'},tr("ui.7b2a6e670e15")+state.network_error));
  c.append(el('div',{class:'dashboard-charts'},inputActivityChart(),protocolTrend(tr("ui.50aa5251963c"))));
  const selected=(n.interfaces||[]).find(x=>x.id===n.selected),summary=el('div',{class:'daily-summary'},...[

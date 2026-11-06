@@ -1,0 +1,15 @@
+.campus-live{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.campus-live>div{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.campus-live small{display:block;color:var(--muted);margin-bottom:5px}
+.campus-live strong,.campus-card-values strong{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.campus-quality{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0;color:var(--muted);font-size:.85rem}
+.campus-progress{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.campus-progress:before{content:'';grid-column:1;grid-row:1;height:7px;border-radius:999px;background:var(--surface-2)}
+.campus-progress i{grid-column:1;grid-row:1;display:block;height:7px;border-radius:999px;background:var(--accent)}
+.campus-progress span{grid-column:2;grid-row:1;font-variant-numeric:tabular-nums}
+.campus-card-values{display:flex;gap:24px;align-items:baseline}
+.campus-card-values span{color:var(--muted)}
+.kpi-campus{grid-column:1/-1}
+.campus-candidate-row{display:grid;grid-template-columns:minmax(120px,180px) 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.campus-settings textarea{min-height:72px;resize:vertical}
+@media(max-width:760px){.campus-live{grid-template-columns:repeat(2,minmax(0,1fr))}.campus-card-values{display:grid}.campus-candidate-row{grid-template-columns:1fr}.campus-quality{display:grid}}

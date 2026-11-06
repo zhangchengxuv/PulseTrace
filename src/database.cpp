@@ -74,7 +74,8 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
                 if(from<4)exec("CREATE TABLE traffic_rankings(session TEXT NOT NULL,minute INTEGER NOT NULL,source TEXT NOT NULL,kind TEXT NOT NULL,identity TEXT NOT NULL,family INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,attribution TEXT NOT NULL,upload INTEGER NOT NULL,download INTEGER NOT NULL,quality INTEGER NOT NULL,PRIMARY KEY(session,minute,source,kind,identity,family)) WITHOUT ROWID;CREATE INDEX traffic_rankings_range ON traffic_rankings(minute,source,kind);PRAGMA user_version=4;");
                 if(from<5)exec("CREATE TABLE app_usage(session TEXT NOT NULL,minute INTEGER NOT NULL,identity TEXT NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,foreground_ms INTEGER NOT NULL CHECK(foreground_ms>=0 AND foreground_ms<=60000),active_ms INTEGER NOT NULL CHECK(active_ms>=0 AND active_ms<=foreground_ms),PRIMARY KEY(session,minute,identity)) WITHOUT ROWID;CREATE INDEX app_usage_range ON app_usage(minute,identity);CREATE INDEX app_usage_identity ON app_usage(identity,minute);PRAGMA user_version=5;");
                 if(from<6)exec("CREATE TABLE persistence_receipts(session TEXT PRIMARY KEY,revision INTEGER NOT NULL) WITHOUT ROWID;PRAGMA user_version=6;");
-                {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");Statement r(db_,"SELECT identity,upload,download,quality FROM traffic_rankings LIMIT 0");Statement u(db_,"SELECT identity,foreground_ms,active_ms FROM app_usage LIMIT 0");Statement j(db_,"SELECT session,revision FROM persistence_receipts LIMIT 0");}
+                if(from<7)exec("CREATE TABLE campus_snapshots(observed_ms INTEGER PRIMARY KEY,portal_origin TEXT NOT NULL,portal_url TEXT NOT NULL,balance REAL,used_bytes INTEGER,remaining_bytes INTEGER,quota_bytes INTEGER,fee REAL,cycle_text TEXT NOT NULL,quality TEXT NOT NULL,confidence REAL NOT NULL,details_json TEXT NOT NULL);CREATE INDEX campus_snapshots_origin_time ON campus_snapshots(portal_origin,observed_ms);PRAGMA user_version=7;");
+                {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");Statement r(db_,"SELECT identity,upload,download,quality FROM traffic_rankings LIMIT 0");Statement u(db_,"SELECT identity,foreground_ms,active_ms FROM app_usage LIMIT 0");Statement j(db_,"SELECT session,revision FROM persistence_receipts LIMIT 0");Statement cs(db_,"SELECT observed_ms,portal_origin,portal_url,quality,confidence FROM campus_snapshots LIMIT 0");}
                 {Statement check(db_,"PRAGMA quick_check");if(check.step()!=SQLITE_ROW||std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p,0)))!="ok")throw std::runtime_error("Migration integrity check failed");}
                 exec("COMMIT");
                 std::ofstream receipt(std::filesystem::path(file.wstring()+L".migration.json"));receipt<<migration_.dump(2);
@@ -231,12 +232,16 @@ void DatabaseManager::prune(std::int64_t cutoff) {
     sqlite3_bind_int64(e.p, 1, cutoff * 60000);
     if (e.step() != SQLITE_DONE)
         throw SQLiteError(db_,"step");
+    Statement campus(db_, "DELETE FROM campus_snapshots WHERE observed_ms<?");
+    sqlite3_bind_int64(campus.p, 1, cutoff * 60000);
+    if (campus.step() != SQLITE_DONE)
+        throw SQLiteError(db_,"step");
 }
 void DatabaseManager::clear(const std::vector<std::string> &pending_sessions){
  exec("BEGIN IMMEDIATE");try{
   Statement tombstone(db_,"INSERT INTO persistence_receipts VALUES(?,9223372036854775807) ON CONFLICT(session) DO UPDATE SET revision=excluded.revision");
   for(const auto &session:pending_sessions){bind_text(tombstone.p,1,session);if(tombstone.step()!=SQLITE_DONE)throw SQLiteError(db_,"clear",sqlite3_sql(tombstone.p));sqlite3_reset(tombstone.p);}
-  exec("DELETE FROM counts;DELETE FROM app_usage;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;COMMIT;");
+  exec("DELETE FROM counts;DELETE FROM app_usage;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;DELETE FROM campus_snapshots;COMMIT;");
  }catch(...){sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr);throw;}
 }
 Json DatabaseManager::traffic_summary(std::int64_t from,std::int64_t to) const {

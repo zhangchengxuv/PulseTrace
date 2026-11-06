@@ -20,11 +20,13 @@ class CoreService final : public InputCallbacks {
     void start();
     void stop();
     Json status() const;
+    Json campus_portal_context() const;
     bool prepare_stop();
     void cancel_stop() noexcept;
     bool flush_now(std::chrono::milliseconds timeout=std::chrono::seconds(5));
     void on_flush_requested() noexcept override {++flush_requested_;wake_.notify_all();}
     void request(Json request, std::function<void(Json)> reply);
+    void save_campus_snapshot(Json snapshot, std::function<void(Json)> reply);
     bool capture_enabled() const noexcept override { return enabled_.load() && !session_locked_.load() && !suspended_.load() && !quiescing_.load(); }
     void on_ready(HWND window) noexcept override;
     void on_keyboard(std::uintptr_t device, USHORT scan, USHORT flags, USHORT vk,
@@ -76,6 +78,7 @@ class CoreService final : public InputCallbacks {
     mutable std::mutex mutex_;
     std::condition_variable wake_;
     Json state_, input_rows_ = Json::array(), config_;
+    Json campus_rules_=Json::object();
     std::map<std::string,Json> input_pending_;
     std::deque<std::pair<Json, std::function<void(Json)>>> requests_;
     bool input_done_{}, worker_done_{}, clear_requested_{};

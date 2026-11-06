@@ -133,8 +133,8 @@ void migration_v5(const std::filesystem::path &root){
  std::filesystem::create_directories(root);const auto file=root/"monitor.db";
  {DatabaseManager db(file);db.save_batch(batch(1,7));}
  sqlite3 *old{};sqlite3_open(file.string().c_str(),&old);
- check(sqlite3_exec(old,"DROP TABLE persistence_receipts;PRAGMA user_version=5",nullptr,nullptr,nullptr)==SQLITE_OK,"controlled genuine v5 fixture created");sqlite3_close(old);
- {DatabaseManager upgraded(file);check(upgraded.migration_info()["from"]==5&&upgraded.migration_info()["to"]==6,"v5 migration adds replay receipts transactionally");verify(upgraded,7);
+ check(sqlite3_exec(old,"DROP TABLE campus_snapshots;DROP TABLE persistence_receipts;PRAGMA user_version=5",nullptr,nullptr,nullptr)==SQLITE_OK,"controlled genuine v5 fixture created");sqlite3_close(old);
+ {DatabaseManager upgraded(file);check(upgraded.migration_info()["from"]==5&&upgraded.migration_info()["to"]==DatabaseManager::supported_schema,"v5 migration adds replay and campus tables transactionally");verify(upgraded,7);
   const auto backup=upgraded.migration_info()["backup"].get<std::string>();sqlite3 *before{};sqlite3_open_v2(backup.c_str(),&before,SQLITE_OPEN_READONLY,nullptr);
   sqlite3_stmt *query{};sqlite3_prepare_v2(before,"PRAGMA user_version",-1,&query,nullptr);sqlite3_step(query);
   check(sqlite3_column_int(query,0)==5,"consistent pre-v6 backup retains original v5 schema");sqlite3_finalize(query);sqlite3_close(before);
