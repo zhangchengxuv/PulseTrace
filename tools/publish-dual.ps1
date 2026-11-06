@@ -7,14 +7,15 @@ $root=Split-Path -Parent $PSScriptRoot
 function Confirm-GiteeRelease {
  param([string]$Api,[long]$ReleaseId,[string]$ExpectedTag,[string]$ExpectedCommit,[bool]$Prerelease,[string]$Token)
  $uri=$Api+'/releases/'+$ReleaseId
+ $headers=@{Authorization=('token '+$Token);'User-Agent'='PulseTrace-publisher'}
  $valid={param($r) $r.tag_name -eq $ExpectedTag -and $r.target_commitish -eq $ExpectedCommit -and $r.prerelease -is [bool]}
- $final=Invoke-RestMethod $uri
+ $final=Invoke-RestMethod $uri -Headers $headers
  if(-not (& $valid $final)){throw 'Gitee release identity or state could not be verified'}
  # Creation already uses prerelease=true. Do not issue a redundant write after verified uploads.
  if($final.prerelease -ne $Prerelease){
   if(-not $Token){throw 'Gitee release-state change needs authentication'}
-  Invoke-RestMethod -Method Patch $uri -Body @{access_token=$Token;prerelease=$Prerelease.ToString().ToLower()} | Out-Null
-  $final=Invoke-RestMethod $uri
+  Invoke-RestMethod -Method Patch $uri -Headers $headers -Body @{prerelease=$Prerelease.ToString().ToLower()} | Out-Null
+  $final=Invoke-RestMethod $uri -Headers $headers
  }
  if(-not (& $valid $final) -or $final.prerelease -ne $Prerelease){throw 'Gitee release final state verification failed'}
  return $final
@@ -74,16 +75,17 @@ try {
     $final=Invoke-RestMethod -Method Patch ($t.API+'/releases/'+$release.id) -Headers $headers -ContentType 'application/json' -Body $payload
     $receipt.URL=$final.html_url
    }else{
-    $releases=Invoke-RestMethod ($t.API+'/releases?per_page=100')
+    $giteeHeaders=@{Authorization=('token '+$gt);'User-Agent'='PulseTrace-publisher'}
+    $releases=Invoke-RestMethod ($t.API+'/releases?per_page=100') -Headers $giteeHeaders
     if($releases | Where-Object {$_.tag_name -eq $tag}){throw 'Existing Gitee release must be reviewed manually; assets are never overwritten'}
-    $release=Invoke-RestMethod -Method Post ($t.API+'/releases') -Body @{access_token=$gt;tag_name=$tag;target_commitish=$commit;name="PulseTrace $tag";body=$notes;prerelease='true'}
+    $release=Invoke-RestMethod -Method Post ($t.API+'/releases') -Headers $giteeHeaders -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes((@{tag_name=$tag;target_commitish=$commit;name="PulseTrace $tag";body=$notes;prerelease='true'}|ConvertTo-Json)))
     foreach($a in $assets){
      $client=[Net.Http.HttpClient]::new();$client.Timeout=[TimeSpan]::FromMinutes(5)
+     $client.DefaultRequestHeaders.Authorization=[Net.Http.Headers.AuthenticationHeaderValue]::new('token',$gt)
      $multipart=[Net.Http.MultipartFormDataContent]::new();$stream=[IO.File]::OpenRead($a.Path)
-     # Send OAuth separately from the multipart file fields, matching the verified endpoint.
-     # Never print the credential-bearing URI.
-     try{$multipart.Add([Net.Http.StreamContent]::new($stream),'file',$a.Name);$upload=$t.API+'/releases/'+$release.id+'/attach_files?access_token='+[Uri]::EscapeDataString($gt);$response=$client.PostAsync($upload,$multipart).GetAwaiter().GetResult();if(-not $response.IsSuccessStatusCode){throw "Gitee attachment upload HTTP $([int]$response.StatusCode)"}}finally{$multipart.Dispose();$stream.Dispose();$client.Dispose();$upload=$null}
-     $files=Invoke-RestMethod ($t.API+'/releases/'+$release.id+'/attach_files?per_page=100')
+     # Authenticate via header to avoid public API rate-limit buckets and keep tokens out of URLs.
+     try{$multipart.Add([Net.Http.StreamContent]::new($stream),'file',$a.Name);$upload=$t.API+'/releases/'+$release.id+'/attach_files';$response=$client.PostAsync($upload,$multipart).GetAwaiter().GetResult();if(-not $response.IsSuccessStatusCode){throw "Gitee attachment upload HTTP $([int]$response.StatusCode)"}}finally{$multipart.Dispose();$stream.Dispose();$client.Dispose();$upload=$null}
+     $files=Invoke-RestMethod ($t.API+'/releases/'+$release.id+'/attach_files?per_page=100') -Headers $giteeHeaders
      $remote=$files | Where-Object {$_.name -eq $a.Name} | Select-Object -First 1
      if(-not $remote -or $remote.size -ne $a.Size){throw 'Gitee attachment size verification failed'}
      $uri=[Uri]$remote.browser_download_url

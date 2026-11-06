@@ -14,8 +14,9 @@ function Reset([bool]$state){
  $script:reads=0;$script:writes=0;$script:ignoreWrite=$false;$script:failWrite=$false
 }
 function Invoke-RestMethod {
- param($Uri,$Method='Get',$Body)
+ param($Uri,$Method='Get',$Body,$Headers)
  if($Uri -ne 'https://example.invalid/releases/12'){throw 'Unexpected test endpoint'}
+ if($Headers.Authorization -ne 'token fixture-token'){throw 'Gitee requests must authenticate via header'}
  if($Method -eq 'Patch'){
   $script:writes++
   if($script:failWrite){throw 'Controlled HTTP 406'}
