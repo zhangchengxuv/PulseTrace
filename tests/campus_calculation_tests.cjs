@@ -1,0 +1,33 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const context=vm.createContext({console,structuredClone,state:{config:{campus_unit_price:.5}},PulseI18n:{locale:'en-US'},tr:(key,vars={})=>key.replace(/\{(\w+)\}/g,(_,k)=>vars[k]??'')});
+vm.runInContext(fs.readFileSync('web/desktop/campus-view.js','utf8'),context);
+const GiB=1024**3;
+vm.runInContext(`campusData={latest:{cycle_text:'2026-11',details:{web_values:{used_bytes:${10*GiB},free_quota_bytes:${99*GiB}}}},
+ rule:{fields:{
+  free_quota_bytes:{mode:'manual',value:10,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'},
+  used_free_bytes:{mode:'manual',value:4,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'},
+  free_remaining_bytes:{mode:'formula',formula:'free_quota_bytes - used_free_bytes',kind:'bytes'},
+  paid_used_bytes:{mode:'formula',formula:'max(0, used_bytes - used_free_bytes)',kind:'bytes'},
+  spendable_balance:{mode:'manual',value:2,unit:'CNY',kind:'currency'},
+  used_bytes:{mode:'auto',selector:'#used',kind:'bytes',unit:'B',confidence:1}
+ }}};`,context);
+let r=vm.runInContext('campusResolve()',context);
+assert.equal(r.freeRemaining,6*GiB);
+assert.equal(r.resolved.paid_used_bytes,6*GiB);
+assert.equal(r.funded,4*GiB);
+assert.equal(r.total,10*GiB);
+assert.equal(r.progress,.4);
+assert.equal(r.estimated,5);
+assert.equal(r.sources.free_remaining_bytes,'formula');
+assert.equal(r.resolved.free_quota_bytes,10*GiB,'manual values are not overwritten by portal refresh');
+vm.runInContext(`state.config.campus_unit_price=0;`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.funded,null);assert.equal(r.total,null);
+vm.runInContext(`state.config.campus_unit_price=.5;campusData.latest.cycle_text='2026-12';`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.used_free_bytes,null);assert.ok(r.errors.some(e=>e.message.includes('formula_missing')));
+vm.runInContext(`campusData.rule.fields.billing_cycle={mode:'manual',kind:'text',value:'2026-12',unit:'text'};campusData.rule.fields.free_quota_bytes.cycle='2026-12';campusData.rule.fields.used_free_bytes.cycle='2026-12';`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.used_free_bytes,4*GiB,'manual billing cycle controls cycle reset');
+vm.runInContext(`campusData.latest.cycle_text='2026-11';campusData.rule.fields.paid_used_bytes.formula='unknown_field';`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.paid_used_bytes,null);assert.ok(r.errors.some(e=>e.field==='paid_used_bytes'));
+vm.runInContext(`campusData.rule.fields.paid_used_bytes.formula='used_free_bytes / 0';`,context);r=vm.runInContext('campusResolve()',context);assert.ok(r.errors.some(e=>e.message.includes('formula_zero')));
+vm.runInContext(`campusData.rule.fields.free_remaining_bytes.formula='free_remaining_bytes + 1';`,context);r=vm.runInContext('campusResolve()',context);assert.ok(r.errors.some(e=>e.message.includes('formula_cycle')));
+console.log('Campus calculations: manual, formula, GB/GiB, cycle reset, zero-price and safe-formula checks passed');

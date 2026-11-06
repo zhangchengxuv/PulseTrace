@@ -24,6 +24,8 @@ Json snapshot_rpc(CoreService &core,Json snapshot){
 void storage(const std::filesystem::path &root){
     bool invalid=false;try{normalize_campus_portal_url("http://");}catch(...){invalid=true;}check(invalid,"portal URL without host rejected");
     check(campus_origin("HTTPS://CAMPUS.EXAMPLE/usage")=="https://campus.example","scheme and origin normalization");
+    Json legacy={{"balance",{{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",1}}}};normalize_campus_mapping(legacy);
+    check(legacy["balance"]["mode"]=="auto","legacy selector rules migrate to automatic mode");
     DatabaseManager db(root/"storage.db");
     Json snapshot={{"observed_ms",100},{"portal_origin","https://campus.example"},{"portal_url","https://campus.example/usage"},
                    {"balance",12.5},{"used_bytes",1024},{"remaining_bytes",2048},{"quota_bytes",3072},{"fee",1.25},
@@ -52,18 +54,26 @@ void core(const std::filesystem::path &root){
                               {"campus_allowed_origins",Json::array({"https://login.example"})},{"campus_refresh_minutes",5},{"campus_unit_price",0.8}});
     bool credential_url=false;try{rpc(service,"set_config",{{"campus_portal_url","https://campus.example/?token=secret"}});}catch(...){credential_url=true;}
     check(credential_url,"portal URL rejects query credentials");
-    const Json fields={{"balance",{{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",0.95}}},
-                       {"used_bytes",{{"selector","#used"},{"kind","bytes"},{"unit","GiB"},{"confidence",0.92}}}};
+    const Json fields={{"balance",{{"mode","auto"},{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",0.95}}},
+                       {"used_bytes",{{"mode","selector"},{"selector","#used"},{"kind","bytes"},{"unit","B"},{"confidence",0.92}}},
+                       {"free_quota_bytes",{{"mode","manual"},{"value",10},{"unit","GiB"},{"kind","bytes"},{"reset_on_cycle",true}}},
+                       {"used_free_bytes",{{"mode","manual"},{"value",4},{"unit","GiB"},{"kind","bytes"},{"reset_on_cycle",true}}},
+                       {"free_remaining_bytes",{{"mode","formula"},{"formula","free_quota_bytes - used_free_bytes"},{"kind","bytes"}}},
+                       {"spendable_balance",{{"mode","manual"},{"value",2},{"unit","CNY"},{"kind","currency"}}},
+                       {"paid_used_bytes",{{"mode","formula"},{"formula","max(0, used_bytes - used_free_bytes)"},{"kind","bytes"}}},
+                       {"billing_cycle",{{"mode","manual"},{"value","2026-11"},{"unit","text"},{"kind","text"}}}};
     rpc(service,"save_campus_mapping",{{"fields",fields}});
     status=rpc(service,"get_campus_status");
     check(status["rule"]["fields"]["balance"]["selector"]=="#balance","campus rule persisted");
     check(status["rule"]["refresh_minutes"]==5&&status["rule"]["unit_price"]==0.8&&status["rule"]["allowed_origins"].size()==1,"per-portal refresh, price and allowed domains persisted");
+    check(status["rule"]["fields"]["free_quota_bytes"]["mode"]=="manual"&&status["rule"]["fields"]["free_remaining_bytes"]["mode"]=="formula","manual and formula mappings persisted");
     const auto saved=snapshot_rpc(service,{{"portal_url","https://campus.example/usage"},{"balance",8.5},
-        {"used_bytes",1073741824},{"remaining_bytes",5368709120},{"quota_bytes",6442450944},{"fee",2.0},
+        {"used_bytes",1073741824},{"free_quota_bytes",10737418240},{"remaining_bytes",5368709120},{"quota_bytes",6442450944},{"fee",2.0},
         {"cycle_text","2026-11"},{"quality","confirmed"},{"confidence",1.0},{"mapped_fields",Json::array({"balance","used_bytes"})}});
     check(saved["saved"]==true,"internal confirmed snapshot save");
     status=rpc(service,"get_campus_status");
     check(status["latest"]["used_bytes"]==1073741824&&status["latest"]["balance"]==8.5,"campus snapshot available through bridge");
+    check(status["latest"]["details"]["web_values"]["free_quota_bytes"]==10737418240,"additional portal fields persist in structured snapshot details");
     check(status["rule"]["last_status"]=="confirmed"&&status["rule"]["last_sync_ms"].get<std::int64_t>()>0,"per-portal latest recognition state persisted");
     bool rejected=false;try{snapshot_rpc(service,{{"portal_url","https://attacker.example"},{"quality","confirmed"},{"confidence",1.0}});}catch(...){rejected=true;}
     check(rejected,"snapshot outside configured origin rejected");

@@ -6,6 +6,7 @@
 #include "pulsetrace/campus.hpp"
 #include <fstream>
 #include <iomanip>
+#include <array>
 #include <sstream>
 #include <stdexcept>
 #include <sqlite3.h>
@@ -377,7 +378,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
                 {"rule_error",rule_error}};
     }
     if(type=="save_campus_mapping"){
-        const auto &fields=p.at("fields");validate_campus_mapping(fields);
+        Json fields=p.at("fields");normalize_campus_mapping(fields);validate_campus_mapping(fields);
         std::string url;Json config;{std::lock_guard lock(mutex_);url=config_.value("campus_portal_url",std::string());config=config_;}
         const auto origin=campus_origin(url);if(origin.empty())throw std::invalid_argument("Configure and save a campus portal URL first");
         Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}
@@ -408,7 +409,9 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         const auto url=normalize_campus_portal_url(p.at("portal_url").get<std::string>());
         const auto origin=campus_origin(url),configured_origin=campus_origin(configured);
         if(origin.empty()||configured_origin.empty()||origin!=configured_origin)throw std::invalid_argument("Snapshot origin is not the configured campus portal");
-        for(const char *key:{"balance","used_bytes","remaining_bytes","quota_bytes","fee"}){
+        const std::array<const char*,10> campus_values={"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes",
+            "spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee"};
+        for(const auto *key:campus_values){
             if(p.contains(key)&&!p[key].is_null()){
                 if(!p[key].is_number()||!std::isfinite(p[key].get<double>())||p[key].get<double>()<0)throw std::invalid_argument("Invalid campus snapshot value");
             }
@@ -424,11 +427,12 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             if(!p["mapped_fields"].is_array()||p["mapped_fields"].size()>8)throw std::invalid_argument("Invalid mapped field summary");
             for(const auto &field:p["mapped_fields"])if(field.is_string()&&field.get<std::string>().size()<=32)mapped.push_back(field);
         }
+        Json web_values=Json::object();for(const auto *key:campus_values)if(p.contains(key)&&!p[key].is_null())web_values[key]=p[key];
         Json snapshot={{"observed_ms",utc_now_ms()},{"portal_origin",origin},{"portal_url",url},
                        {"balance",p.value("balance",Json(nullptr))},{"used_bytes",p.value("used_bytes",Json(nullptr))},
                        {"remaining_bytes",p.value("remaining_bytes",Json(nullptr))},{"quota_bytes",p.value("quota_bytes",Json(nullptr))},
                        {"fee",p.value("fee",Json(nullptr))},{"cycle_text",cycle},{"quality",quality},{"confidence",confidence},
-                       {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"}}}};
+                       {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"},{"web_values",web_values}}}};
         database().save_campus_snapshot(snapshot);
         try{
             Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}

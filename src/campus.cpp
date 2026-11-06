@@ -1,6 +1,7 @@
 #include "pulsetrace/campus.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <set>
 #include <stdexcept>
@@ -43,10 +44,11 @@ Json load_campus_rules(const std::filesystem::path &data){
     std::ifstream input(file);input>>rules;
     if(!rules.is_object()||rules.value("format",0)!=1||!rules.contains("portals")||!rules["portals"].is_array()||rules["portals"].size()>256)
         throw std::runtime_error("Campus mapping rules are invalid; original file preserved");
-    for(const auto &rule:rules["portals"]){
+    for(auto &rule:rules["portals"]){
         if(!rule.is_object()||!rule.contains("origin")||!rule["origin"].is_string()||
            !rule.contains("fields")||!rule["fields"].is_object())
             throw std::runtime_error("Campus mapping rule is invalid; original file preserved");
+        normalize_campus_mapping(rule["fields"]);
         validate_campus_mapping(rule["fields"]);
     }
     return rules;
@@ -68,19 +70,47 @@ Json campus_rule_for(const Json &rules,const std::string &origin){
     return nullptr;
 }
 void validate_campus_mapping(const Json &fields){
-    if(!fields.is_object()||fields.empty())throw std::invalid_argument("Campus mapping must not be empty");
-    const std::set<std::string> allowed={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
+    if(!fields.is_object())throw std::invalid_argument("Campus mapping must be an object");
+    const std::set<std::string> allowed={"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes",
+        "spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
     for(auto it=fields.begin();it!=fields.end();++it){
         if(!allowed.contains(it.key())||!it->is_object())throw std::invalid_argument("Unknown campus field mapping");
         const auto &m=*it;
-        if(!m.contains("selector")||!m["selector"].is_string()||m["selector"].get<std::string>().empty()||m["selector"].get<std::string>().size()>2048)
-            throw std::invalid_argument("Invalid campus selector");
-        if(!m.contains("kind")||(m["kind"]!="bytes"&&m["kind"]!="currency"&&m["kind"]!="text"))
-            throw std::invalid_argument("Invalid campus field kind");
-        if(!m.contains("unit")||!m["unit"].is_string()||m["unit"].get<std::string>().size()>16)
-            throw std::invalid_argument("Invalid campus unit");
-        if(!m.contains("confidence")||!m["confidence"].is_number()||m["confidence"].get<double>()<0||m["confidence"].get<double>()>1)
-            throw std::invalid_argument("Invalid campus confidence");
+        const auto mode=m.value("mode","auto");
+        if(mode!="auto"&&mode!="selector"&&mode!="manual"&&mode!="formula"&&mode!="disabled")
+            throw std::invalid_argument("Invalid campus mapping mode");
+        if(mode=="auto"||mode=="selector"){
+            if(!m.contains("selector")||!m["selector"].is_string()||m["selector"].get<std::string>().empty()||m["selector"].get<std::string>().size()>2048)
+                throw std::invalid_argument("Invalid campus selector");
+            if(!m.contains("kind")||(m["kind"]!="bytes"&&m["kind"]!="currency"&&m["kind"]!="text"))
+                throw std::invalid_argument("Invalid campus field kind");
+            if(!m.contains("unit")||!m["unit"].is_string()||m["unit"].get<std::string>().size()>16)
+                throw std::invalid_argument("Invalid campus unit");
+            if(!m.contains("confidence")||!m["confidence"].is_number()||m["confidence"].get<double>()<0||m["confidence"].get<double>()>1)
+                throw std::invalid_argument("Invalid campus confidence");
+        }else if(mode=="manual"){
+            if(!m.contains("unit")||!m["unit"].is_string()||m["unit"].get<std::string>().size()>16)
+                throw std::invalid_argument("Invalid campus unit");
+            if(m.value("kind","bytes")=="text"){
+                if(!m.contains("value")||!m["value"].is_string()||m["value"].get<std::string>().empty()||m["value"].get<std::string>().size()>128)
+                    throw std::invalid_argument("Invalid manual campus text");
+            }else if(!m.contains("value")||!m["value"].is_number()||!std::isfinite(m["value"].get<double>())||m["value"].get<double>()<0)
+                throw std::invalid_argument("Invalid manual campus value");
+            if(m.contains("cycle")&&(!m["cycle"].is_string()||m["cycle"].get<std::string>().size()>128))
+                throw std::invalid_argument("Invalid campus cycle");
+            if(m.contains("reset_on_cycle")&&!m["reset_on_cycle"].is_boolean())throw std::invalid_argument("Invalid campus cycle reset flag");
+        }else if(mode=="formula"){
+            if(!m.contains("formula")||!m["formula"].is_string()||m["formula"].get<std::string>().empty()||m["formula"].get<std::string>().size()>512)
+                throw std::invalid_argument("Invalid campus formula");
+            if(!m.contains("kind")||(m["kind"]!="bytes"&&m["kind"]!="currency"))
+                throw std::invalid_argument("Invalid campus formula kind");
+        }
+    }
+}
+void normalize_campus_mapping(Json &fields){
+    for(auto &[field,mapping]:fields.items()){
+        (void)field;
+        if(mapping.is_object()&&!mapping.contains("mode"))mapping["mode"]=mapping.contains("selector")?"auto":"disabled";
     }
 }
 }

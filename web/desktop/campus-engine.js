@@ -2,6 +2,11 @@
   'use strict';
   const patterns={
     balance:/余额|可用金额|账户余额|balance|available\s+(?:funds|credit)/i,
+    free_quota_bytes:/免费流量|免费额度|free\s+(?:data|traffic|quota|allowance)/i,
+    free_remaining_bytes:/免费剩余|免费流量剩余|free\s+remaining|remaining\s+free/i,
+    used_free_bytes:/免费已用|已用免费流量|免费流量已使用|free\s+(?:used|usage)/i,
+    spendable_balance:/可消费余额|流量余额|可用于流量(?:消费)?的余额|spendable\s+balance|balance\s+for\s+(?:data|usage)/i,
+    paid_used_bytes:/付费流量|超额流量|超出免费|paid\s+(?:data|usage)|chargeable\s+(?:data|usage)/i,
     used_bytes:/已用流量|已使用流量|已用数据|used\s+(?:data|traffic|usage)|data\s+used|(?:^|\s)usage(?:\s|$)/i,
     remaining_bytes:/剩余流量|可用流量|剩余数据|remaining\s+(?:data|traffic)|data\s+remaining/i,
     quota_bytes:/套餐总量|套餐额度|总流量|流量额度|quota|allowance|data\s+plan/i,
@@ -49,7 +54,7 @@
     }
     return parts.join(' > ');
   }
-  function kindFor(field){return field==='balance'||field==='fee'?'currency':field==='billing_cycle'?'text':'bytes';}
+  function kindFor(field){return field==='balance'||field==='spendable_balance'||field==='fee'?'currency':field==='billing_cycle'?'text':'bytes';}
   function parsedField(field,text){
     const kind=kindFor(field),parsed=parseKind(kind,text);
     if(!parsed)return null;
@@ -62,6 +67,13 @@
     return {...parsed,selector:selector||stableSelector(element),raw:text.slice(0,180),confidence:Math.min(.99,base+(table?.12:0)+(patterns[field].test(hint)?.08:0))};
   }
   function addCandidates(document,candidates){
+    const specific=(field,text)=>{
+      if(field==='balance'&&patterns.spendable_balance.test(text))return false;
+      if(field==='used_bytes'&&(patterns.used_free_bytes.test(text)||patterns.paid_used_bytes.test(text)))return false;
+      if(field==='remaining_bytes'&&patterns.free_remaining_bytes.test(text))return false;
+      if(field==='quota_bytes'&&patterns.free_quota_bytes.test(text))return false;
+      return true;
+    };
     const nodes=[...document.querySelectorAll('body *')].slice(0,2500);
     for(const element of nodes){
       if(!element||/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|INPUT|TEXTAREA|OPTION)$/.test(element.tagName))continue;
@@ -69,6 +81,7 @@
       const row=element.closest?.('tr,dl,li,section,article,.card,.item,.metric')||element;
       const rowText=normalize(row.textContent).slice(0,220);
       for(const [field,pattern]of Object.entries(patterns)){
+        if(!specific(field,rowText))continue;
         if(!pattern.test(rowText)&&!pattern.test(normalize((element.id||'')+' '+(element.className||'')+' '+(element.getAttribute?.('aria-label')||''))))continue;
         const target=text.length<=180?element:row;
         const c=candidate(field,normalize(target.textContent).slice(0,220),target,stableSelector(target),.56);
@@ -78,6 +91,7 @@
     for(const row of [...document.querySelectorAll('tr')].slice(0,500)){
       const cells=[...row.querySelectorAll('th,td')].map(normalize);if(cells.length<2)continue;
       for(const [field,pattern]of Object.entries(patterns))if(pattern.test(cells[0])||pattern.test(cells[1])){
+        if(!specific(field,cells.slice(0,2).join(' ')))continue;
         const c=candidate(field,cells.slice(0,2).join(' '),row,stableSelector(row),.7);if(c)candidates.push(c);
       }
     }
@@ -91,7 +105,9 @@
       fields[field]=unique.slice(0,5);
     }
     for(const [field,items]of Object.entries(fields))fields[field].ambiguous=items.length>1&&items[0].confidence-items[1].confidence<.12;
-    const mappings=rule?.fields||{},values={},missing=[],mapped=[];
+    const mappings=Object.fromEntries(Object.entries(rule?.fields||{}).filter(([,mapping])=>
+      mapping&&(mapping.mode==='auto'||mapping.mode==='selector'||(!mapping.mode&&mapping.selector))));
+    const values={},missing=[],mapped=[];
     for(const [field,mapping]of Object.entries(mappings)){
       let element=null;try{element=document.querySelector(mapping.selector);}catch{continue;}
       if(!element){missing.push(field);continue;}

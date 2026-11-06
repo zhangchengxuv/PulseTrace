@@ -54,16 +54,22 @@ void validate_request(const Json &r) {
         allowed={"field"};const std::set<std::string> fields={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
         if(!p.contains("field")||!p["field"].is_string()||!fields.contains(p["field"].get<std::string>()))throw std::invalid_argument("Invalid campus field");
     } else if(type=="save_campus_mapping"){
-        allowed={"fields"};if(!p.contains("fields")||!p["fields"].is_object()||p["fields"].empty()||p["fields"].size()>6)throw std::invalid_argument("Invalid campus fields");
-        const std::set<std::string> fields={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"},keys={"selector","kind","unit","confidence"};
+        allowed={"fields"};if(!p.contains("fields")||!p["fields"].is_object()||p["fields"].size()>11)throw std::invalid_argument("Invalid campus fields");
+        const std::set<std::string> fields={"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes","spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"},
+            keys={"mode","selector","kind","unit","confidence","value","formula","cycle","reset_on_cycle"};
         for(auto it=p["fields"].begin();it!=p["fields"].end();++it){
-            if(!fields.contains(it.key())||!it->is_object()||it->size()!=keys.size())throw std::invalid_argument("Invalid campus mapping");
+            if(!fields.contains(it.key())||!it->is_object()||it->size()>keys.size())throw std::invalid_argument("Invalid campus mapping");
             for(auto value=it->begin();value!=it->end();++value){
                 if(!keys.contains(value.key()))throw std::invalid_argument("Invalid campus mapping key");
+                if(value.key()=="mode"&&(!value->is_string()||(*value!="auto"&&*value!="selector"&&*value!="manual"&&*value!="formula"&&*value!="disabled")))throw std::invalid_argument("Invalid campus mode");
                 if(value.key()=="selector"&&(!value->is_string()||value->get<std::string>().empty()||value->get<std::string>().size()>2048))throw std::invalid_argument("Invalid campus selector");
                 if(value.key()=="kind"&&(!value->is_string()||(*value!="bytes"&&*value!="currency"&&*value!="text")))throw std::invalid_argument("Invalid campus kind");
                 if(value.key()=="unit"&&(!value->is_string()||value->get<std::string>().size()>16))throw std::invalid_argument("Invalid campus unit");
                 if(value.key()=="confidence"&&(!value->is_number()||value->get<double>()<0||value->get<double>()>1))throw std::invalid_argument("Invalid campus confidence");
+                if(value.key()=="value"&&!((value->is_number()&&value->get<double>()>=0)||(value->is_string()&&!value->get<std::string>().empty()&&value->get<std::string>().size()<=128)))throw std::invalid_argument("Invalid manual campus value");
+                if(value.key()=="formula"&&(!value->is_string()||value->get<std::string>().empty()||value->get<std::string>().size()>512))throw std::invalid_argument("Invalid campus formula");
+                if(value.key()=="cycle"&&(!value->is_string()||value->get<std::string>().size()>128))throw std::invalid_argument("Invalid campus cycle");
+                if(value.key()=="reset_on_cycle"&&!value->is_boolean())throw std::invalid_argument("Invalid campus cycle flag");
             }
         }
     } else if (type == "selftest_failure") {

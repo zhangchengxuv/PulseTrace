@@ -149,7 +149,7 @@ void CampusPortalHost::run_scan(){
                 {"ambiguous",result.value("candidates",Json::object())}});
         if(result.value("rule_valid",false)&&result.contains("snapshot")&&!result["snapshot"].is_null()){
             auto snapshot=result["snapshot"];snapshot["portal_url"]=url_;event_({{"type","campus_snapshot"},{"snapshot",snapshot}});
-        }else if(!rule_.is_null()&&result.contains("missing")){
+        }else if(!rule_.is_null()&&result.contains("missing")&&!result["missing"].empty()){
             event_({{"type","campus_rule_stale"},{"missing",result["missing"]}});
         }
     });

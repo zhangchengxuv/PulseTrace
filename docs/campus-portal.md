@@ -6,13 +6,30 @@
 
 自动结果只在设置页预览，不立即保存。选择候选并确认后才能形成规则；低置信度、冲突字段或页面改版不会覆盖已有规则。无法可靠识别时，可对每个字段点击“点击网页选择”，再回到门户页面点选对应值。
 
+每个字段可选择自动识别、手动网页映射、手动输入、公式计算或不使用。余额、免费额度、流量、费用与计费周期使用对应类型控件；自动结果仍可切换到其他方式。手动值与公式保存在规则中，不会被网页扫描覆盖。
+
 `http://202.204.48.66` 只作为可选测试占位地址，不是默认门户。本轮没有访问、验证或模拟任何真实高校账号。
 
 ## 识别与单位
 
 识别器分析可见文本、标签、表格、相邻 DOM 和 aria/class/id 提示，支持余额、已用、剩余、额度、费用和计费周期的中英文关键词。字节使用 B、KB、MB、GB、TB 与 KiB、MiB、GiB、TiB；金额使用元/¥/RMB/CNY。每个字段包含置信度，重复且接近的候选会标记为歧义。
 
-已确认规则保存字段类型、选择器、单位和置信度。每次扫描重新读取映射值；页面结构变化导致选择器失效时只显示“页面结构可能已变化”，不会用自动候选静默替换原规则。
+已确认规则保存字段类型、模式、选择器、单位、置信度和计算表达式。每次扫描只重新读取自动/映射字段；页面结构变化导致选择器失效时只显示“页面结构可能已变化”，不会用自动候选静默替换原规则。
+
+## 可用流量计算
+
+计算值始终使用字节作为内部单位，手动输入支持 B、KB、MB、GB、KiB、MiB、GiB。字段可以按以下顺序取值：
+
+1. 网页实时值。
+2. 用户手动值。
+3. 安全公式值。
+4. 明确的未知状态。
+
+公式仅接受数字、字段名、加减乘除、括号及 `min`、`max`、`abs`，不接受脚本或系统调用。可用变量包括全部已配置字段以及 `GiB`、`GB`、`MiB`、`MB`。
+
+门户直接提供免费剩余流量时优先使用。否则在免费总额度与已用免费流量都存在时计算 `max(0, 免费总额度 − 已用免费流量)`。资金可使用流量为 `可用于流量消费的余额 ÷ 流量单价 × 1 GiB`；单价为零或缺失时显示无法计算。总可用流量仅在免费剩余与资金可使用流量都可计算时求和。
+
+门户真实费用、本地单价估算和余额保持独立，估算不会再次从账户余额扣除。免费额度进度只在额度与使用量来自网页或用户确认的手动值时显示；公式和估算不会冒充真实门户进度。启用账期重置的手动值会记录确认账期，新账期时要求重新确认。
 
 规则保存在 `data/campus/rules.json`；聚合快照保存在 Schema v7 的 `campus_snapshots` 表。不会保存密码、Cookie、Token、完整页面、URL 查询参数、输入内容或浏览历史。
 
@@ -32,4 +49,4 @@
 
 ## Validation
 
-The controlled test suite covers a table layout, card/proximity layout and definition-list layout, byte and currency units, ambiguity, stale selectors, rule replay, manual candidates, configured-origin validation and SQLite v6→v7 migration. No real campus service was contacted.
+The controlled test suite covers a table layout, card/proximity layout and definition-list layout, byte and currency units, ambiguity, stale selectors, rule replay, manual candidates, manual/formula fields, safe formulas, cycle reset, zero-price handling, navigation atomic replacement and configured-origin validation. No real campus service was contacted.

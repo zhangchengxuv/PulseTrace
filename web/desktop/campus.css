@@ -11,5 +11,11 @@
 .campus-card-values span{color:var(--muted)}
 .kpi-campus{grid-column:1/-1}
 .campus-candidate-row{display:grid;grid-template-columns:minmax(120px,180px) 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.campus-field-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(130px,180px) 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.campus-mode-control{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.campus-mode-control input{min-width:110px}
+.campus-section{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:10px 0;background:var(--surface-2)}
+.campus-section>summary{cursor:pointer;font-weight:650;padding:4px}
+.campus-section[open]>summary{margin-bottom:10px;border-bottom:1px solid var(--border)}
 .campus-settings textarea{min-height:72px;resize:vertical}
-@media(max-width:760px){.campus-live{grid-template-columns:repeat(2,minmax(0,1fr))}.campus-card-values{display:grid}.campus-candidate-row{grid-template-columns:1fr}.campus-quality{display:grid}}
+@media(max-width:760px){.campus-live{grid-template-columns:repeat(2,minmax(0,1fr))}.campus-card-values{display:grid}.campus-candidate-row,.campus-field-row{grid-template-columns:1fr}.campus-quality{display:grid}}

@@ -21,13 +21,21 @@ assert.equal(E.parseMoney('余额 ¥ 12.30 元').value,12.3);
 assert.equal(E.parseCycle('2026-11-01 至 2026-11-30').unit,'text');
 function cell(tag,text,id){return new Element(tag,text,{id});}
 function row(label,value,id){return new Element('tr','',{},[cell('td',label,id+'-label'),cell('td',value,id)]);}
-const tableDoc=document([row('账户余额','¥88.60','balance'),row('已用流量','3.25 GiB','used'),row('剩余流量','26.75 GiB','remaining'),row('套餐额度','30 GiB','quota'),row('计费周期','2026-11','cycle')]);
+const tableDoc=document([row('账户余额','¥88.60','balance'),row('免费流量总额度','20 GiB','free-quota'),row('免费剩余流量','15 GiB','free-remaining'),row('已用免费流量','5 GiB','used-free'),row('可用于流量消费的余额','¥10.00','spendable'),row('付费流量已使用量','1.5 GiB','paid-used'),row('已用流量','3.25 GiB','used'),row('剩余流量','26.75 GiB','remaining'),row('套餐额度','30 GiB','quota'),row('计费周期','2026-11','cycle')]);
 context.document=tableDoc;
 const table=E.scan(tableDoc,null);
 assert.equal(table.candidates.balance[0].value,88.6);
 assert.equal(table.candidates.used_bytes[0].value,3.25*1024**3);
-const ruleResult=E.scan(tableDoc,{fields:{balance:{selector:'#balance',kind:'currency',unit:'CNY'},used_bytes:{selector:'#used',kind:'bytes',unit:'GiB'},remaining_bytes:{selector:'#remaining',kind:'bytes',unit:'GiB'},quota_bytes:{selector:'#quota',kind:'bytes',unit:'GiB'},billing_cycle:{selector:'#cycle',kind:'text',unit:'text'}}});
+assert.equal(table.candidates.free_quota_bytes[0].value,20*1024**3);
+assert.equal(table.candidates.used_free_bytes[0].value,5*1024**3);
+assert.equal(table.candidates.spendable_balance[0].value,10);
+assert.equal(table.candidates.paid_used_bytes[0].value,1.5*1024**3);
+assert.ok(!table.candidates.balance.some(x=>x.value===10),'spendable balance is not misclassified as account balance');
+assert.ok(!table.candidates.used_bytes.some(x=>x.value===5*1024**3||x.value===1.5*1024**3),'free and paid usage are not misclassified as total usage');
+const ruleResult=E.scan(tableDoc,{fields:{balance:{mode:'auto',selector:'#balance',kind:'currency',unit:'CNY'},used_bytes:{mode:'auto',selector:'#used',kind:'bytes',unit:'GiB'},remaining_bytes:{mode:'selector',selector:'#remaining',kind:'bytes',unit:'GiB'},quota_bytes:{mode:'auto',selector:'#quota',kind:'bytes',unit:'GiB'},billing_cycle:{mode:'auto',selector:'#cycle',kind:'text',unit:'text'},free_remaining_bytes:{mode:'manual',value:12,unit:'GiB',kind:'bytes'},paid_used_bytes:{mode:'formula',formula:'used_bytes - free_remaining_bytes',kind:'bytes'}}});
 assert.ok(ruleResult.rule_valid,JSON.stringify({missing:ruleResult.missing,values:ruleResult.values}));
+assert.equal(ruleResult.snapshot.free_remaining_bytes,undefined,'manual fields are not overwritten by page scan');
+assert.equal(ruleResult.snapshot.paid_used_bytes,undefined,'formula fields are not overwritten by page scan');
 const cards=document([new Element('section','',{},[new Element('strong','Balance',{id:'b1'}),new Element('b','$42.10')]),new Element('section','',{},[new Element('strong','Data remaining',{id:'r1'}),new Element('b','512 MB')])]);
 context.document=cards;const cardResult=E.scan(cards,null);assert.equal(cardResult.candidates.balance[0].value,42.1);assert.equal(cardResult.candidates.remaining_bytes[0].value,512*1e6);
 const dl=document([new Element('dl','',{},[new Element('dt','Usage'),new Element('dd','1.2 GB')]),new Element('dl','',{},[new Element('dt','Quota'),new Element('dd','10 GB')])]);

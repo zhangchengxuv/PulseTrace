@@ -9,4 +9,5 @@ Json load_campus_rules(const std::filesystem::path &data);
 void save_campus_rules(const std::filesystem::path &data,const Json &rules);
 Json campus_rule_for(const Json &rules,const std::string &origin);
 void validate_campus_mapping(const Json &mapping);
+void normalize_campus_mapping(Json &mapping);
 }
