@@ -14,7 +14,9 @@ function Confirm-GiteeRelease {
  # Creation already uses prerelease=true. Do not issue a redundant write after verified uploads.
  if($final.prerelease -ne $Prerelease){
   if(-not $Token){throw 'Gitee release-state change needs authentication'}
-  Invoke-RestMethod -Method Patch $uri -Headers $headers -Body @{prerelease=$Prerelease.ToString().ToLower()} | Out-Null
+  # Gitee requires tag_name, name and body on every update even when only
+  # prerelease changes.
+  Invoke-RestMethod -Method Patch $uri -Headers $headers -ContentType 'application/x-www-form-urlencoded' -Body @{tag_name=$final.tag_name;name=$final.name;body=$final.body;prerelease=$Prerelease.ToString().ToLower()} | Out-Null
   $final=Invoke-RestMethod $uri -Headers $headers
  }
  if(-not (& $valid $final) -or $final.prerelease -ne $Prerelease){throw 'Gitee release final state verification failed'}

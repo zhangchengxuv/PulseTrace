@@ -10,7 +10,7 @@ if(-not $definition){throw 'Production finalizer not found'}
 $checks=0
 function Check($ok,$message){$script:checks++;if(-not $ok){throw $message}}
 function Reset([bool]$state){
- $script:remote=[pscustomobject]@{tag_name='v1.2.3';target_commitish=('a'*40);prerelease=$state}
+ $script:remote=[pscustomobject]@{tag_name='v1.2.3';name='PulseTrace v1.2.3';body='fixture notes';target_commitish=('a'*40);prerelease=$state}
  $script:reads=0;$script:writes=0;$script:ignoreWrite=$false;$script:failWrite=$false
 }
 function Invoke-RestMethod {
