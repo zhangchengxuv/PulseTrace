@@ -4,7 +4,10 @@
 
 - 用户要求发布包含会话恢复与持久化修复的安装包。因 rc4 已发布且附件不可覆盖，版本递增为 rc5；包含 rc4 之后的发布脚本修复与 `e5511df` 持久化修复。
 - 安装器注册标识改为可由构建参数覆盖：正式安装保留原 AppId，生命周期自动测试使用独立 AppId，避免替换当前机器上已安装的 rc4 及其数据。交互向导测试只打开和取消私有安装器进程，不写入正式注册。
-- 发布验证与远端资产状态待完整 Release/Debug、CTest、打包、双语安装器及双源发布结果完成后补录。
+- Release/Debug 实际构建且各 22/22 CTest 通过；双语向导、独立 AppId 安装/运行中升级/卸载保留/重装、旧外置数据迁移与非空目标保护、63 文件便携清单、800×600 DIP 自检及七种图标尺寸通过。首次安装器回归发现升级夹具残留 v6 回执表，修正为真正 v1 夹具后完整重跑通过。
+- 发布源码及标签提交为 `0c1598be6775fc0d244187dbf02d9db98b893991`，[GitHub](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.3.0-rc5) 与 [Gitee](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.3.0-rc5) 均已发布预发布版及四个附件。首次 GitHub 上传发生网络中断，重试成功；最终两端分支和 Tag 提交一致，附件名称、大小和 SHA-256 已复核。
+- 安装包 `build/release/PulseTrace-Setup-v0.3.0-rc5-x64.exe` SHA-256 `5c435a0506c2ea089eea9a41f0daede8c361ad6e9f193e49b810807b971ba119`；便携 ZIP `build/release/PulseTrace-v0.3.0-rc5-x64.zip` SHA-256 `c7fd2ab853eee6e8db197969236d2a51b2f650fcdbff48f2ed9434473cbc23d5`。
+- 当前机器正式安装仍为 rc4，未自动升级或修改其 `data`。真实锁屏、休眠、注销、重启及长时间硬件验收仍未执行。
 
 ## 会话恢复与持久化紧急修复（2026-11-06，开发构建）
 
