@@ -45,11 +45,17 @@ void CampusPortalHost::open(const std::string &url,unsigned refresh_minutes,cons
     else initialize_webview();
 }
 void CampusPortalHost::close(){
+    ++generation_;
     if(window_&&IsWindow(window_))DestroyWindow(window_);
     window_=nullptr;ready_=false;creating_=false;scan_round_=0;
     if(controller_)controller_->Close();controller_.reset();view_.reset();environment_.reset();
 }
 void CampusPortalHost::rescan(){if(!ready_)throw std::runtime_error("Open and finish loading the campus portal first");run_scan();}
+void CampusPortalHost::synchronize(){
+    if(!view_)throw std::runtime_error("Open the campus portal first");
+    event_({{"type","campus_syncing"}});
+    const auto hr=view_->Navigate(widen(url_).c_str());if(FAILED(hr))fail(hr,"synchronize");
+}
 void CampusPortalHost::pick(const std::string &field){
     if(!ready_)throw std::runtime_error("Open and finish loading the campus portal first");
     pending_picker_=field;
@@ -90,7 +96,8 @@ void CampusPortalHost::initialize_webview(){
                         EventRegistrationToken token{};
                         auto register_handler=[&](auto *cb,auto call){const auto rc=call(cb);cb->Release();if(FAILED(rc))throw std::runtime_error("Campus WebView2 handler registration failed");};
                         register_handler(new ComCallback<ICoreWebView2NavigationStartingEventHandler,ICoreWebView2*,ICoreWebView2NavigationStartingEventArgs*>(
-                            [this](auto*,auto*args){LPWSTR uri{};args->get_Uri(&uri);if(!trusted_source(uri,allowed_origins_))args->put_Cancel(TRUE);CoTaskMemFree(uri);return S_OK;}),
+                            [this](auto*,auto*args){LPWSTR uri{};args->get_Uri(&uri);if(!trusted_source(uri,allowed_origins_))args->put_Cancel(TRUE);
+                                else{++generation_;ready_=false;KillTimer(window_,scan_timer);}CoTaskMemFree(uri);return S_OK;}),
                             [&](auto*cb){return view_->add_NavigationStarting(cb,&token);});
                         register_handler(new ComCallback<ICoreWebView2NavigationStartingEventHandler,ICoreWebView2*,ICoreWebView2NavigationStartingEventArgs*>(
                             [this](auto*,auto*args){LPWSTR uri{};args->get_Uri(&uri);if(!trusted_source(uri,allowed_origins_))args->put_Cancel(TRUE);CoTaskMemFree(uri);return S_OK;}),
@@ -143,8 +150,14 @@ void CampusPortalHost::execute_engine(const std::wstring &expression,std::functi
     const auto hr=view_->ExecuteScript(script.c_str(),callback);if(FAILED(hr))callback->Invoke(hr,L"{\"error\":\"Campus script failed\"}");callback->Release();
 }
 void CampusPortalHost::run_scan(){
-    execute_engine(L";PulseCampusEngine.scan(document,"+widen((rule_.is_null()?Json(nullptr):rule_).dump())+L")",[this](Json result){
+    if(!ready_||!view_)return;
+    const auto generation=generation_;
+    execute_engine(L";PulseCampusEngine.scan(document,"+widen((rule_.is_null()?Json(nullptr):rule_).dump())+L")",[this,generation](Json result){
+        if(!ready_||generation!=generation_)return;
+        if(!result.is_object()){event_({{"type","campus_error"},{"message","Campus page is not ready for recognition"}});return;}
         if(result.contains("error")){event_({{"type","campus_error"},{"message",result["error"]}});return;}
+        if(campus_origin(result.value("portal_url",std::string()))!=origin_){event_({{"type","campus_rule_stale"}});return;}
+        if(result.value("auth_required",false)){event_({{"type","campus_auth_required"}});return;}
         event_({{"type","campus_candidates"},{"candidates",result.value("candidates",Json::object())},
                 {"ambiguous",result.value("candidates",Json::object())}});
         if(result.value("rule_valid",false)&&result.contains("snapshot")&&!result["snapshot"].is_null()){
@@ -164,7 +177,9 @@ LRESULT CampusPortalHost::message(HWND h,UINT m,WPARAM w,LPARAM l){
     case WM_SIZE:if(controller_){RECT r{};GetClientRect(h,&r);controller_->put_Bounds(r);}return 0;
     case WM_TIMER:
         if(w==scan_timer){if(ready_)run_scan();if(++scan_round_>=3)KillTimer(h,scan_timer);else SetTimer(h,scan_timer,2200,nullptr);return 0;}
-        if(w==refresh_timer){if(ready_&&visible())run_scan();return 0;}
+        // A DOM rescan alone repeats cached server-rendered values indefinitely.
+        // Navigate to the configured, query-free GET URL; never replay a login POST.
+        if(w==refresh_timer){if(visible()&&view_)synchronize();return 0;}
     case WM_WTSSESSION_CHANGE:
         if(w==WTS_SESSION_LOCK){KillTimer(h,scan_timer);KillTimer(h,refresh_timer);ready_=false;diagnostic_("Campus portal paused while locked");}
         else if(w==WTS_SESSION_UNLOCK){ready_=true;scan_round_=0;SetTimer(h,scan_timer,1200,nullptr);SetTimer(h,refresh_timer,refresh_minutes_*60000,nullptr);}
@@ -174,7 +189,7 @@ LRESULT CampusPortalHost::message(HWND h,UINT m,WPARAM w,LPARAM l){
         else if(w==PBT_APMRESUMEAUTOMATIC||w==PBT_APMRESUMESUSPEND){ready_=true;scan_round_=0;SetTimer(h,scan_timer,1500,nullptr);SetTimer(h,refresh_timer,refresh_minutes_*60000,nullptr);}
         return TRUE;
     case WM_CLOSE:DestroyWindow(h);return 0;
-    case WM_DESTROY:KillTimer(h,scan_timer);KillTimer(h,refresh_timer);WTSUnRegisterSessionNotification(h);if(controller_)controller_->Close();controller_.reset();view_.reset();environment_.reset();window_=nullptr;ready_=false;return 0;
+    case WM_DESTROY:++generation_;KillTimer(h,scan_timer);KillTimer(h,refresh_timer);WTSUnRegisterSessionNotification(h);if(controller_)controller_->Close();controller_.reset();view_.reset();environment_.reset();window_=nullptr;ready_=false;return 0;
     default:return DefWindowProcW(h,m,w,l);
     }
 }

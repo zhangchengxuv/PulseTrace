@@ -20,12 +20,13 @@ class PortalServer{
   }
   ~PortalServer(){closed_=true;if(listener_!=INVALID_SOCKET){shutdown(listener_,SD_BOTH);closesocket(listener_);}if(worker_.joinable())worker_.join();WSACleanup();}
   std::string url()const{return "http://127.0.0.1:"+std::to_string(port_)+"/usage";}
+  void change_balance(){changed_=true;}
  private:
   void serve(){
     while(!closed_){
       auto client=accept(listener_,nullptr,nullptr);if(client==INVALID_SOCKET)return;
       char request[4096]{};recv(client,request,sizeof(request)-1,0);
-      const std::string body=R"HTML(<!doctype html><html><head><meta charset="utf-8"><title>Campus mock</title></head><body>
+      std::string body=R"HTML(<!doctype html><html><head><meta charset="utf-8"><title>Campus mock</title></head><body>
 <h1>Usage Center</h1><table>
 <tr><th>Balance</th><td id="balance">¥ 27.50</td></tr>
 <tr><th>Used data</th><td id="used">2.5 GiB</td></tr>
@@ -34,11 +35,12 @@ class PortalServer{
 <tr><th>Fee</th><td id="fee">¥ 1.20</td></tr>
 <tr><th>Billing cycle</th><td id="cycle">2026-11</td></tr>
 </table><button id="manual">Balance ¥ 30.00</button><script>setTimeout(()=>document.getElementById('manual').click(),2500);</script></body></html>)HTML";
+      if(changed_)body.replace(body.find("27.50"),5,"28.50");
       const std::string response="HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "+std::to_string(body.size())+"\r\nConnection: close\r\n\r\n"+body;
       send(client,response.data(),static_cast<int>(response.size()),0);closesocket(client);
     }
   }
-  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{};std::thread worker_;
+  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},changed_{};std::thread worker_;
 };
 }
 int wmain(){
@@ -71,10 +73,17 @@ int wmain(){
       if(!picker_started&&!candidates.is_null()){picker_started=true;host.pick("balance");}
       Sleep(20);
     }
-    host.close();
     if(candidates.is_null()||snapshot.is_null()||manual.is_null())throw std::runtime_error("Campus portal WebView2 scan or manual picker timed out");
     if(snapshot.value("balance",0.0)!=27.5||snapshot.value("used_bytes",0.0)!=2.5*1024.0*1024.0*1024.0||snapshot.value("quota_bytes",0.0)!=10.0*1024.0*1024.0*1024.0)
       throw std::runtime_error("Campus portal parsed values mismatch");
+    const auto pump_until=[&](auto done){const auto end=GetTickCount64()+10000;while(GetTickCount64()<end&&!done()){
+      while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}Sleep(20);
+    }if(!done())throw std::runtime_error("Campus portal update timed out");};
+    rule["fields"]["balance"]["selector"]="#manual";snapshot=nullptr;host.update_rule(rule);host.rescan();
+    pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==30;});
+    rule["fields"]["balance"]["selector"]="#balance";host.update_rule(rule);server.change_balance();snapshot=nullptr;host.synchronize();
+    pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==28.5;});
+    host.close();
     CoUninitialize();
     std::cout<<"Native campus WebView2 portal recognition passed; candidates="<<candidates.size()<<"\n";return 0;
   }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}

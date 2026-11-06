@@ -267,6 +267,7 @@ void DesktopApplication::command(Json request) {
                 portal_->open(context.value("portal_url",std::string()),context.value("refresh_minutes",5u),context.value("rule",Json(nullptr)),origins);
             }else if(request["type"]=="campus_rescan"){
                 if(!portal_)throw std::runtime_error("Open the campus portal first");
+                portal_->update_rule(core_->campus_portal_context().value("rule",Json(nullptr)));
                 portal_->rescan();
             }else{
                 if(!portal_)throw std::runtime_error("Open the campus portal first");

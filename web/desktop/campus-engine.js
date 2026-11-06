@@ -21,14 +21,16 @@
     return Number.isFinite(n)?n:null;
   }
   function parseBytes(value){
-    const text=normalize(value),match=text.match(/([0-9]+(?:[.,][0-9]+)?)\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)\b/i);
+    const text=normalize(value),match=text.match(/(?<![\d.,，-])((?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?)\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)\b/i);
     if(!match||!byteUnit.test(match[2]))return null;
-    const displayUnit=match[2].replace(/^k/i,'K').replace(/^m/i,'M').replace(/^g/i,'G').replace(/^t/i,'T');
+    const displayUnit=Object.keys({B:1,KB:1,MB:1,GB:1,TB:1,KiB:1,MiB:1,GiB:1,TiB:1}).find(u=>u.toLowerCase()===match[2].toLowerCase());
     const factors={B:1,KB:1e3,MB:1e6,GB:1e9,TB:1e12,KiB:1024,MiB:1024**2,GiB:1024**3,TiB:1024**4};
     return {value:numeric(match[1])*factors[displayUnit],unit:'B',display_unit:displayUnit};
   }
   function parseMoney(value){
-    const text=normalize(value),match=text.match(/(?:¥|￥)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(元|RMB|CNY|¥|￥)?/i);
+    const text=normalize(value);
+    if(/[-−]\s*\d|\d\s*(?:[KMGT]i?B|%)\b/i.test(text))return null;
+    const match=text.match(/(?<![\d.,，])((?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?)(?![\d.,，])/);
     if(!match)return null;return {value:numeric(match[1]),unit:'CNY'};
   }
   function parseCycle(value){
@@ -41,6 +43,7 @@
     if(kind==='text')return parseCycle(value);
     return null;
   }
+  function visible(element){return !element.hidden&&element.getAttribute?.('aria-hidden')!=='true'&&(!element.getClientRects||element.getClientRects().length>0);}
   function stableSelector(element){
     if(!element||element.nodeType!==1)return '';
     if(element.id&&!/[^\w-]/.test(element.id))return '#'+CSS.escape(element.id);
@@ -72,11 +75,12 @@
       if(field==='used_bytes'&&(patterns.used_free_bytes.test(text)||patterns.paid_used_bytes.test(text)))return false;
       if(field==='remaining_bytes'&&patterns.free_remaining_bytes.test(text))return false;
       if(field==='quota_bytes'&&patterns.free_quota_bytes.test(text))return false;
+      if(field==='free_quota_bytes'&&(patterns.free_remaining_bytes.test(text)||patterns.used_free_bytes.test(text)))return false;
       return true;
     };
     const nodes=[...document.querySelectorAll('body *')].slice(0,2500);
     for(const element of nodes){
-      if(!element||/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|INPUT|TEXTAREA|OPTION)$/.test(element.tagName))continue;
+      if(!element||!visible(element)||/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|INPUT|TEXTAREA|OPTION)$/.test(element.tagName))continue;
       const text=normalize(element.textContent);if(!text||text.length>220)continue;
       const row=element.closest?.('tr,dl,li,section,article,.card,.item,.metric')||element;
       const rowText=normalize(row.textContent).slice(0,220);
@@ -89,14 +93,17 @@
       }
     }
     for(const row of [...document.querySelectorAll('tr')].slice(0,500)){
-      const cells=[...row.querySelectorAll('th,td')].map(normalize);if(cells.length<2)continue;
+      if(!visible(row))continue;
+      const elements=[...row.querySelectorAll('th,td')],cells=elements.map(cell=>normalize(cell.textContent));if(cells.length<2)continue;
       for(const [field,pattern]of Object.entries(patterns))if(pattern.test(cells[0])||pattern.test(cells[1])){
         if(!specific(field,cells.slice(0,2).join(' ')))continue;
-        const c=candidate(field,cells.slice(0,2).join(' '),row,stableSelector(row),.7);if(c)candidates.push(c);
+        const c=candidate(field,cells[1],elements[1],stableSelector(elements[1]),.82);if(c)candidates.push(c);
       }
     }
   }
   function scan(document,rule){
+    const login=[...document.querySelectorAll('input[type="password"]')].some(visible);
+    if(login)return {candidates:{},rule_valid:false,missing:Object.keys(rule?.fields||{}),values:{},snapshot:null,portal_url:location.origin+location.pathname,auth_required:true};
     const raw=[];addCandidates(document,raw);
     const fields={};
     for(const [field,items]of Object.entries(raw.reduce((groups,item)=>{(groups[item.field]??=[]).push(item);return groups;},{}))){
@@ -104,13 +111,13 @@
       const unique=[];for(const item of items)if(!unique.some(old=>old.selector===item.selector&&old.value===item.value))unique.push(item);
       fields[field]=unique.slice(0,5);
     }
-    for(const [field,items]of Object.entries(fields))fields[field].ambiguous=items.length>1&&items[0].confidence-items[1].confidence<.12;
+    for(const [field,items]of Object.entries(fields))fields[field].ambiguous=items.some(item=>item.value!==items[0].value&&items[0].confidence-item.confidence<.12);
     const mappings=Object.fromEntries(Object.entries(rule?.fields||{}).filter(([,mapping])=>
       mapping&&(mapping.mode==='auto'||mapping.mode==='selector'||(!mapping.mode&&mapping.selector))));
     const values={},missing=[],mapped=[];
     for(const [field,mapping]of Object.entries(mappings)){
-      let element=null;try{element=document.querySelector(mapping.selector);}catch{continue;}
-      if(!element){missing.push(field);continue;}
+      let element=null;try{element=document.querySelector(mapping.selector);}catch{missing.push(field);continue;}
+      if(!element||!visible(element)){missing.push(field);continue;}
       const parsed=parseKind(mapping.kind,normalize(element.textContent));if(!parsed){missing.push(field);continue;}
       values[field]=parsed.value;mapped.push(field);
     }

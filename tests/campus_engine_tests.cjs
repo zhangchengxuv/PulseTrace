@@ -15,6 +15,12 @@ class CSS{static escape(v){return v.replace(/[^\w-]/g,'\\$&');}}
 const context=vm.createContext({globalThis:null,CSS,document:null,location:{origin:'https://campus.example',pathname:'/usage'}});context.globalThis=context;
 vm.runInContext(fs.readFileSync('web/desktop/campus-engine.js','utf8'),context);
 const E=context.PulseCampusEngine;
+assert.equal(E.parseBytes('1,024 MiB').value,1024**3);
+assert.equal(E.parseBytes('1 gib').value,1024**3);
+assert.equal(E.parseBytes('-2 GB'),null);
+assert.equal(E.parseMoney('¥ 1,234.50').value,1234.5);
+assert.equal(E.parseMoney('-12.00'),null);
+assert.equal(E.parseMoney('12 GB'),null);
 assert.equal(E.parseBytes('1.5 GiB').value,1.5*1024**3);
 assert.equal(E.parseBytes('2048 KB').value,2048000);
 assert.equal(E.parseMoney('余额 ¥ 12.30 元').value,12.3);
@@ -41,6 +47,12 @@ context.document=cards;const cardResult=E.scan(cards,null);assert.equal(cardResu
 const dl=document([new Element('dl','',{},[new Element('dt','Usage'),new Element('dd','1.2 GB')]),new Element('dl','',{},[new Element('dt','Quota'),new Element('dd','10 GB')])]);
 context.document=dl;const dlResult=E.scan(dl,null);assert.ok(dlResult.candidates.used_bytes.some(x=>x.value===1.2e9));
 const changed=E.scan(tableDoc,{fields:{balance:{selector:'#missing',kind:'currency',unit:'CNY'}}});assert.equal(changed.rule_valid,false);assert.equal(changed.snapshot,null);assert.deepEqual([...changed.missing],['balance']);
+const nineFields=Object.fromEntries(Object.entries(table.candidates).slice(0,9).map(([field,items])=>[field,{...items[0],mode:'auto'}]));
+assert.equal(E.scan(tableDoc,{fields:nineFields}).snapshot.mapped_fields.length,9,'extended mappings replay together');
+const hiddenBalance=tableDoc.querySelector('#balance');hiddenBalance.hidden=true;
+assert.equal(E.scan(tableDoc,{fields:{balance:{selector:'#balance',kind:'currency'}}}).snapshot,null,'hidden historical values cannot synchronize');hiddenBalance.hidden=false;
+const loginDoc={...tableDoc,querySelectorAll:s=>s==='input[type="password"]'?[{hidden:false}]:tableDoc.querySelectorAll(s)};
+assert.equal(E.scan(loginDoc,{fields:nineFields}).snapshot,null,'expired authentication preserves the previous snapshot');
 const ambiguous=document([new Element('section','Balance ¥12.00',{id:'a'}),new Element('section','Balance ¥13.00',{id:'b'})]);context.document=ambiguous;const ambiguousResult=E.scan(ambiguous,null);assert.equal(ambiguousResult.candidates.balance.ambiguous,true);
 const login=document([new Element('form','Account Password Login',{id:'login'})]);context.document=login;assert.equal(Object.keys(E.scan(login,null).candidates).length,0);
 let picked=null;context.document=tableDoc;E.installPicker(tableDoc,'balance',event=>picked=event);const target=tableDoc.querySelector('#balance');tableDoc.listeners.click({preventDefault(){},stopPropagation(){},target});assert.equal(picked.field,'balance');assert.ok(picked.candidate&&picked.candidate.manual);

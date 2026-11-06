@@ -424,7 +424,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         const auto cycle=p.value("cycle_text",std::string());if(cycle.size()>128)throw std::invalid_argument("Billing cycle is too long");
         Json mapped=Json::array();
         if(p.contains("mapped_fields")){
-            if(!p["mapped_fields"].is_array()||p["mapped_fields"].size()>8)throw std::invalid_argument("Invalid mapped field summary");
+            if(!p["mapped_fields"].is_array()||p["mapped_fields"].size()>11)throw std::invalid_argument("Invalid mapped field summary");
             for(const auto &field:p["mapped_fields"])if(field.is_string()&&field.get<std::string>().size()<=32)mapped.push_back(field);
         }
         Json web_values=Json::object();for(const auto *key:campus_values)if(p.contains(key)&&!p[key].is_null())web_values[key]=p[key];

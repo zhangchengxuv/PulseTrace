@@ -11,6 +11,8 @@ class CampusPortalHost {
     void open(const std::string &url,unsigned refresh_minutes,const Json &rule,const std::vector<std::string> &allowed_origins);
     void close();
     void rescan();
+    void synchronize();
+    void update_rule(const Json &rule){++generation_;rule_=rule;}
     void pick(const std::string &field);
     bool visible() const;
   private:
@@ -35,6 +37,7 @@ class CampusPortalHost {
     std::vector<std::string> allowed_origins_;
     Json rule_=nullptr;
     unsigned refresh_minutes_{5},scan_round_{};
+    unsigned generation_{};
     bool creating_{},ready_{};
 };
 }

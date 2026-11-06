@@ -22,10 +22,10 @@ function campusWebValues(){const d=campusData?.latest?.details?.web_values||{},l
 function campusMapping(field){return campusFieldState[field]||campusData?.rule?.fields?.[field]||{mode:'disabled'};}
 function campusManualValue(m){
  if(m.value==null||!Number.isFinite(Number(m.value)))return null;
- const cycle=campusCycle();if(m.reset_on_cycle&&m.cycle&&cycle&&m.cycle!==cycle)return null;
+ const cycle=campusCycle();if(m.reset_on_cycle&&(!m.cycle||!cycle||m.cycle!==cycle))return null;
  return Number(m.value)*campusUnitFactor(m.unit||'B');
 }
-function campusManualExpired(m){const cycle=campusCycle();return Boolean(m.reset_on_cycle&&m.cycle&&cycle&&m.cycle!==cycle);}
+function campusManualExpired(m){const cycle=campusCycle();return Boolean(m.reset_on_cycle&&(!m.cycle||!cycle||m.cycle!==cycle));}
 function campusFormula(expression,lookup){
  const tokens=String(expression||'').match(/\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*|[()+\-*/,]/g)||[];
  if(tokens.join('')!==String(expression||'').replace(/\s+/g,''))throw new Error(tr('campus.formula_invalid'));
@@ -61,17 +61,19 @@ function campusResolve(){
   if(resolved[field]==null&&source==='unknown')source=mode;sources[field]=source;return resolved[field];
  };
  for(const [field]of campusFields)resolve(field);
- const freeQuota=resolved.free_quota_bytes??resolved.quota_bytes,freeUsed=resolved.used_free_bytes??resolved.used_bytes;
+ // Generic plan totals and remaining data are not necessarily free allowances.
+ const freeQuota=resolved.free_quota_bytes,freeUsed=resolved.used_free_bytes;
  const calculatedFree=freeQuota!=null&&freeUsed!=null?Math.max(0,freeQuota-freeUsed):null;
- const freeRemaining=resolved.free_remaining_bytes??calculatedFree??resolved.remaining_bytes;
- const freeRemainingSource=resolved.free_remaining_bytes!=null?sources.free_remaining_bytes:calculatedFree!=null?'calculated':resolved.remaining_bytes!=null?sources.remaining_bytes:sources.free_remaining_bytes;
+ const freeRemaining=resolved.free_remaining_bytes??calculatedFree;
+ const freeRemainingSource=resolved.free_remaining_bytes!=null?sources.free_remaining_bytes:calculatedFree!=null?'calculated':'unknown';
  const price=Number(state.config?.campus_unit_price||0),funded=price>0&&resolved.spendable_balance!=null?resolved.spendable_balance/price*GiB:null;
  const total=freeRemaining!=null&&funded!=null?freeRemaining+funded:null;
  const quota=freeQuota,used=freeUsed;
  const trusted=s=>s==='portal'||s==='manual';
  const quotaSource=resolved.free_quota_bytes!=null?sources.free_quota_bytes:sources.quota_bytes,usedSource=resolved.used_free_bytes!=null?sources.used_free_bytes:sources.used_bytes;
  const progress=trusted(quotaSource)&&trusted(usedSource)&&quota>0&&used!=null?Math.max(0,Math.min(1,used/quota)):null;
- const estimated=resolved.used_bytes==null||price<=0?null:resolved.used_bytes/GiB*price;
+ // Paid usage has already excluded the free allowance. Never charge all usage again.
+ const estimated=resolved.paid_used_bytes==null||price<=0?null:resolved.paid_used_bytes/GiB*price;
  return {resolved,sources,freeRemaining,freeRemainingSource,funded,total,progress,estimated,errors};
 }
 function campusLivePanel(compact=false){
