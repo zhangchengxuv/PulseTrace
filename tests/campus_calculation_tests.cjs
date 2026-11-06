@@ -34,4 +34,10 @@ vm.runInContext(`campusFieldState={};campusData={latest:{details:{web_values:{qu
 r=vm.runInContext('campusResolve()',context);assert.equal(r.freeRemaining,null,'generic remaining and plan quota do not mean free data');assert.equal(r.estimated,null,'total usage must not be billed as paid usage');
 vm.runInContext(`campusData.rule.fields.free_quota_bytes={mode:'manual',value:10,unit:'GB',kind:'bytes',reset_on_cycle:false};campusData.rule.fields.used_free_bytes={mode:'manual',value:2,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'};`,context);
 r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.free_quota_bytes,1e10);assert.equal(r.resolved.used_free_bytes,null,'unknown billing period cannot validate cycle-specific usage');
+vm.runInContext(`state.config.campus_price_unit='GB';campusData.rule.fields.spendable_balance={mode:'manual',value:2,unit:'CNY',kind:'currency'};campusData.rule.fields.paid_used_bytes={mode:'manual',value:3,unit:'GB',kind:'bytes'};`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.funded,4e9,'GB price must not use a GiB divisor');assert.equal(r.estimated,1.5);
+vm.runInContext(`campusFieldState={};campusData={rule:null};campusCandidates={balance:[{value:10,raw:'10',selector:'#balance',unit:'CNY',confidence:.9}]};campusSuggest();`,context);
+assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','recognized values prefill for explicit confirmation');
+vm.runInContext(`campusCandidates.balance[0].selector='#changed';campusSuggest();`,context);
+assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','automatic rescans do not replace a pending selection');
 console.log('Campus calculations: manual, formula, GB/GiB, missing data, cycle reset, free/paid separation and zero-price checks passed');

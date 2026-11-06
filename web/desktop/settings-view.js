@@ -10,7 +10,7 @@ function settings(c){
  renderLanguageSettings(groups.general);groups.general.append(panel(tr('ui.57907a69fc5a'),general));
  const startup=el('input',{type:'checkbox',checked:state.autostart||false});startup.onchange=async()=>{try{await rpc('set_autostart',{enabled:startup.checked});feedback(tr('ui.434203a723b4'));}catch(e){startup.checked=!startup.checked;error(e);}};
  groups.general.append(panel(tr('ui.b1cc9079e8ba'),el('label',{class:'checkbox'},startup,tr('ui.eaaae3972868'))));
- groups.monitoring.append(panel(tr('settings.monitoring'),monitor));const usage=el('div');renderUsageSettings(usage);groups.monitoring.append(disclosure('settings.usage',tr('usage.title'),null,usage));const campus=el('div');renderCampusSettings(campus);groups.monitoring.append(disclosure('settings.campus',tr('campus.title'),null,campus));
+ groups.monitoring.append(panel(tr('settings.monitoring'),monitor));const usage=el('div');renderUsageSettings(usage);groups.monitoring.append(disclosure('settings.usage',tr('usage.title'),null,usage));const campus=el('div');renderCampusSettings(campus);groups.monitoring.append(panel(tr('campus.title'),campus));
  renderWidgetSettings(groups.taskbar);renderUpdateSettings(groups.updates,groups.data);
  groups.data.append(panel(tr('ui.b1326f0910b9'),el('p',{class:'muted'},tr('ui.c30c4947f572')),archiveFolderButton()));
  const confirmation=el('input',{placeholder:tr('ui.4b7021984601'),'aria-label':tr('ui.fe43bc43c294')});

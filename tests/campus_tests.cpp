@@ -54,6 +54,11 @@ void core(const std::filesystem::path &root){
                               {"campus_allowed_origins",Json::array({"https://login.example"})},{"campus_refresh_minutes",5},{"campus_unit_price",0.8}});
     bool credential_url=false;try{rpc(service,"set_config",{{"campus_portal_url","https://campus.example/?token=secret"}});}catch(...){credential_url=true;}
     check(credential_url,"portal URL rejects query credentials");
+    parse_message(R"({"type":"set_config","request_id":4,"params":{"campus_price_unit":"GB"}})");
+    rpc(service,"set_config",{{"campus_price_unit","GB"}});
+    check(rpc(service,"get_status")["config"]["campus_price_unit"]=="GB","decimal billing unit persisted");
+    bool bad_unit=false;try{rpc(service,"set_config",{{"campus_price_unit","MB"}});}catch(...){bad_unit=true;}
+    check(bad_unit,"unsupported campus price units rejected");
     const Json fields={{"balance",{{"mode","auto"},{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",0.95}}},
                        {"used_bytes",{{"mode","selector"},{"selector","#used"},{"kind","bytes"},{"unit","B"},{"confidence",0.92}}},
                        {"free_quota_bytes",{{"mode","manual"},{"value",10},{"unit","GiB"},{"kind","bytes"},{"reset_on_cycle",true}}},

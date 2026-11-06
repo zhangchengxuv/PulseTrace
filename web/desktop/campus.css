@@ -1,4 +1,4 @@
-.campus-live{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.campus-live{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
 .campus-live>div{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
 .campus-live small{display:block;color:var(--muted);margin-bottom:5px}
 .campus-live strong,.campus-card-values strong{font-size:1.25rem;font-variant-numeric:tabular-nums}
@@ -10,7 +10,7 @@
 .campus-card-values{display:flex;gap:24px;align-items:baseline}
 .campus-card-values span{color:var(--muted)}
 .kpi-campus{grid-column:1/-1}
-.campus-candidate-row{display:grid;grid-template-columns:minmax(120px,180px) 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.campus-candidate-row{display:grid;grid-template-columns:minmax(100px,160px) minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
 .campus-field-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(130px,180px) 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
 .campus-mode-control{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
 .campus-mode-control input{min-width:110px}
@@ -18,4 +18,16 @@
 .campus-section>summary{cursor:pointer;font-weight:650;padding:4px}
 .campus-section[open]>summary{margin-bottom:10px;border-bottom:1px solid var(--border)}
 .campus-settings textarea{min-height:72px;resize:vertical}
+.campus-settings{--border:var(--line);--surface-2:var(--panel);min-width:0}
+.campus-settings h4{margin:0 0 12px;font-size:13px}
+.campus-settings .settings-grid{gap:14px;margin:12px 0}
+.campus-settings .campus-section{margin:12px 0;padding:14px}
+.campus-settings input,.campus-settings select,.campus-settings textarea{max-width:100%;min-width:0}
+.campus-settings select{width:100%;text-overflow:ellipsis}
+.campus-param{display:flex;gap:8px;min-width:0}
+.campus-param input{flex:1;width:100%;min-width:0}
+.campus-param select{width:82px;flex:0 0 82px}
+.campus-feedback{min-height:1.8em}
+.campus-preview{max-height:90px;overflow:auto;user-select:text}
+.campus-live strong{font-size:1.1rem;overflow-wrap:anywhere}
 @media(max-width:760px){.campus-live{grid-template-columns:repeat(2,minmax(0,1fr))}.campus-card-values{display:grid}.campus-candidate-row,.campus-field-row{grid-template-columns:1fr}.campus-quality{display:grid}}

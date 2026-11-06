@@ -47,6 +47,8 @@ void validate_config(const Json &c) {
     if(!c.at("campus_unit_price").is_number()||!std::isfinite(c.at("campus_unit_price").get<double>())||
        c.at("campus_unit_price").get<double>()<0||c.at("campus_unit_price").get<double>()>1000)
         throw std::invalid_argument("Invalid campus unit price");
+    if(c.value("campus_price_unit",std::string("GiB"))!="GB"&&c.value("campus_price_unit",std::string("GiB"))!="GiB")
+        throw std::invalid_argument("Invalid campus price unit");
     const auto theme = c.at("theme").get<std::string>();
     if (theme != "light" && theme != "dark" && theme != "system")
         throw std::invalid_argument("Invalid theme");
@@ -70,7 +72,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
                {"taskbar_font","Segoe UI Variable Text"},{"taskbar_font_size",10},{"taskbar_unit","auto"},{"taskbar_precision",1},{"taskbar_upload_color","#3498db"},{"taskbar_download_color","#8bc4ea"},{"taskbar_offset_x",0},{"taskbar_offset_y",0},{"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
                {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
-    config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;
+    config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;config_["campus_price_unit"]="GiB";
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {
@@ -391,6 +393,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         rule["allowed_origins"]=config.value("campus_allowed_origins",Json::array());
         rule["refresh_minutes"]=config.value("campus_refresh_minutes",5);
         rule["unit_price"]=config.value("campus_unit_price",0.0);
+        rule["price_unit"]=config.value("campus_price_unit",std::string("GiB"));
         rule["last_status"]="confirmed";
         portals.push_back(rule);rules["portals"]=std::move(portals);save_campus_rules(data_,rules);
         {std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_error"]="";state_["campus_rule_updated_ms"]=utc_now_ms();}
