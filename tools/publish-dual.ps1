@@ -30,9 +30,9 @@ try {
  $targets=@(@{Name='github';Remote='PulseTrace';URL='https://github.com/zhangchengxuv/PulseTrace.git';API='https://api.github.com/repos/zhangchengxuv/PulseTrace'},@{Name='gitee';Remote='PulseTrace_gitee';URL='https://gitee.com/zhangchenxuv/pulse-trace.git';API='https://gitee.com/api/v5/repos/zhangchenxuv/pulse-trace'})
  $targets=@($targets | Where-Object {$_.Name -in $Sources})
  foreach($t in $targets){$actual=(git remote get-url $t.Remote).Trim();if($LASTEXITCODE -ne 0 -or $actual -ne $t.URL){throw "Remote differs from the reviewed repository: $($t.Remote)"}}
- $names=@("PulseTrace-v$($v.version)-x64.zip","PulseTrace-v$($v.version)-x64.zip.sha256","PulseTrace-Setup-v$($v.version)-x64.exe","PulseTrace-Setup-v$($v.version)-x64.exe.sha256")
+ $names=@("PulseTrace-v$($v.version)-x64.zip","PulseTrace-v$($v.version)-x64.zip.sha256","PulseTrace-Setup-v$($v.version)-x64.exe","PulseTrace-Setup-v$($v.version)-x64.exe.sha256","SHA256SUMS.txt")
  $assets=foreach($n in $names){$file=Join-Path $releaseRoot $n;if(-not(Test-Path -LiteralPath $file)){throw "Missing package: $n"};@{Name=$n;Path=$file;Size=(Get-Item -LiteralPath $file).Length;Sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower()}}
- foreach($a in $assets | Where-Object {$_.Name -notlike '*.sha256'}){$line=(Get-Content -LiteralPath ($a.Path+'.sha256') -Raw).Trim();if($line -ne ($a.Sha256+'  '+$a.Name)){throw "Checksum sidecar mismatch: $($a.Name)"}}
+ foreach($a in $assets | Where-Object {$_.Name -notlike '*.sha256' -and $_.Name -ne 'SHA256SUMS.txt'}){$line=(Get-Content -LiteralPath ($a.Path+'.sha256') -Raw).Trim();if($line -ne ($a.Sha256+'  '+$a.Name)){throw "Checksum sidecar mismatch: $($a.Name)"}}
  $plan=@{Version=$v.version;Commit=$commit;Tree=$tree;Dirty=$dirty;DryRun=(-not $Publish);Targets=$targets;Assets=@($assets | ForEach-Object {@{Name=$_.Name;Size=$_.Size;Sha256=$_.Sha256}})}
  if(-not $Publish){$plan | ConvertTo-Json -Depth 8;Write-Verbose 'Dry run only. Review, commit, tag, validate the clean source, then invoke -Publish explicitly.';return}
  if($dirty){throw 'Commit reviewed source changes before explicit publication'}

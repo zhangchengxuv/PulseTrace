@@ -27,8 +27,12 @@ try {
  & (Join-Path $PSScriptRoot 'test-legacy-layout.ps1') -BuildDirectory $build -InstallerPath $validationInstaller -AppId $validationAppId
  & (Join-Path $PSScriptRoot 'test-package.ps1') -BuildDirectory $build
  if((git rev-parse HEAD).Trim() -ne $commit -or (git rev-parse 'HEAD^{tree}').Trim() -ne $tree -or (git status --porcelain)){throw 'Source changed while preparing release'}
+ $zipName="PulseTrace-v$($v.version)-x64.zip";$setupName="PulseTrace-Setup-v$($v.version)-x64.exe"
+ $zipHash=(Get-FileHash -LiteralPath (Join-Path $root "build\release\$zipName") -Algorithm SHA256).Hash.ToLower()
+ $setupHash=(Get-FileHash -LiteralPath (Join-Path $root "build\release\$setupName") -Algorithm SHA256).Hash.ToLower()
+ @("$zipHash  $zipName","$setupHash  $setupName") | Set-Content -LiteralPath (Join-Path $root 'build\release\SHA256SUMS.txt') -Encoding ASCII
  $artifacts=@{}
- foreach($name in @("PulseTrace-v$($v.version)-x64.zip","PulseTrace-v$($v.version)-x64.zip.sha256","PulseTrace-Setup-v$($v.version)-x64.exe","PulseTrace-Setup-v$($v.version)-x64.exe.sha256")){$artifacts[$name]=(Get-FileHash -LiteralPath (Join-Path $root "build\release\$name") -Algorithm SHA256).Hash.ToLower()}
+ foreach($name in @($zipName,"$zipName.sha256",$setupName,"$setupName.sha256",'SHA256SUMS.txt')){$artifacts[$name]=(Get-FileHash -LiteralPath (Join-Path $root "build\release\$name") -Algorithm SHA256).Hash.ToLower()}
  $result=@{Version=$v.version;SourceCommit=$commit;SourceTree=$tree;UncommittedWorkingTree=$false;ReleaseTestsPassed=$true;DebugTestsPassed=$true;InstallerTestsPassed=$true;Artifacts=$artifacts;RecordedUtc=[DateTime]::UtcNow.ToString('o')}
  $result | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $root "build\release\validation-v$($v.version).json") -Encoding UTF8
  Write-Output 'Local release preparation complete. Publishing remains a separate explicit operation.'
