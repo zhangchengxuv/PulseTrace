@@ -127,7 +127,7 @@ end;
 function DefaultInstallPath(Param: String): String;
 begin
   { Used before InitializeWizard: never read WizardForm, WizardDirValue or app. }
-  if DirExists('D:\') then Result := 'D:\Program Files\PulseTrace'
+  if DirExists('D:\') then Result := 'D:\Program Files (x86)\PulseTrace'
   else Result := ExpandConstant('{localappdata}\Programs\PulseTrace');
 end;
 

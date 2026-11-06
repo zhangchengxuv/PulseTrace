@@ -103,7 +103,7 @@ int wmain(int argc,wchar_t **argv) {
             setup.click(setup.button(h,L"Next",L"下一步"));setup.shot(h,"directory-page");HWND edit{};
             setup.wait([&]{for(auto c:children(h))if(klass(c)==L"TNewPathEdit"){edit=c;return true;}return false;},"Directory page did not open");
             setup.shot(h,"default-directory");const auto initial=text(edit);
-            if(GetFileAttributesW(L"D:\\")!=INVALID_FILE_ATTRIBUTES&&initial!=L"D:\\Program Files\\PulseTrace")throw std::runtime_error("Unexpected fresh-install D default");
+            if(GetFileAttributesW(L"D:\\")!=INVALID_FILE_ATTRIBUTES&&initial!=L"D:\\Program Files (x86)\\PulseTrace")throw std::runtime_error("Unexpected fresh-install D default");
             if(std::wstring(argv[4])==L"default-denied"){
                 setup.click(setup.button(h,L"Next",L"下一步"));HWND denied{};
                 setup.wait([&]{for(auto w:setup.windows())if(w!=h&&(setup.allText(w).find(L"not writable")!=std::wstring::npos||setup.allText(w).find(L"不可写")!=std::wstring::npos)){denied=w;return true;}return false;},"Expected default-directory permission refusal was not shown");

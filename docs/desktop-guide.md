@@ -8,7 +8,7 @@
 
 任务栏网速使用真正的子窗口。设置可选嵌入、独立悬浮或托盘；暂停、不可用与实际速率明确区分。系统无法验证显示时安全回退。默认每秒更新，不另起采集器。
 
-新安装默认 D:\Program Files\PulseTrace，data 固定在安装目录内。D 不可用会给出替代位置；权限不足会提前提示，用户可明确提升安装器或改选可写目录。普通运行不需要管理员权限，不修改整个 Program Files 的 ACL。
+新安装默认 D:\Program Files (x86)\PulseTrace，data 固定在安装目录内。D 不可用会给出替代位置；权限不足会提前提示，用户可明确提升安装器或改选可写目录。普通运行不需要管理员权限，不修改整个 Program Files 的 ACL。
 
 升级保留原安装位置和设置。旧版独立数据目录通过安装器安全迁移，一致性备份、原目录保留；目标已有数据时不会覆盖或合并。普通卸载保留 data，重新安装会继续读取历史。
 
@@ -26,7 +26,7 @@ Run PulseTrace.exe from the complete portable ZIP, or use the EXE installer. Mon
 
 Network speed is displayed in a real taskbar child window. Embedded, floating and tray modes are available. Paused and unavailable states are distinct from real rates. Unverifiable display falls back safely. Rates use the existing monitor snapshot, updated once per second.
 
-New installations default to D:\Program Files\PulseTrace. All data stays in its data subfolder. If D is unavailable, an alternative is suggested. Permission checks occur before copying; explicitly elevate the installer if required, or choose another location. The running app does not require administrator rights and the parent Program Files ACL is not changed.
+New installations default to D:\Program Files (x86)\PulseTrace. All data stays in its data subfolder. If D is unavailable, an alternative is suggested. Permission checks occur before copying; explicitly elevate the installer if required, or choose another location. The running app does not require administrator rights and the parent Program Files ACL is not changed.
 
 Upgrades keep the existing location and preferences. The installer can copy legacy external data using consistent SQLite backups while preserving the source. An occupied destination is never silently overwritten or merged. Uninstall keeps data; reinstall reads the retained history.
 
