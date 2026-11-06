@@ -1,10 +1,11 @@
-param([string]$BuildDirectory='build\llvm-release',[string]$InstallerPath='')
+param([string]$BuildDirectory='build\llvm-release',[string]$InstallerPath='',[string]$AppId='{A9F4B181-98CE-426B-AE31-7112540CB549}')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $build=Join-Path $root $BuildDirectory
 $v=Get-Content -LiteralPath (Join-Path $build 'version.json') -Raw | ConvertFrom-Json
 $setup=if($InstallerPath){(Resolve-Path -LiteralPath $InstallerPath).Path}else{Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe"}
-$key='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A9F4B181-98CE-426B-AE31-7112540CB549}_is1'
+if($AppId -notmatch '^\{[0-9A-Fa-f-]{36}\}$'){throw 'Invalid installer AppId for isolated test'}
+$key='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{0}_is1' -f $AppId
 if(Test-Path -LiteralPath $key){throw 'An existing installation is registered; refusing to replace it'}
 $reports=@()
 foreach($occupied in @($false,$true)){

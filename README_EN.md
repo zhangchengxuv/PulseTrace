@@ -58,7 +58,7 @@ Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Public candidate **v0.3.0-rc3** has matching assets on both sources. The new UI and settings shown here are currently on main; installers have not been republished. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Public candidate **v0.3.0-rc5** includes the session-recovery and persistence fixes. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 

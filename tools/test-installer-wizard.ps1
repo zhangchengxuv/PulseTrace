@@ -5,8 +5,8 @@ $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $setup=(Resolve-Path -LiteralPath $InstallerPath).Path
 $probe=Join-Path $root "$BuildDirectory\installer_wizard_probe.exe"
-$key='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A9F4B181-98CE-426B-AE31-7112540CB549}_is1'
-if(Test-Path -LiteralPath $key){throw 'Fresh-wizard test refuses to use a real registered installation; keep its data and registration unchanged'}
+# This test only opens, navigates and cancels private installer processes. It never
+# installs or unregisters software, so an existing production installation is safe.
 $fixture=Join-Path $root ('build\installer-wizard-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $report=@{InstallerSha256=(Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLower();Success=$false;Cases=@()}

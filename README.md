@@ -58,7 +58,7 @@ Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-公开候选版 **v0.3.0-rc3** 两源附件一致；本页新增界面与设置目前在 main，尚未重发安装包。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+公开候选版 **v0.3.0-rc5** 包含会话恢复与持久化修复；同一源码、安装包及便携包发布到两个仓库。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 

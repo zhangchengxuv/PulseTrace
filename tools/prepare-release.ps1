@@ -14,10 +14,17 @@ try {
  & (Join-Path $PSScriptRoot 'bootstrap-inno.ps1')
  & (Join-Path $PSScriptRoot 'package.ps1') -BuildDirectory $build
  & (Join-Path $PSScriptRoot 'build-installer.ps1') -BuildDirectory $build
- & (Join-Path $PSScriptRoot 'test-installer-wizard.ps1') -BuildDirectory $build -InstallerPath (Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe")
- & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language english
- & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language chinesesimp
- & (Join-Path $PSScriptRoot 'test-legacy-layout.ps1') -BuildDirectory $build
+ $productionInstaller=Join-Path $root "build\release\PulseTrace-Setup-v$($v.version)-x64.exe"
+ & (Join-Path $PSScriptRoot 'test-installer-wizard.ps1') -BuildDirectory $build -InstallerPath $productionInstaller
+ # Lifecycle tests use a distinct AppId so a real registered installation and
+ # its data are never replaced while exercising install/upgrade/uninstall.
+ $validationAppId='{D0B0915F-3A96-45BF-90A4-E12BFB12C505}'
+ $validationDirectory=Join-Path $root 'build\release\validation'
+ & (Join-Path $PSScriptRoot 'build-installer.ps1') -BuildDirectory $build -OutputDirectory $validationDirectory -SetupAppId $validationAppId
+ $validationInstaller=Join-Path $validationDirectory "PulseTrace-Setup-v$($v.version)-x64.exe"
+ & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language english -InstallerPath $validationInstaller -AppId $validationAppId
+ & (Join-Path $PSScriptRoot 'test-installer.ps1') -BuildDirectory $build -Language chinesesimp -InstallerPath $validationInstaller -AppId $validationAppId
+ & (Join-Path $PSScriptRoot 'test-legacy-layout.ps1') -BuildDirectory $build -InstallerPath $validationInstaller -AppId $validationAppId
  & (Join-Path $PSScriptRoot 'test-package.ps1') -BuildDirectory $build
  if((git rev-parse HEAD).Trim() -ne $commit -or (git rev-parse 'HEAD^{tree}').Trim() -ne $tree -or (git status --porcelain)){throw 'Source changed while preparing release'}
  $artifacts=@{}

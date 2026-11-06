@@ -2,8 +2,11 @@
 #ifndef AppVersion
  #error AppVersion is required
 #endif
+#ifndef SetupAppId
+ #define SetupAppId "{{A9F4B181-98CE-426B-AE31-7112540CB549}"
+#endif
 [Setup]
-AppId={{A9F4B181-98CE-426B-AE31-7112540CB549}
+AppId={#SetupAppId}
 AppName=PulseTrace
 AppVersion={#AppVersion}
 AppVerName=PulseTrace {#AppVersion}

@@ -1,6 +1,6 @@
 # 会话变化后的监测与保存恢复
 
-本轮修改只在开发构建中，未替换已安装程序或已发布的 RC4 附件。
+本修复包含在 0.3.0-rc5 候选版中；已发布的 RC4 附件保持不变。
 
 ## 已复现的根因
 
@@ -61,6 +61,6 @@ Windows 本机 LLVM-MinGW x64 Release / Debug 分别构建，完整 CTest 各 22
 4. 正常退出再启动，核对历史、默认启动策略及统一目录。只在测试目录做进程异常终止实验。
 5. 经用户明确安排后真实 Windows 重启，核对 SQLite、月度归档和历史。此轮没有重启电脑。
 
-真实高频事件丢失率、长时间运行、其他 Windows 版本、强制断电及磁盘硬件故障未验收。本轮不发布安装包，部署前确认备份及降级方案。
+真实高频事件丢失率、长时间运行、其他 Windows 版本、强制断电及磁盘硬件故障未验收。rc5 候选版按上述限制发布，用户部署前应确认备份及降级方案。
 
 参考：[SQLite 错误码](https://www.sqlite.org/rescode.html)、[事务](https://www.sqlite.org/lang_transaction.html)、[WM_QUERYENDSESSION](https://learn.microsoft.com/en-us/windows/win32/shutdown/wm-queryendsession)、[自动恢复电源通知](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumeautomatic)。
