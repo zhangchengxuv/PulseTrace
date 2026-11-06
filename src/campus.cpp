@@ -71,8 +71,7 @@ Json campus_rule_for(const Json &rules,const std::string &origin){
 }
 void validate_campus_mapping(const Json &fields){
     if(!fields.is_object())throw std::invalid_argument("Campus mapping must be an object");
-    const std::set<std::string> allowed={"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes",
-        "spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
+    const std::set<std::string> allowed(campus_field_names.begin(),campus_field_names.end());
     for(auto it=fields.begin();it!=fields.end();++it){
         if(!allowed.contains(it.key())||!it->is_object())throw std::invalid_argument("Unknown campus field mapping");
         const auto &m=*it;

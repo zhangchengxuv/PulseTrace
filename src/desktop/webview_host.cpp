@@ -240,19 +240,20 @@ void WebViewHost::configure() {
             LPWSTR raw{};
             if (FAILED(args->get_WebMessageAsJson(&raw)))
                 return S_OK;
+            Json request_id=nullptr;
             try {
                 const std::wstring w(raw);
                 CoTaskMemFree(raw);
                 raw = nullptr;
                 if (w.size() > 65536)
                     throw std::invalid_argument("Message too large");
-                auto json = parse_message(narrow(w));
+                auto json = parse_message(narrow(w),&request_id);
                 message_(std::move(json));
             } catch (const std::exception &e) {
                 if (raw)
                     CoTaskMemFree(raw);
                 post({{"type", "response"},
-                      {"request_id", nullptr},
+                      {"request_id", request_id},
                       {"ok", false},
                       {"error", {{"code", "INVALID_MESSAGE"}, {"message", e.what()}}}});
             }

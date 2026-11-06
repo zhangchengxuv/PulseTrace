@@ -1,4 +1,16 @@
 'use strict';
+async function validateCampusPickerBridge(){
+ if(!state.self_test||state.config?.campus_enabled)return;
+ // Disabled monitoring lets the real UI -> WebView2 parser -> native dispatch
+ // reject each request without opening any configured or external website.
+ for(const [field]of campusFields){
+  try{await rpc('campus_pick_field',{field});throw Error('Disabled portal unexpectedly opened');}
+  catch(failure){if(failure.code!=='CAMPUS_PORTAL_FAILED')throw Error('Campus picker bridge failed for '+field+': '+(failure.code||'timeout/no correlated reply'));}
+ }
+ let rejected=false;try{await rpc('campus_pick_field',{field:'password'});}catch(failure){rejected=failure.code==='INVALID_MESSAGE';}
+ if(!rejected)throw Error('Invalid picker field did not receive an immediate correlated rejection');
+ window.pulseCampusPickerBridgeReport={fields:campusFields.length,invalidFieldRejected:true};
+}
 async function validateNavigationTransitions(){
  if(!state.self_test)return;
  const c=$('content'),nav=$('navigation'),toolbar=$('dashboard-toolbar'),initial=page,initialScroll=window.scrollY;

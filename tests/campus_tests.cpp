@@ -45,6 +45,17 @@ void migration(const std::filesystem::path &root){
 void core(const std::filesystem::path &root){
     parse_message(R"({"type":"open_campus_portal","request_id":1,"params":{}})");
     parse_message(R"({"type":"campus_pick_field","request_id":2,"params":{"field":"balance"}})");
+    for(const auto field:campus_field_names){
+        Json id=nullptr;const auto request=Json{{"type","campus_pick_field"},{"request_id",41},{"params",{{"field",field}}}};
+        check(parse_message(request.dump(),&id)["params"]["field"]==field&&id==41,"all eleven picker fields pass the real bridge parser");
+    }
+    Json rejected_id=nullptr;bool rejected_parameter=false;
+    try{parse_message(R"({"type":"campus_pick_field","request_id":42,"params":{"field":"password"}})",&rejected_id);}catch(...){rejected_parameter=true;}
+    check(rejected_parameter&&rejected_id==42,"invalid picker parameters retain their valid request ID for immediate rejection");
+    for(const auto text:{R"({"type":"ping","request_id":42,"request_id":43,"params":{}})",R"({"type":"ping","request_id":-1,"params":{}})",R"({"type":"ping","request_id":"42","params":{}})",R"({"type":"ping","request_id":42,"params":{)",R"({"type":"ping","request_id":9007199254740992,"params":{}})"}){
+        rejected_id=99;bool malformed=false;try{parse_message(text,&rejected_id);}catch(...){malformed=true;}
+        check(malformed&&rejected_id.is_null(),"malformed or ambiguous envelopes do not expose a guessed correlation ID");
+    }
     bool bad=false;try{parse_message(R"({"type":"campus_pick_field","request_id":3,"params":{"field":"password"}})");}catch(...){bad=true;}
     check(bad,"campus bridge rejects unknown field picker");
     CoreService service(root);service.start();

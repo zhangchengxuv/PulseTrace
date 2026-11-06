@@ -38,5 +38,11 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  vm.runInContext(`PulseCampus.ingest({type:'campus_picker_ready',field:'used_free_bytes'});`,context);
  assert.equal(status.textContent,'campus.pick_hint','only a native ready event announces selection readiness');
  rejectPicker=true;await pick.onclick();assert.equal(status.textContent,'controlled picker failure','picker failures remain visible beside the button');assert.equal(pick.disabled,false);
+ rejectPicker=false;const clicked=[];
+ for(const candidateRow of host.all().filter(n=>n.class==='campus-candidate-row')){
+  calls=[];await candidateRow.all().find(n=>n.tag==='button').onclick();
+  assert.equal(calls[0]?.type,'campus_pick_field');clicked.push(calls[0].params.field);
+ }
+ assert.deepEqual(clicked,['balance','free_quota_bytes','free_remaining_bytes','used_free_bytes','spendable_balance','paid_used_bytes','used_bytes','remaining_bytes','quota_bytes','fee','billing_cycle'],'every field button routes its own field');
  console.log('Campus settings: explicit confirmation, billing isolation, immediate rule replay and failed-save handling passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

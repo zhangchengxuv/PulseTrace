@@ -1,5 +1,13 @@
 # PulseTrace 开发状态
 
+## 校园网全部字段桥接修复（2026-11-06，开发构建）
+
+- 定位“余额可点、新增字段超时”的实际根因：前端已有 11 字段，`campus_pick_field` 消息白名单仍只有旧 6 字段；参数校验失败回包使用空 request_id，前端无法关联错误，只能等待超时。此前窗口修复及直接调用 Host 的测试未覆盖这条解析链路。
+- 点选、映射协议及规则验证共用 11 字段列表；对通过大小/深度/重复键校验且信封有效的请求保留 request_id，使参数错误立即返回。畸形 JSON、重复或非法 ID 仍不回显猜测 ID；未知字段继续拒绝，不改变认证边界或数据库 schema。
+- 用 v0.6.1 发布程序复制出的隔离副本加同一桥接自检脚本，实际复现 free_quota_bytes 超时（退出 2）；换为修复版 EXE 后同测通过（退出 0）。源发布目录及线上附件未修改。
+- Release/Debug 实际构建且相关 CTest 各 16/16 通过。新增全部按钮路由、全部字段解析/门户显示/就绪、有效错误关联及畸形消息回归；原生主界面自检通过真实 WebView2 RPC 检查 11 个字段和非法字段即时拒绝，禁用监控状态下不访问任何外部网站。未读取用户数据库或真实校园网账号。
+- 本轮为开发修复，尚未创建新 Tag/Release 或安装包，已发布 v0.6.1 保留原样。
+
 ## v0.6.1 已发布（2026-11-06）
 
 - 发布源码提交/Tag `v0.6.1` 指向 `a271d79f1fae32c645973bba7a85727647ec5429`（`build: prepare v0.6.1 release`），包含校园网点选自动打开、窗口恢复、加载等待及邻近反馈修复。[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.1) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.1) 均为正式版，GitHub latest stable 已核验。

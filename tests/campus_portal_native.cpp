@@ -1,5 +1,6 @@
 #include "pulsetrace/desktop/campus_portal_host.hpp"
 #include "pulsetrace/campus.hpp"
+#include "pulsetrace/protocol.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -102,6 +103,13 @@ int wmain(){
     if(host.matches_scope(disabled))throw std::runtime_error("Disabled monitoring retained authorization");
     HWND portal_window{};EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM target)->BOOL{wchar_t name[128]{};GetClassNameW(h,name,128);if(std::wstring(name)==L"PulseTrace.CampusPortal"){*reinterpret_cast<HWND*>(target)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&portal_window));
     if(!portal_window)throw std::runtime_error("Own portal test window not found");
+    for(const auto field:campus_field_names){
+        const auto request=parse_message(Json{{"type","campus_pick_field"},{"request_id",51},{"params",{{"field",field}}}}.dump());
+        host.hide();const auto before=picker_ready_count;
+        host.pick(request["params"]["field"].get<std::string>());
+        pump_until([&]{return picker_ready_count>before;});
+        if(!host.visible()||ready_field!=field)throw std::runtime_error("Picker did not open and arm every configured field");
+    }
     const auto requests_before_pick=server.requests(),ready_before_pick=picker_ready_count;
     ShowWindow(portal_window,SW_MINIMIZE);host.pick("balance");
     if(!host.visible()||IsIconic(portal_window))throw std::runtime_error("Picker did not restore the minimized portal");

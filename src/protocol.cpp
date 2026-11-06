@@ -1,9 +1,17 @@
 #include "pulsetrace/protocol.hpp"
+#include "pulsetrace/campus.hpp"
 #include <set>
 #include <stdexcept>
 #include <vector>
 #include <cmath>
 namespace pulsetrace {
+namespace {
+bool valid_envelope(const Json &r){
+    return r.is_object()&&r.size()==3&&r.contains("type")&&r["type"].is_string()&&
+        r.contains("request_id")&&r["request_id"].is_number_integer()&&r["request_id"].get<double>()>=0&&
+        r["request_id"].get<double>()<=9007199254740991.0&&r.contains("params")&&r["params"].is_object();
+}
+}
 std::wstring quote_windows_argument(const std::wstring &argument) {
     std::wstring result = L"\"";
     std::size_t slashes = 0;
@@ -22,7 +30,8 @@ std::wstring quote_windows_argument(const std::wstring &argument) {
     result += L'"';
     return result;
 }
-Json parse_message(const std::string &text) {
+Json parse_message(const std::string &text,Json *request_id) {
+    if(request_id)*request_id=nullptr;
     if (text.size() > 65536)
         throw std::invalid_argument("Message exceeds 64 KiB");
     std::vector<std::set<std::string>> objects;
@@ -37,26 +46,26 @@ Json parse_message(const std::string &text) {
             objects.pop_back();
         return true;
     });
+    // Correlate parameter-validation errors only after bounded, duplicate-free
+    // JSON parsing and a valid envelope. Malformed/ambiguous IDs stay unknown.
+    if(request_id&&valid_envelope(json))*request_id=json["request_id"];
     validate_request(json);
     return json;
 }
 void validate_request(const Json &r) {
-    if (!r.is_object() || r.size() != 3 || !r.contains("type") || !r["type"].is_string() ||
-        !r.contains("request_id") || !r["request_id"].is_number_integer() ||
-        r["request_id"].get<double>() < 0 || r["request_id"].get<double>() > 9007199254740991.0 ||
-        !r.contains("params") || !r["params"].is_object())
+    if (!valid_envelope(r))
         throw std::invalid_argument("Invalid request envelope");
     const auto type = r["type"].get<std::string>();
     const auto &p = r["params"];
     std::set<std::string> allowed;
     if (type == "retry_persistence" || type == "ping" || type == "get_status" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update" || type=="get_campus_status" || type=="open_campus_portal" || type=="campus_rescan" || type=="delete_campus_rule") {
     } else if(type=="campus_pick_field"){
-        allowed={"field"};const std::set<std::string> fields={"balance","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"};
+        allowed={"field"};const std::set<std::string> fields(campus_field_names.begin(),campus_field_names.end());
         if(!p.contains("field")||!p["field"].is_string()||!fields.contains(p["field"].get<std::string>()))throw std::invalid_argument("Invalid campus field");
     } else if(type=="save_campus_mapping"){
         allowed={"fields"};if(!p.contains("fields")||!p["fields"].is_object()||p["fields"].size()>11)throw std::invalid_argument("Invalid campus fields");
-        const std::set<std::string> fields={"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes","spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"},
-            keys={"mode","selector","kind","unit","confidence","value","formula","cycle","reset_on_cycle"};
+        const std::set<std::string> fields(campus_field_names.begin(),campus_field_names.end());
+        const std::set<std::string> keys={"mode","selector","kind","unit","confidence","value","formula","cycle","reset_on_cycle"};
         for(auto it=p["fields"].begin();it!=p["fields"].end();++it){
             if(!fields.contains(it.key())||!it->is_object()||it->size()>keys.size())throw std::invalid_argument("Invalid campus mapping");
             for(auto value=it->begin();value!=it->end();++value){
