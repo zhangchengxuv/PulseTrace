@@ -62,6 +62,19 @@ int main(){try{
  for(const char *key:{"ipv4_up","ipv4_down","ipv6_up","ipv6_down"})changed["ip_record"][key]=0;
  comparison.save("rejected",Json::array({changed}));
  check(comparison.query("2027-02")["totals"]["has_ip"]==true,"rejected-only diagnostics do not change observed byte basis");
+ // A failed recovery may leave committed archive batches; retry must preserve and publish them once.
+ {DatabaseManager interrupted_source(dir/"interrupted-source.db");
+  interrupted_source.save("original",Json::array({network(jan,"interface_upload_bytes",17),network(feb,"interface_upload_bytes",23)}));
+  interrupted_source.save("second-session",Json::array({network(jan,"interface_upload_bytes",5)}));
+  MonthlyTrafficStore interrupted(dir/"interrupted");std::filesystem::create_directory(dir/"interrupted/2027-02.sqlite3");
+  bool failed=false;try{interrupted.recover(interrupted_source);}catch(...){failed=true;}check(failed,"recovery I/O failure is reported, not ignored");
+  {DatabaseManager committed(dir/"interrupted/2027-01.sqlite3");check(committed.traffic_summary()["upload_bytes"]==17,"committed batch survives later month failure");}
+  check(std::filesystem::remove(dir/"interrupted/2027-02.sqlite3"),"remove only deliberately created empty failure fixture");
+  interrupted.recover(interrupted_source);interrupted.recover(interrupted_source);
+  check(interrupted.query("all")["totals"]["upload_bytes"]==45,"recovery retry across months and sessions is idempotent");
+  std::filesystem::remove(dir/"interrupted/2027-01.json");interrupted_source.clear();interrupted.recover(interrupted_source);
+  check(interrupted.query("2027-01")["totals"]["upload_bytes"]==22&&std::filesystem::exists(dir/"interrupted/2027-01.json"),"archive-only month republished after detail pruning");
+ }
  bool invalid=false;try{store.query("../bad");}catch(...){invalid=true;}check(invalid,"path traversal rejected");
  invalid=false;try{parse_message(R"({"type":"get_monthly_traffic","request_id":1,"params":{"month":"2026-13"}})");}catch(...){invalid=true;}check(invalid,"bridge rejects malformed month");
  check(parse_message(R"({"type":"get_monthly_traffic","request_id":1,"params":{"month":"all"}})")["type"]=="get_monthly_traffic","all-month bridge validated");

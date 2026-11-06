@@ -13,6 +13,14 @@ void atomic_json(const std::filesystem::path &path,const Json &value){
     std::ofstream out(temp,std::ios::binary);out<<value.dump(2)<<'\n';out.close();
     if(!out||!MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot publish monthly traffic file: "+utf8(path));
 }
+std::map<std::string,Json> network_batches(const MonthlyTrafficStore &store,const Json &rows){
+    std::map<std::string,Json> batches;
+    for(const auto &r:rows){const auto module=r.value("module","");const auto metric=r.value("metric","");
+        if(!(r.contains("ip_record")||(module=="network"&&(metric=="interface_upload_bytes"||metric=="interface_download_bytes"||metric.starts_with("bytes/")))))continue;
+        const auto key=store.month_at(r.at("minute").get<std::int64_t>());if(!batches.contains(key))batches[key]=Json::array();batches[key].push_back(r);
+    }
+    return batches;
+}
 }
 MonthlyTrafficStore::MonthlyTrafficStore(std::filesystem::path directory):directory_(std::filesystem::absolute(std::move(directory))){
     std::filesystem::create_directories(directory_);
@@ -33,14 +41,22 @@ std::string MonthlyTrafficStore::month_at(std::int64_t minute) const {
     std::ostringstream key;key<<std::setfill('0')<<std::setw(4)<<local.wYear<<'-'<<std::setw(2)<<local.wMonth;return key.str();
 }
 void MonthlyTrafficStore::save(const std::string &session,const Json &rows){
-    std::map<std::string,Json> batches;
-    for(const auto &r:rows){const auto module=r.value("module","");const auto metric=r.value("metric","");
-        if(!(r.contains("ip_record")||(module=="network"&&(metric=="interface_upload_bytes"||metric=="interface_download_bytes"||metric.starts_with("bytes/")))))continue;
-        const auto key=month_at(r.at("minute").get<std::int64_t>());if(!batches.contains(key))batches[key]=Json::array();batches[key].push_back(r);
-    }
-    for(const auto &[key,batch]:batches){{DatabaseManager db(directory_/(key+".sqlite3"));db.save(session,batch);}publish(key);}
+    for(const auto &[key,batch]:network_batches(*this,rows)){{DatabaseManager db(directory_/(key+".sqlite3"));db.save(session,batch);}publish(key);}
 }
-void MonthlyTrafficStore::recover(const DatabaseManager &source){source.visit_traffic([this](const auto &session,const auto &rows){save(session,rows);});
+void MonthlyTrafficStore::recover(const DatabaseManager &source){
+    // Source visits are bounded and ordered by session/minute. Keep at most one archive open,
+    // avoiding repeated integrity scans and checkpoints within the same month.
+    std::string active_month;
+    std::unique_ptr<DatabaseManager> writer;
+    source.visit_traffic([&](const auto &session,const auto &rows){
+        for(const auto &[key,batch]:network_batches(*this,rows)){
+            if(key!=active_month){writer.reset();writer=std::make_unique<DatabaseManager>(directory_/(key+".sqlite3"));active_month=key;}
+            writer->save(session,batch);
+        }
+    });
+    writer.reset();
+    // Each SQLite batch is already committed. Publish each derived JSON once, including
+    // archive-only months retained after main-database pruning. A retry remains idempotent.
     for(const auto &entry:std::filesystem::directory_iterator(directory_))if(entry.path().extension()==".sqlite3"&&valid_month(entry.path().stem().string()))publish(entry.path().stem().string());
 }
 void MonthlyTrafficStore::publish(const std::string &month) const {
