@@ -52,7 +52,7 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub Releases](https://github.com/zhangchengxuv/PulseTrace/releases) · [Gitee Releases](https://gitee.com/zhangchenxuv/pulse-trace/releases)
+[GitHub v0.4.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.4.0) · [Gitee v0.4.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.4.0)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 

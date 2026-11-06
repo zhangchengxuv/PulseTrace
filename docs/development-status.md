@@ -7,6 +7,8 @@
 - 规则按门户保存，支持更新和删除。Dashboard/Network 显示真实门户字段、未知状态、门户费用与本地估算；Schema v7 保存结构化快照，v6→v7 迁移前一致性备份，清除数据会同时清理门户快照。
 - Release/Debug 实际构建且各 25/25 CTest 通过。新增 13 项 C++ 存储/迁移/协议检查、三种模拟 DOM 及单位/歧义/登录空页/手动点选/改版测试，并通过真实 WebView2 + 本地模拟 HTTP 门户完成加载、六字段识别、候选回传和手动选择。
 - 未访问真实高校账号；真实学校登录、验证码、MFA、改版、长时间刷新、门户计费一致性及其他 Windows 环境仍需用户授权后人工验收。自动刷新仅在用户打开的门户窗口存在时运行，关闭窗口后不保留后台 WebView2。
+- 发布提交/Tag 均为 `0912f7271559026c33ca69cff8744250540ada60`；[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.4.0) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.4.0) 均为正式版，五个附件已核验。安装包 SHA-256 `2dffacdb8182a3a8b27701f518013765cf43ba86e4f4e458008611bd362d2518`，便携 ZIP SHA-256 `7a773dd634f39c5728b33d34bb2d02cb7bd7c909911ef8edfda6e0fd7560ae04`。
+- Gitee 公共 API 发生限流后，使用已配置令牌的认证头完成 Release 与附件上传并逐项下载核验；后续提交 `0f64ece` 已让发布脚本默认改用认证头，避免令牌进入 URL。当前双仓库 `main` 指向该发布工具修复，`v0.4.0` Tag 保留经验证的应用源码提交。
 
 ## 0.3.0-rc5 发布准备（2026-11-06）
 

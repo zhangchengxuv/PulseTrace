@@ -52,7 +52,7 @@ main `b3a2cbf` 的真实 x64 Release 开发构建；独立空数据目录、暂�
 
 ## 下载安装
 
-[GitHub Releases](https://github.com/zhangchengxuv/PulseTrace/releases) · [Gitee Releases](https://gitee.com/zhangchenxuv/pulse-trace/releases)
+[GitHub v0.4.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.4.0) · [Gitee v0.4.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.4.0)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
