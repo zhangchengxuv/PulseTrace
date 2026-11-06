@@ -62,6 +62,26 @@ void RawInputHost::sample_memory() noexcept {
 void RawInputHost::sync_clock() noexcept {
     anchor_tick_ = GetTickCount64(); anchor_utc_ms_ = utc_now_ms();
 }
+void RawInputHost::sync_session()noexcept{
+ if(!options_.callbacks)return;
+ unsigned long error=0;if(!session_notifications_){session_notifications_=WTSRegisterSessionNotification(window_,NOTIFY_FOR_THIS_SESSION)!=FALSE;if(!session_notifications_)error=GetLastError();}
+ options_.callbacks->on_session_status(session_notifications_,error);
+ DWORD size=0;LPWSTR memory=nullptr;
+ if(WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,WTS_CURRENT_SESSION,WTSSessionInfoEx,&memory,&size)){
+  if(size>=sizeof(WTSINFOEXW)){const auto *info=reinterpret_cast<const WTSINFOEXW*>(memory);const bool locked=info->Level!=1||info->Data.WTSInfoExLevel1.SessionState!=WTSActive||info->Data.WTSInfoExLevel1.SessionFlags!=WTS_SESSIONSTATE_UNLOCK;
+   if(locked!=session_locked_){session_locked_=locked;mouse_.reset_pairing();options_.callbacks->on_session_locked(locked);}
+  }WTSFreeMemory(memory);
+ }
+}
+bool RawInputHost::verify_registration()noexcept{
+    RAWINPUTDEVICE records[64]{};UINT count=64;bool mouse=false,keyboard=!options_.keyboard_count;
+    const auto n=GetRegisteredRawInputDevices(records,&count,sizeof(RAWINPUTDEVICE));
+    if(n!=static_cast<UINT>(-1))for(UINT i=0;i<n;i++)if(records[i].usUsagePage==1&&records[i].hwndTarget==window_&&(records[i].dwFlags&RIDEV_INPUTSINK)){if(records[i].usUsage==2)mouse=true;if(records[i].usUsage==6)keyboard=true;}
+    if(!mouse||!keyboard){RAWINPUTDEVICE devices[2]{{1,2,RIDEV_INPUTSINK|RIDEV_DEVNOTIFY,window_},{1,6,RIDEV_INPUTSINK|RIDEV_DEVNOTIFY,window_}};
+        if(!RegisterRawInputDevices(devices,options_.keyboard_count?2:1,sizeof(RAWINPUTDEVICE))){if(options_.callbacks)options_.callbacks->on_registration_error(GetLastError());return false;}
+    }
+    registered_=true;if(options_.callbacks)options_.callbacks->on_ready(window_);return true;
+}
 void RawInputHost::run() {
     if (window_class_) throw std::logic_error("RawInputHost is single-use");
     WNDCLASSEXW wc{}; wc.cbSize = sizeof(wc); wc.lpfnWndProc = window_proc;
@@ -76,7 +96,7 @@ void RawInputHost::run() {
     if (!RegisterRawInputDevices(devices, options_.keyboard_count ? 2 : 1, sizeof(RAWINPUTDEVICE)))
         throw windows_error("RegisterRawInputDevices");
     registered_ = true;
-    if(options_.callbacks)WTSRegisterSessionNotification(window_,NOTIFY_FOR_THIS_SESSION);
+    if(options_.callbacks){session_notifications_=WTSRegisterSessionNotification(window_,NOTIFY_FOR_THIS_SESSION)!=FALSE;sync_session();}
     if (!SetTimer(window_, 1, 1000, nullptr)) throw windows_error("SetTimer");
     if (!options_.callbacks) {
         control_window.store(window_, std::memory_order_relaxed);
@@ -85,7 +105,7 @@ void RawInputHost::run() {
     sync_clock(); start_tick_ = anchor_tick_; metrics_.start_utc_ms = anchor_utc_ms_;
     sample_memory();
     if (options_.callbacks) options_.callbacks->on_ready(window_);
-    auto last_memory_tick = start_tick_;
+    auto last_memory_tick = start_tick_,last_session_tick=start_tick_;
     LARGE_INTEGER start{}, end{}; QueryPerformanceCounter(&start);
     const auto cpu_start = process_cpu_100ns();
     MSG message{};
@@ -100,6 +120,7 @@ void RawInputHost::run() {
             sample_memory(); last_memory_tick = now;
             if (options_.callbacks) {options_.callbacks->on_input_metrics(metrics_.mouse_packets,metrics_.keyboard_packets,metrics_.read_errors);options_.callbacks->on_tick(mouse_);}
         }
+        if(now-last_session_tick>=5000){sync_session();verify_registration();last_session_tick=now;}
         if (options_.seconds && now - start_tick_ >= static_cast<std::uint64_t>(options_.seconds) * 1000) break;
     }
     // Stop delivery before any reporting I/O, even though the window stays alive
@@ -136,7 +157,11 @@ LRESULT RawInputHost::handle_message(HWND window, UINT message, WPARAM wparam, L
         mouse_.remove_device(reinterpret_cast<std::uintptr_t>(reinterpret_cast<HANDLE>(lparam)));
         if(options_.callbacks)options_.callbacks->on_device_removed(static_cast<std::uintptr_t>(lparam));return 0;
     case WM_WTSSESSION_CHANGE:
-        if(options_.callbacks&&(wparam==WTS_SESSION_LOCK||wparam==WTS_SESSION_UNLOCK)){mouse_.reset_pairing();options_.callbacks->on_session_locked(wparam==WTS_SESSION_LOCK);}return 0;
+        if(options_.callbacks&&(wparam==WTS_SESSION_LOCK||wparam==WTS_SESSION_UNLOCK||wparam==WTS_CONSOLE_DISCONNECT||wparam==WTS_REMOTE_DISCONNECT)){
+            options_.callbacks->on_tick(mouse_);mouse_.reset_pairing();sync_clock();
+            session_locked_=wparam!=WTS_SESSION_UNLOCK;options_.callbacks->on_session_locked(session_locked_);
+            if(wparam==WTS_SESSION_UNLOCK)verify_registration();
+        }else if(wparam==WTS_REMOTE_CONNECT||wparam==WTS_CONSOLE_CONNECT)sync_session();return 0;
     case WM_SETTINGCHANGE: {
         const auto timeout = GetDoubleClickTime();
         if (timeout != metrics_.double_click_final_ms) {
@@ -147,8 +172,19 @@ LRESULT RawInputHost::handle_message(HWND window, UINT message, WPARAM wparam, L
         break;
     }
     case WM_TIMECHANGE:
+        sync_clock();mouse_.reset_pairing();break;
     case WM_POWERBROADCAST:
-        sync_clock(); mouse_.reset_pairing(); break;
+        if(options_.callbacks&&(wparam==PBT_APMSUSPEND||wparam==PBT_APMRESUMEAUTOMATIC||wparam==PBT_APMRESUMESUSPEND)){
+            options_.callbacks->on_tick(mouse_);options_.callbacks->on_power_suspended(wparam==PBT_APMSUSPEND);
+            if(wparam!=PBT_APMSUSPEND)verify_registration();
+        }
+        sync_clock();mouse_.reset_pairing();return TRUE;
+    case WM_QUERYENDSESSION:
+        if(options_.callbacks){options_.callbacks->on_tick(mouse_);options_.callbacks->on_flush_requested();}return TRUE;
+    case WM_ENDSESSION:
+        if(options_.callbacks&&wparam){options_.callbacks->on_tick(mouse_);options_.callbacks->on_power_suspended(true);}return 0;
+    case WM_APP+18:
+        if(options_.callbacks){options_.callbacks->on_tick(mouse_);options_.callbacks->on_flush_requested();}return 1;
     case WM_TIMER:
         return 0; // Wake idle pump for 1 Hz resource sampling; never polls input state.
     case WM_APP+16:

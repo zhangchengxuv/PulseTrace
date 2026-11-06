@@ -1,3 +1,4 @@
+#include <atomic>
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/desktop/webview_host.hpp"
 #include "pulsetrace/desktop/taskbar_host.hpp"
@@ -39,6 +40,7 @@ class DesktopApplication {
             Shell_NotifyIconW(NIM_DELETE, &nid_);
         if (instance_mutex_)
             CloseHandle(instance_mutex_);
+        if(data_lock_!=INVALID_HANDLE_VALUE)CloseHandle(data_lock_);
     }
 
   private:
@@ -77,7 +79,8 @@ class DesktopApplication {
     std::unique_ptr<UpdateService> updates_;
     CaptionBar caption_;
     std::thread exit_thread_;
-    HANDLE instance_mutex_{};
+    HANDLE instance_mutex_{},data_lock_{INVALID_HANDLE_VALUE};
+    std::atomic<bool> ending_session_{false};
     bool maximized_{};
     bool expect_failure_{}, failure_observed_{}, shutdown_verified_{true}, crash_test_{}, crash_done_{};
     bool tray_added_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
@@ -315,8 +318,9 @@ void DesktopApplication::quit() {
     if (exit_thread_.joinable())
         exit_thread_.join();
     exit_thread_ = std::thread([this] {
-        core_->stop();
-        PostMessageW(window_, WM_APP + 52, 0, 0);
+        const bool ready=core_->prepare_stop();
+        if(ready||ending_session_)core_->stop();
+        PostMessageW(window_, WM_APP + 52, ready||ending_session_?0:1, 0);
     });
 }
 LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -415,14 +419,12 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_APP + 52: {
         if (exit_thread_.joinable())
             exit_thread_.join();
-        const auto status = core_->status();
-        if (!status.value("storage_error", "").empty() && !selftest_) {
-            const auto result = MessageBoxW(window_,
-                                            ui_text("native.save_prompt"),
-                                            ui_text("native.save_failed"), MB_OKCANCEL | MB_ICONERROR);
-            if (result != IDOK) {
-                exiting_ = false;
-                return 0;
+        if(w==1){
+            if(selftest_){core_->cancel_stop();diagnostic("SELFTEST FAIL: exit persistence preparation failed");core_->stop();}
+            else if(!ending_session_){
+                const auto result=MessageBoxW(window_,ui_text("native.save_prompt"),ui_text("native.save_failed"),MB_OKCANCEL|MB_ICONERROR);
+                if(result!=IDOK){core_->cancel_stop();exiting_=false;diagnostic("Exit cancelled; monitoring core retained for automatic persistence recovery");return 0;}
+                exit_thread_=std::thread([this]{core_->stop();PostMessageW(window_,WM_APP+52,0,0);});return 0;
             }
         }
         if(widget_){widget_->stop();if(widget_test_handle_&&IsWindow(widget_test_handle_))throw std::runtime_error("Widget did not exit");diagnostic("Taskbar widget stopped; native helper released");}
@@ -576,6 +578,12 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         return 0;
     }
+    case WM_QUERYENDSESSION:
+        diagnostic((l&ENDSESSION_LOGOFF)?"Windows logoff requested; scheduling checkpoint":"Windows shutdown/restart requested; scheduling checkpoint");
+        if(core_)core_->on_flush_requested();return TRUE;
+    case WM_ENDSESSION:
+        if(w){ending_session_=true;if(core_)core_->flush_now(std::chrono::milliseconds(1500));quit();}
+        else if(core_)core_->cancel_stop();return 0;
     case WM_CLOSE:
         if (core_ && core_->status()["config"].value("close_to_tray", true))
             hide();
@@ -657,6 +665,9 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
             PostMessageW(existing, WM_APP + 51, 0, 0);
         return 0;
     }
+    // Filesystem lock also covers other logon sessions and executable copies.
+    data_lock_=CreateFileW((data_/L"data.lock").c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(data_lock_==INVALID_HANDLE_VALUE)throw std::runtime_error("PulseTrace data directory is already in use or cannot be locked; existing data preserved");
     const auto logfile = data_ / "logs" / "desktop.log";
     if (std::filesystem::exists(logfile) && std::filesystem::file_size(logfile) > 1024 * 1024)
         MoveFileExW(logfile.c_str(), (data_ / "logs" / "desktop.previous.log").c_str(),

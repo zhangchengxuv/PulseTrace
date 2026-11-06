@@ -2,12 +2,17 @@
 #include "pulsetrace/protocol.hpp"
 #include "pulsetrace/version.hpp"
 #include "pulsetrace/localization.hpp"
+#include "pulsetrace/pending_store.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <sqlite3.h>
 namespace pulsetrace {
 namespace {
+std::string path_utf8(const std::filesystem::path &path) {
+    const auto text=path.u8string();return {text.begin(),text.end()};
+}
 void validate_config(const Json &c) {
     for(const char *key:{"usage_enabled","usage_icons"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean usage setting");
     for(const auto &[key,lo,hi]:{std::tuple{"usage_idle_seconds",15,3600},std::tuple{"usage_retention_days",1,365}})if(!c.at(key).is_number_integer()||c.at(key)<lo||c.at(key)>hi)throw std::invalid_argument("Invalid usage setting");
@@ -45,7 +50,7 @@ Json row(std::int64_t minute, const char *module, std::string metric, std::uint6
     return {{"minute", minute}, {"module", module}, {"metric", std::move(metric)}, {"value", value}};
 }
 } // namespace
-CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
+CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::absolute(std::move(data)).lexically_normal()) {
     config_ = {{"theme", "system"},       {"retention_days", 30},  {"flush_seconds", 30},
                {"network_interface", ""}, {"close_to_tray", true}, {"capture_on_launch", false},
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
@@ -76,6 +81,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::move(data)) {
 }
 CoreService::~CoreService() { stop(); }
 void CoreService::start() {
+    if(input_thread_.joinable()||worker_thread_.joinable())throw std::logic_error("Core already started");
     enabled_.store(config_.value("capture_on_launch", false));
     capture_window_.start.store(capture_clock());
     capture_window_.stop.store(enabled_.load() ? 0 : capture_clock());
@@ -117,33 +123,31 @@ void CoreService::stop() {
     if (worker_thread_.joinable())
         worker_thread_.join();
 }
-void CoreService::retry_final_flush() {
-    Json rows, events;
-    {
-        std::lock_guard lock(mutex_);
-        rows = unsaved_rows_;
-        events = unsaved_events_;
-    }
-    if (rows.empty() && events.empty() && unsaved_rankings_.empty() && unsaved_usage_.empty())
-        return;
-    try {
-        DatabaseManager db(data_ / "monitor.db");
-        db.save(session_, rows, events);
-        db.save_rankings(session_,unsaved_rankings_);
-        db.save_usage(session_,unsaved_usage_);unsaved_usage_=Json::array();
-        unsaved_rankings_=Json::array();
-        MonthlyTrafficStore monthly(data_ / "network-months");
-        monthly.recover(db);
-        std::lock_guard lock(mutex_);
-        unsaved_rows_ = Json::array();
-        unsaved_events_ = Json::array();
-        state_["storage_error"] = "";
-        state_["pending_retry_rows"] = 0;
-        state_["last_flush_ms"] = utc_now_ms();
-    } catch (const std::exception &e) {
-        std::lock_guard lock(mutex_);
-        state_["storage_error"] = e.what();
-    }
+void CoreService::retry_final_flush(){
+ Json batch;{std::lock_guard lock(mutex_);batch=unsaved_batch_;}if(batch.empty())return;
+ try{
+  PendingStore journal(data_/"pending");try{journal.stage(batch);}catch(const std::exception &e){std::lock_guard lock(mutex_);state_["journal_error"]=e.what();}
+  DatabaseManager db(data_/"monitor.db");db.save_batch(batch);
+  try{journal.acknowledge(batch.at("session"));}catch(const std::exception &e){std::lock_guard lock(mutex_);state_["journal_error"]=e.what();}
+  {std::lock_guard lock(mutex_);unsaved_batch_=Json::object();unsaved_rows_=Json::array();unsaved_events_=Json::array();unsaved_usage_=Json::array();unsaved_rankings_=Json::array();state_["storage_error"]="";state_["pending_retry_rows"]=0;state_["last_flush_ms"]=utc_now_ms();}
+  try{MonthlyTrafficStore monthly(data_/"network-months");monthly.recover(db);std::lock_guard lock(mutex_);state_["archive_error"]="";state_["archive_flush_ms"]=utc_now_ms();}
+  catch(const std::exception &e){std::lock_guard lock(mutex_);state_["archive_error"]=e.what();}
+ }catch(const std::exception &e){std::lock_guard lock(mutex_);state_["storage_error"]=e.what();}
+}
+bool CoreService::flush_now(std::chrono::milliseconds timeout){const auto target=++flush_requested_;wake_.notify_all();std::unique_lock lock(mutex_);return wake_.wait_for(lock,timeout,[&]{return flush_completed_>=target||worker_done_;})&&flush_completed_>=target&&state_.value("storage_error","").empty();}
+bool CoreService::prepare_stop(){
+ quiescing_.store(true);std::int64_t unset=0;capture_window_.stop.compare_exchange_strong(unset,capture_clock());
+ if(auto h=input_window_.load()){DWORD_PTR ignored{};SendMessageTimeoutW(h,WM_APP+18,0,0,SMTO_ABORTIFHUNG,1500,&ignored);}
+ Json config;{std::lock_guard lock(mutex_);config=config_;}usage_->configure(config,false);
+ if(!rankings_->quiesce(config))return false;
+ return flush_now();
+}
+void CoreService::cancel_stop()noexcept{const bool was_quiescing=quiescing_.exchange(false);if(was_quiescing&&enabled_.load()&&!suspended_.load()){capture_window_.start.store(capture_clock());capture_window_.stop.store(0);}wake_.notify_all();}
+void CoreService::on_power_suspended(bool suspended)noexcept{
+ if(suspended_.exchange(suspended)!=suspended)network_rebaseline_.store(true);keyboard_.reset_state();last_coverage_ms_=0;
+ if(suspended){std::int64_t unset=0;capture_window_.stop.compare_exchange_strong(unset,capture_clock());}
+ else if(enabled_.load()&&!quiescing_.load()){capture_window_.start.store(capture_clock());capture_window_.stop.store(0);}
+ on_flush_requested();
 }
 void CoreService::on_ready(HWND window) noexcept {
     input_window_.store(window);
@@ -151,9 +155,12 @@ void CoreService::on_ready(HWND window) noexcept {
         std::lock_guard lock(mutex_);
         state_["input_ready"] = true;
     }
+    {std::lock_guard lock(mutex_);if(state_["input_error"].get<std::string>().starts_with("Raw Input registration unavailable"))state_["input_error"]="";}
     if (stopping_.load())
         PostMessageW(window, WM_CLOSE, 0, 0);
 }
+void CoreService::on_session_status(bool registered,unsigned long error)noexcept{try{std::lock_guard lock(mutex_);state_["session_notifications_ready"]=registered;state_["session_notification_error_code"]=error;}catch(...){}}
+void CoreService::on_registration_error(unsigned long error)noexcept{try{std::lock_guard lock(mutex_);state_["input_ready"]=false;state_["input_error"]="Raw Input registration unavailable; Win32="+std::to_string(error);}catch(...){}}
 void CoreService::on_keyboard(std::uintptr_t d, USHORT scan, USHORT flags, USHORT vk,
                               std::int64_t minute) noexcept {
     if (keyboard_generation_ != reset_generation_.load()) {
@@ -170,8 +177,7 @@ void CoreService::on_input_metrics(std::uint64_t mouse, std::uint64_t keyboard,
         state_["keyboard_packets"] = keyboard;
         state_["raw_read_errors"] = errors;
         if (errors) {
-            disable_capture();
-            state_["input_error"] = "Raw Input read errors: " + std::to_string(errors);
+            state_["input_warning"] = "Raw Input read errors: " + std::to_string(errors);
         }
     } catch (...) {
         disable_capture();
@@ -221,7 +227,7 @@ void CoreService::on_tick(const MouseMonitor &mouse) noexcept {
                      {"horizontal_events", c.horizontal_events}})
                 if (value)
                     rows.push_back(row(m.utc_minute, "mouse", name, value));
-            if (c.horizontal_delta)
+            if (c.horizontal_events)
                 rows.push_back({{"minute", m.utc_minute},
                                 {"module", "mouse"},
                                 {"metric", "horizontal_delta"},
@@ -239,6 +245,9 @@ void CoreService::on_tick(const MouseMonitor &mouse) noexcept {
         for (const auto &s : mouse.lifetime())
             lifetime += s;
         std::lock_guard lock(mutex_);
+        // Preserve unhanded buckets even if the next snapshot follows a long suspend
+        // and has already expired them from the monitor's rolling memory window.
+        for(const auto &r:rows)input_pending_[Json::array({r["minute"],r["module"],r["metric"]}).dump()]=r;
         input_rows_ = std::move(rows);
         state_["mouse_clicks_session"] = lifetime.total_clicks();
         state_["keyboard_presses_session"] = keyboard_.total();
@@ -257,6 +266,7 @@ Json CoreService::status() const {
     Json result = state_;
     result["monitoring"] = enabled_.load();
     result["session_locked"] = session_locked_.load();
+    result["suspended"] = suspended_.load();result["quiescing"]=quiescing_.load();result["collection_active"]=capture_enabled();
     result["config"] = config_;
     return result;
 }
@@ -285,6 +295,7 @@ void CoreService::on_reset() noexcept {
         last_coverage_ms_ = 0;
         std::lock_guard lock(mutex_);
         input_rows_ = Json::array();
+        input_pending_.clear();
         state_["mouse_clicks_session"] = 0;
         state_["keyboard_presses_session"] = 0;
     } catch (...) {
@@ -304,20 +315,22 @@ void CoreService::save_config() {
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         throw std::runtime_error("Cannot replace configuration");
 }
-Json CoreService::execute(const Json &request, DatabaseManager &db) {
+Json CoreService::execute(const Json &request, DatabaseManager *connection) {
+    const auto database=[&]() -> DatabaseManager& {if(!connection)throw std::runtime_error("SQLite database unavailable; recovery is pending");return *connection;};
     const auto type = request.at("type").get<std::string>();
+    if(type=="retry_persistence"){on_flush_requested();return {{"retry_requested",true}};}
     const auto p = request.value("params", Json::object());
     if (type == "ping")
         return {{"pong", true}};
     if (type == "get_status")
         return status();
-    if(type=="get_history_bounds")return db.history_bounds();
+    if(type=="get_history_bounds")return database().history_bounds();
     if(type=="get_app_usage"||type=="export_app_usage"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
         const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
         for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
         const int bucket=type=="export_app_usage"?1:p.value("bucket",1);
-        auto values=db.usage(from,to,session_,floor,bucket);
+        auto values=database().usage(from,to,session_,floor,bucket);
         for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)values.push_back(r);
         if(type!="export_app_usage"){
             std::map<std::pair<std::int64_t,std::string>,Json> grouped;
@@ -334,14 +347,14 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
     }
     if(type=="get_usage_icon"){
         const auto key=p.at("key").get<std::string>();std::string path;for(const auto &r:usage_->rows())if(r["key"]==key){path=r["path"];break;}
-        if(path.empty())path=db.usage_icon_path(key);
+        if(path.empty())path=database().usage_icon_path(key);
         return {{"icon",config_.value("usage_icons",true)?application_icon(path):""}};
     }
     if(type=="get_ranking_status")return rankings_->status();
     if(type=="get_ranking_icon"){
         const std::string source=p.at("source"),key=p.at("key");const auto cache=source+"/"+key;
         if(!ranking_icons_.contains(cache)){
-            if(ranking_icons_.size()>=128)ranking_icons_.clear();std::string path=db.ranking_icon_path(source,key);
+            if(ranking_icons_.size()>=128)ranking_icons_.clear();std::string path=database().ranking_icon_path(source,key);
             for(const auto &r:rankings_->rows())if(r["source"]==source&&r["kind"]=="app"&&r["key"]==key){path=r["path"];break;}
             ranking_icons_[cache]=application_icon(path);
         }return {{"icon",ranking_icons_[cache]}};
@@ -349,7 +362,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
     if(type=="set_mihomo_secret"){rankings_->set_secret(p.at("secret"));return {{"saved",true}};}
     if(type=="clear_ranking_domains"){
         if(enabled_.load())throw std::runtime_error("ranking_pause_required");
-        db.clear_rankings(true);rankings_->clear(true);
+        database().clear_rankings(true);rankings_->clear(true);
         Json retained=Json::array();for(const auto &r:unsaved_rankings_)if(r["kind"]!="domain")retained.push_back(r);unsaved_rankings_=std::move(retained);
         return {{"cleared",true}};
     }
@@ -357,7 +370,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();const std::string source=p.at("source"),kind=p.at("kind");const int family=p.at("family");
         const auto live=rankings_->rows();auto floor=utc_now_ms()/60000-119;
         for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
-        auto values=db.rankings(from,to,source,kind,session_,floor);
+        auto values=database().rankings(from,to,source,kind,session_,floor);
         for(const auto &r:live)if(r["source"]==source&&r["kind"]==kind&&r["minute"]>=from&&r["minute"]<to)values.push_back(r);
         std::map<std::string,Json> grouped;unsigned flags=0;
         for(const auto &r:values){if(family&&r["family"]!=family)continue;const std::string key=r["key"];auto &a=grouped[key];if(a.is_null()){a=r;a.erase("minute");a["upload"]=0ULL;a["download"]=0ULL;a["quality"]=0u;a["ipv4_up"]=0ULL;a["ipv4_down"]=0ULL;a["ipv6_up"]=0ULL;a["ipv6_down"]=0ULL;a["unknown_family_bytes"]=0ULL;a["up_bps"]=nullptr;a["down_bps"]=nullptr;}
@@ -370,19 +383,19 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         Json result=Json::array();for(auto &[key,r]:grouped){r["family"]=family;r["total"]=r["upload"].get<std::uint64_t>()+r["download"].get<std::uint64_t>();result.push_back(std::move(r));}
         return {{"rows",result},{"status",rankings_->status()},{"source",source},{"basis",source=="mihomo"?"connection_payload_counters":"etw_reported_size"},{"quality_flags",flags},{"reference_validated",false},{"sources_additive",false},{"time_basis",source=="mihomo"?"sample_end_minute":"event_minute"}};
     }
-    if (type == "get_network_calendar") {auto result=monthly_->daily(p.value("month",""));result["last_flush_ms"]=status()["last_flush_ms"];return result;}
+    if (type == "get_network_calendar") {auto result=(monthly_?monthly_.get():throw std::runtime_error("Monthly archive unavailable"))->daily(p.value("month",""));result["last_flush_ms"]=status().value("archive_flush_ms",std::int64_t(0));return result;}
     if (type == "get_monthly_traffic") {
-        auto result = monthly_->query(p.value("month", ""));
-        result["last_flush_ms"] = status()["last_flush_ms"];
+        auto result = (monthly_?monthly_.get():throw std::runtime_error("Monthly archive unavailable"))->query(p.value("month", ""));
+        result["last_flush_ms"] = status().value("archive_flush_ms",std::int64_t(0));
         return result;
     }
     if (type == "set_monitoring") {
         const bool active = p.at("enabled").get<bool>();
+        if(active&&(quiescing_.load()||stopping_.load()))throw std::runtime_error("Exit is pending; cancel it before resuming monitoring");
         {
             std::lock_guard lock(mutex_);
-            if (active && (!state_["input_error"].get<std::string>().empty() ||
-                           !state_["storage_error"].get<std::string>().empty()))
-                throw std::runtime_error("Resolve core/storage error before enabling capture");
+            if (active && !state_["input_error"].get<std::string>().empty())
+                throw std::runtime_error("Resolve input registration error before enabling capture");
         }
         ++reset_generation_;
         if (auto h = input_window_.load())
@@ -401,7 +414,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         const auto from = p.at("from").get<std::int64_t>(), to = p.at("to").get<std::int64_t>(),
                    floor = utc_now_ms() / 60000 - 119;
         const int bucket = p.value("bucket", 1);
-        auto historical = db.query(from, to, bucket, session_, floor);
+        auto historical = database().query(from, to, bucket, session_, floor);
         Json live;
         {
             std::lock_guard lock(mutex_);
@@ -424,13 +437,13 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
                               {"module", std::get<1>(key)},
                               {"metric", std::get<2>(key)},
                               {"value", value}});
-        auto events = db.network_events(from, to);
+        auto events = database().network_events(from, to);
         for (const auto &e : network_events_) {
             auto ms = e["observed_ms"].get<std::int64_t>();
             if (ms >= from * 60000 && ms < to * 60000)
                 events.push_back(e);
         }
-        auto protocol = db.protocol_samples(from, to, bucket, session_, floor);
+        auto protocol = database().protocol_samples(from, to, bucket, session_, floor);
         // Capture sources and packet-length bases are distinct observations, never additive.
         using ProtocolKey = std::tuple<std::int64_t, std::string, std::string, std::string>;
         const auto protocol_key = [](const Json &record) -> ProtocolKey {
@@ -502,7 +515,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
     }
     if(type=="backup_database"){
         const auto folder=data_/"backups"/("manual-"+std::to_string(utc_now_ms()));std::filesystem::create_directories(folder);
-        db.backup(folder/"monitor.db");
+        database().backup(folder/"monitor.db");
         if(std::filesystem::exists(data_/"network-months"))for(const auto &item:std::filesystem::directory_iterator(data_/"network-months")){
             if(!item.is_regular_file())continue;const auto ext=item.path().extension();
             std::filesystem::create_directories(folder/"network-months");
@@ -516,7 +529,7 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
         auto name = "pulsetrace-export-" + std::to_string(utc_now_ms()) + ".csv";
         auto report = execute({{"type", "get_statistics"},
                                {"params", {{"from", p.at("from")}, {"to", p.at("to")}, {"bucket", 1}}}},
-                              db);
+                              connection);
         const auto &data = report["rows"];
         std::ofstream out(data_ / name, std::ios::binary);
         out << "utc_minute,module,metric,value\r\n";
@@ -556,8 +569,12 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
             if (!SendMessageTimeoutW(h, WM_APP + 17, 0, 0, SMTO_ABORTIFHUNG, 3000, &result) || !result)
                 throw std::runtime_error("Input reset did not complete; database preserved");
         }
-        monthly_->clear();
-        db.clear();
+        PendingStore pending(data_/"pending");std::vector<std::string> sessions{session_};for(const auto &file:pending.files())sessions.push_back(file.stem().string());
+        database().clear(sessions);
+        if(monthly_)monthly_->clear();
+        for(const auto &session:sessions)try{pending.acknowledge(session);}catch(...){}
+        session_=std::to_string(utc_now_ms())+"-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(reset_generation_.load());persistence_revision_=0;
+        {std::lock_guard lock(mutex_);state_["session"]=session_;unsaved_batch_=Json::object();}
         rankings_->clear(false);usage_->clear();unsaved_usage_=Json::array();
         {std::lock_guard lock(mutex_);unsaved_rows_=Json::array();unsaved_events_=Json::array();unsaved_rankings_=Json::array();state_["pending_retry_rows"]=0;}
         clear_requested_ = true;
@@ -566,181 +583,122 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
     throw std::invalid_argument("Unsupported message type");
 }
 void CoreService::worker() {
+    PendingStore journal(data_/"pending");std::unique_ptr<DatabaseManager> db;
+    NetworkMonitor network(&capture_window_);
+    std::map<std::string,std::string> saved;
+    std::map<std::string,Json> retry_rows;
+    Json saved_usage=Json::array(),saved_rankings=Json::array();
+    auto last_flush=std::chrono::steady_clock::now()-std::chrono::hours(1),next_attempt=last_flush,last_network=last_flush;
+    auto last_prune=std::chrono::steady_clock::now();
+    unsigned failures=0;bool archive_recover=true,retry_blocked=false;
+    const auto update_network=[&](const Json &config){
+        try{
+            if(network_rebaseline_.exchange(false))network.reset_baseline();
+            auto sample=network.sample(utc_now_ms()/60000,enabled_.load()&&!suspended_.load()&&!quiescing_.load(),config.value("network_interface",""));
+            network_rows_=std::move(sample.rows);
+            for(const auto &event:sample.events)network_events_.push_back(event);
+            std::lock_guard lock(mutex_);state_["network"]=std::move(sample.status);state_["network_error"]="";
+        }catch(const std::exception &e){std::lock_guard lock(mutex_);state_["network_error"]=e.what();}
+        last_network=std::chrono::steady_clock::now();
+    };
+    const auto key_of=[](const Json &r){Json key=Json::array({r.at("minute"),r.at("module"),r.at("metric")});if(r.contains("ip_record")){key.push_back(r["ip_record"]["source"]);key.push_back(r["ip_record"]["basis"]);}return key.dump();};
+    const auto record_error=[&](const std::exception &error){
+        Json detail={{"path",path_utf8(data_/"monitor.db")},{"message",error.what()}};
+        if(const auto *sqlite=dynamic_cast<const SQLiteError*>(&error))detail=sqlite->details();
+        detail["time_ms"]=utc_now_ms();
+        try{const auto logs=data_/"logs";std::filesystem::create_directories(logs);const auto file=logs/"storage.log";
+            if(std::filesystem::exists(file)&&std::filesystem::file_size(file)>1024*1024){std::error_code ec;std::filesystem::remove(logs/"storage.log.1",ec);std::filesystem::rename(file,logs/"storage.log.1",ec);}
+            std::ofstream out(file,std::ios::app);out<<detail.dump()<<'\n';
+        }catch(...){}
+        std::lock_guard lock(mutex_);state_["storage_error"]=error.what();state_["storage_diagnostic"]=detail;state_["storage_state"]="retrying";
+    };
     try {
-        DatabaseManager db(data_ / "monitor.db");
-        {std::lock_guard lock(mutex_);state_["database_schema"]=DatabaseManager::supported_schema;state_["database_migration"]=db.migration_info();}
-        monthly_ = std::make_unique<MonthlyTrafficStore>(data_ / "network-months");
-        monthly_->recover(db);
-        NetworkMonitor network(&capture_window_);
-        std::map<std::string, std::int64_t> saved;
-        auto last_flush = std::chrono::steady_clock::now() - std::chrono::seconds(300);
-        auto last_prune = last_flush;
-        auto last_network = last_flush;
-        auto last_attempt = last_flush;
-        int retry_seconds = 1;
-        Json net_rows = Json::array();
-        std::map<std::string, Json> retry_rows;
-        for (;;) {
-            std::deque<std::pair<Json, std::function<void(Json)>>> pending;
-            Json cfg, rows;
-            bool done{};
-            {
-                std::unique_lock lock(mutex_);
-                wake_.wait_for(lock, std::chrono::seconds(1),
-                               [this] { return !requests_.empty() || (stopping_.load() && input_done_); });
-                pending.swap(requests_);
-                cfg = config_;
-                rows = input_rows_;
-                done = stopping_.load() && input_done_;
-            }
-            rankings_->configure(cfg,enabled_.load()&&!session_locked_.load());
-            usage_->configure(cfg,enabled_.load()&&!session_locked_.load());
+        for(;;){
+            std::deque<std::pair<Json,std::function<void(Json)>>> requests;Json cfg,rows;bool done;
+            {std::unique_lock lock(mutex_);wake_.wait_for(lock,std::chrono::seconds(1),[&]{return !requests_.empty()||flush_requested_.load()>flush_completed_||(stopping_.load()&&input_done_);});requests.swap(requests_);cfg=config_;rows=Json::array();for(const auto &[key,r]:input_pending_)rows.push_back(r);input_pending_.clear();done=stopping_.load()&&input_done_;}
+            const bool collecting=enabled_.load()&&!session_locked_.load()&&!suspended_.load()&&!quiescing_.load();
+            rankings_->configure(cfg,collecting);usage_->configure(cfg,collecting);
             if(done){rankings_->stop();usage_->stop();}
-            if (done || std::chrono::steady_clock::now() - last_network >= std::chrono::seconds(1))
-                try {
-                    auto sample = network.sample(utc_now_ms() / 60000, enabled_.load(),
-                                                 cfg.value("network_interface", ""));
-                    net_rows = std::move(sample.rows);
-                    network_rows_ = net_rows;
-                    for (const auto &e : sample.events)
-                        network_events_.push_back(e);
-                    last_network = std::chrono::steady_clock::now();
-                    std::lock_guard lock(mutex_);
-                    state_["network"] = std::move(sample.status);
-                    state_["network_error"] = "";
-                } catch (const std::exception &e) {
-                    std::lock_guard lock(mutex_);
-                    state_["network_error"] = e.what();
-                }
-            const auto now = std::chrono::steady_clock::now();
-            if (done || (now - last_flush >= std::chrono::seconds(cfg.value("flush_seconds", 30)) &&
-                         now - last_attempt >= std::chrono::seconds(retry_seconds))) {
-                last_attempt = now;
-                for (const auto &r : net_rows)
-                    rows.push_back(r);
-                Json changed = Json::array();
-                std::map<std::string, std::int64_t> updates;
-                for (const auto &r : rows) {
-                    std::string key = std::to_string(r["minute"].get<std::int64_t>()) + "/" +
-                                      r["module"].get<std::string>() + "/" + r["metric"].get<std::string>();
-                    auto value = r["value"].get<std::int64_t>();
-                    if (!saved.contains(key) || saved[key] != value) {
-                        changed.push_back(r);
-                        updates[key] = value;
-                    }
-                }
-                for (const auto &r : changed) {
-                    const auto key = std::to_string(r["minute"].get<std::int64_t>()) + "/" +
-                                     r["module"].get<std::string>() + "/" + r["metric"].get<std::string>();
-                    retry_rows[key] = r;
-                }
-                changed = Json::array();
-                for (const auto &[key, r] : retry_rows) {
-                    changed.push_back(r);
-                    updates[key] = r["value"].get<std::int64_t>();
-                }
-                try {
-                    if (!changed.empty() || !network_events_.empty())
-                        db.save(session_, changed, network_events_);
-                    monthly_->save(session_, changed);
-                    db.save_usage(session_,usage_->rows());usage_->persisted_before(utc_now_ms()/60000-119);
-                    db.save_rankings(session_,rankings_->rows());
-                    rankings_->persisted_before(utc_now_ms()/60000-119);
-                    for (const auto &[k, v] : updates)
-                        saved[k] = v;
-                    retry_rows.clear();
-                    network_events_ = Json::array();
-                    retry_seconds = 1;
-                    const auto cutoff = utc_now_ms() / 60000 - 120;
-                    for (auto it = saved.begin(); it != saved.end();)
-                        if (std::stoll(it->first.substr(0, it->first.find('/'))) < cutoff)
-                            it = saved.erase(it);
-                        else
-                            ++it;
-                    if (now - last_prune > std::chrono::hours(1)) {
-                        db.prune(utc_now_ms() / 60000 - cfg.value("retention_days", 30) * 1440);
-                        db.prune_usage(utc_now_ms()/60000-cfg.value("usage_retention_days",30)*1440);
-                        db.prune_rankings(utc_now_ms()/60000-cfg.value("ranking_retention_days",30)*1440);
-                        last_prune = now;
-                    }
-                    last_flush = now;
-                    std::lock_guard lock(mutex_);
-                    state_["last_flush_ms"] = utc_now_ms();
-                    state_["storage_error"] = "";
-                    unsaved_rows_ = Json::array();
-                    unsaved_events_ = Json::array();
-                    unsaved_usage_=Json::array();
-                    unsaved_rankings_=Json::array();
-                    state_["pending_retry_rows"] = 0;
-                } catch (const std::exception &e) {
-                    disable_capture();
-                    rankings_->configure(cfg,false);usage_->configure(cfg,false);
-                    retry_seconds = std::min(60, retry_seconds * 2);
-                    std::lock_guard lock(mutex_);
-                    state_["storage_error"] = e.what();
-                    state_["pending_retry_rows"] = retry_rows.size();
-                    unsaved_rows_ = changed;
-                    unsaved_events_ = network_events_;
-                    unsaved_usage_=usage_->rows();
-                    unsaved_rankings_=rankings_->rows();
-                }
+            auto now=std::chrono::steady_clock::now();
+            if(done||now-last_network>=std::chrono::seconds(1)||flush_requested_.load()>flush_completed_){
+                update_network(cfg);
             }
-            for (auto &[request, reply] : pending) {
-                Json response = {{"type", "response"},
-                                 {"request_id", request.value("request_id", Json(nullptr))},
-                                 {"ok", true},
-                                 {"error", nullptr}};
-                try {
-                    response["data"] = execute(request, db);
-                    if (request["type"] == "set_monitoring") {
-                        auto sample = network.sample(utc_now_ms() / 60000, enabled_.load(),
-                                                     config_.value("network_interface", ""));
-                        net_rows = std::move(sample.rows);
-                        network_rows_ = net_rows;
-                        for (const auto &e : sample.events)
-                            network_events_.push_back(e);
-                        std::lock_guard lock(mutex_);
-                        state_["network"] = std::move(sample.status);
+            for(const auto &r:network_rows_)rows.push_back(r);
+            for(const auto &r:rows){const auto key=key_of(r);const auto fingerprint=r.dump();if(!saved.contains(key)||saved[key]!=fingerprint)retry_rows[key]=r;}
+            const auto requested=flush_requested_.load();
+            const bool forced=requested>flush_completed_;
+            if(done||forced||(!retry_blocked&&now>=next_attempt&&(!db||now-last_flush>=std::chrono::seconds(cfg.value("flush_seconds",30))))){
+                Json changed=Json::array();for(const auto &[key,r]:retry_rows)changed.push_back(r);
+                auto usage=usage_->rows(),rankings=rankings_->rows();
+                Json batch={{"format",1},{"session",session_},{"revision",++persistence_revision_},{"created_ms",utc_now_ms()},{"rows",changed},{"events",network_events_},{"usage",usage==saved_usage?Json::array():usage},{"rankings",rankings==saved_rankings?Json::array():rankings}};
+                const bool has_data=!changed.empty()||!network_events_.empty()||!batch["usage"].empty()||!batch["rankings"].empty();
+                std::string journal_error;
+                if(has_data)try{journal.stage(batch);}catch(const std::exception &e){journal_error=e.what();}
+                try{
+                    if(!db){db=std::make_unique<DatabaseManager>(data_/"monitor.db");archive_recover=true;
+                        {std::lock_guard lock(mutex_);state_["database_schema"]=DatabaseManager::supported_schema;state_["database_migration"]=db->migration_info();state_["database_path"]=path_utf8(data_/"monitor.db");}
                     }
-                } catch (const std::exception &e) {
-                    response["ok"] = false;
-                    response["error"] = {{"code", "REQUEST_FAILED"}, {"message", e.what()}};
+                    std::vector<std::filesystem::path> pending_files;
+                    try{pending_files=journal.files();}catch(const std::exception &e){journal_error=e.what();}
+                    {std::lock_guard lock(mutex_);state_["recovery_error"]="";}
+                    for(const auto &file:pending_files){
+                        if(file.stem().string()==session_)continue;
+                        Json recovered;
+                        try{recovered=journal.read(file);}catch(const std::exception &e){std::lock_guard lock(mutex_);state_["recovery_error"]=e.what();continue;}
+                        if(db->save_batch(recovered))archive_recover=true;
+                        try{journal.acknowledge(recovered.at("session"));}catch(const std::exception &e){journal_error=e.what();}
+                    }
+                    if(has_data)db->save_batch(batch);
+                    for(const auto &[key,r]:retry_rows)saved[key]=r.dump();
+                    retry_rows.clear();network_events_=Json::array();
+                    usage_->persisted_before(utc_now_ms()/60000-119);rankings_->persisted_before(utc_now_ms()/60000-119);
+                    saved_usage=Json::array();saved_rankings=Json::array();
+                    for(const auto &r:usage)if(r["minute"].get<std::int64_t>()>=utc_now_ms()/60000-119)saved_usage.push_back(r);
+                    for(const auto &r:rankings)if(r["minute"].get<std::int64_t>()>=utc_now_ms()/60000-119)saved_rankings.push_back(r);
+                    if(has_data)try{journal.acknowledge(session_);}catch(const std::exception &e){journal_error=e.what();}
+                    failures=0;retry_blocked=false;last_flush=now;next_attempt=now;
+                    {std::lock_guard lock(mutex_);state_["last_flush_ms"]=utc_now_ms();state_["storage_error"]="";state_["storage_diagnostic"]=nullptr;state_["storage_state"]="healthy";state_["journal_error"]=journal_error;state_["pending_retry_rows"]=0;unsaved_batch_=Json::object();unsaved_rows_=Json::array();unsaved_events_=Json::array();unsaved_usage_=Json::array();unsaved_rankings_=Json::array();}
+                    // Archive failures never turn a committed primary transaction into lost input.
+                    try{if(!monthly_)monthly_=std::make_unique<MonthlyTrafficStore>(data_/"network-months");if(archive_recover){monthly_->recover(*db);archive_recover=false;}else if(has_data)monthly_->save(session_,changed);
+                        std::lock_guard lock(mutex_);state_["archive_error"]="";state_["archive_flush_ms"]=utc_now_ms();
+                    }catch(const std::exception &e){archive_recover=true;std::lock_guard lock(mutex_);state_["archive_error"]=e.what();}
+                    if(!done&&!archive_recover&&now-last_prune>std::chrono::hours(1)){
+                        try{db->prune(utc_now_ms()/60000-cfg.value("retention_days",30)*1440);db->prune_usage(utc_now_ms()/60000-cfg.value("usage_retention_days",30)*1440);db->prune_rankings(utc_now_ms()/60000-cfg.value("ranking_retention_days",30)*1440);last_prune=now;std::lock_guard lock(mutex_);state_["retention_error"]="";}
+                        catch(const std::exception &e){std::lock_guard lock(mutex_);state_["retention_error"]=e.what();}
+                    }
+                    const auto cutoff=utc_now_ms()/60000-120;
+                    for(auto it=saved.begin();it!=saved.end();)if(Json::parse(it->first)[0].get<std::int64_t>()<cutoff)it=saved.erase(it);else ++it;
+                }catch(const std::exception &e){
+                    record_error(e);++failures;
+                    const auto *sqlite=dynamic_cast<const SQLiteError*>(&e);
+                    const int code=sqlite?sqlite->details()["code"].get<int>():-1;
+                    const bool environment=sqlite&&(sqlite->transient()||code==SQLITE_READONLY||code==SQLITE_FULL);retry_blocked=!environment;
+                    const bool retry=sqlite&&sqlite->transient()&&failures<=5;
+                    next_attempt=now+std::chrono::seconds(retry?std::min(30u,1u<<std::min(failures,5u)):60u);
+                    // Reopen failed connections after backoff; this also restores WAL/I/O state.
+                    db.reset();
+                    std::lock_guard lock(mutex_);state_["pending_retry_rows"]=changed.size()+batch["usage"].size()+batch["rankings"].size();state_["journal_error"]=journal_error;state_["storage_state"]=retry?"retrying":"blocked";
+                    unsaved_batch_=batch;unsaved_rows_=changed;unsaved_events_=network_events_;unsaved_usage_=usage;unsaved_rankings_=rankings;
                 }
-                try {
-                    reply(std::move(response));
-                } catch (...) {
+                {std::lock_guard lock(mutex_);flush_completed_=requested;}wake_.notify_all();
+            }
+            for(auto &[request,reply]:requests){Json response={{"type","response"},{"request_id",request.value("request_id",Json(nullptr))},{"ok",true},{"error",nullptr}};
+                try{
+                    const bool transition=request["type"]=="set_monitoring";
+                    // Snapshot the paused baseline before enabling; after pausing, drain
+                    // already accepted ETW buffers before acknowledging the UI request.
+                    if(transition&&request["params"].value("enabled",false)&&!enabled_.load())update_network(status()["config"]);
+                    response["data"]=execute(request,db.get());
+                    if(transition){update_network(status()["config"]);response["data"]=status();}
                 }
+                catch(const std::exception &e){response["ok"]=false;response["error"]={{"code",(request["type"].get<std::string>().starts_with("get_")||dynamic_cast<const SQLiteError*>(&e))?"DATABASE_QUERY_FAILED":"REQUEST_FAILED"},{"message",e.what()}};}
+                try{reply(std::move(response));}catch(...){}
             }
-            if (clear_requested_) {
-                network = NetworkMonitor(&capture_window_);
-                net_rows = Json::array();
-                network_rows_ = Json::array();
-                network_events_ = Json::array();
-                saved.clear();
-                retry_rows.clear();
-                clear_requested_ = false;
-            }
-            if (done)
-                break;
+            if(clear_requested_){network=NetworkMonitor(&capture_window_);network_rows_=Json::array();network_events_=Json::array();saved.clear();retry_rows.clear();saved_usage=Json::array();saved_rankings=Json::array();clear_requested_=false;}
+            if(done)break;
         }
-    } catch (const std::exception &e) {
-        disable_capture();
-        rankings_->stop();usage_->stop();
-        std::lock_guard lock(mutex_);
-        state_["storage_error"] = e.what();
-        for (auto &[request, reply] : requests_)
-            try {
-                reply({{"type", "response"},
-                       {"request_id", request.value("request_id", Json(nullptr))},
-                       {"ok", false},
-                       {"error", {{"code", "DATABASE_UNAVAILABLE"}, {"message", e.what()}}}});
-            } catch (...) {
-            }
-        requests_.clear();
-    }
-    {
-        std::lock_guard lock(mutex_);
-        worker_done_ = true;
-    }
+    }catch(const std::exception &e){record_error(e);}
+    {std::lock_guard lock(mutex_);worker_done_=true;state_["worker_stopped"]=true;for(auto &[request,reply]:requests_)try{reply({{"type","response"},{"request_id",request.value("request_id",Json(nullptr))},{"ok",false},{"error",{{"code","DATABASE_UNAVAILABLE"},{"message",state_.value("storage_error","")}}}});}catch(...){}requests_.clear();}
+    wake_.notify_all();
 }
 } // namespace pulsetrace

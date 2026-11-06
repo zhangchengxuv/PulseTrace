@@ -43,7 +43,7 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"widget.floating_visible",L"悬浮窗已显示",L"Floating window visible"},
 {"widget.geometry",L"窗口位置异常，已安全回退",L"Window geometry invalid; safe fallback active"},
 {"native.save_failed",L"PulseTrace 保存失败",L"PulseTrace could not save data"},
-{"native.save_prompt",L"数据库保存失败。“取消”将保留未写入统计，排除磁盘问题后再次退出重试；“确定”将退出并丢弃未写入数据。",L"Database save failed. Cancel keeps pending statistics so you can resolve the problem and retry exiting. OK exits and discards unsaved statistics."},
+{"native.save_prompt",L"数据库保存失败。“取消”将保持程序运行并继续尝试保存；“确定”将退出，尚未可靠写入的数据可能丢失。已保存的恢复快照会在下次启动时重试。",L"Database save failed. Cancel keeps the app running and retrying. OK exits; data not durably saved may be lost. Published recovery snapshots will be retried on the next start."},
 {"native.data_title",L"PulseTrace 数据目录",L"PulseTrace data directory"},
 {"native.data_prompt",L"数据目录不可写。是否手动选择其他目录？不会自动写入其他位置。",L"The data directory is not writable. Choose another directory? No other location will be used automatically."},
 {"native.start_failed",L"PulseTrace 启动失败",L"PulseTrace could not start"},
@@ -216,5 +216,14 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"settings.data",L"数据",L"Data"},
 {"settings.updates",L"更新",L"Updates"},
 {"settings.about",L"关于",L"About"},
-{"settings.license",L"MIT 开源协议；第三方组件保留各自许可。",L"MIT License; third-party components retain their own licenses."}
+{"settings.license",L"MIT 开源协议；第三方组件保留各自许可。",L"MIT License; third-party components retain their own licenses."},
+{"storage.retry",L"重试保存",L"Retry saving"},
+{"error.query",L"历史查询失败，当前显示可能是上次成功结果。",L"History query failed. Previously loaded results may still be shown."},
+{"status.locked",L"锁屏暂停",L"Paused while locked"},
+{"status.suspended",L"休眠暂停",L"Paused for sleep"},
+{"error.archive",L"月度归档暂不可用，核心统计仍在保存。",L"Monthly archive unavailable. Primary statistics are still being saved."},
+{"error.recovery",L"部分待恢复统计尚未导入，原文件已保留。",L"Some pending statistics could not be restored. Their files are preserved."},
+{"error.input",L"输入采集出现异常，请查看诊断。",L"Input collection reported a problem. Check the diagnostic details."},
+{"status.saving",L"正在保存",L"Saving"},
+{"status.stopped",L"监测已停止",L"Monitoring stopped"}
 };}

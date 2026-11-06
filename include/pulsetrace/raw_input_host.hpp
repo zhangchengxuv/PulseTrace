@@ -27,6 +27,10 @@ struct InputCallbacks {
     virtual void on_reset() noexcept = 0;
     virtual void on_device_removed(std::uintptr_t device) noexcept = 0;
     virtual void on_session_locked(bool locked) noexcept = 0;
+    virtual void on_power_suspended(bool) noexcept {}
+    virtual void on_registration_error(unsigned long) noexcept {}
+    virtual void on_session_status(bool,unsigned long) noexcept {}
+    virtual void on_flush_requested() noexcept {}
     virtual void on_input_metrics(std::uint64_t mouse,std::uint64_t keyboard,std::uint64_t errors) noexcept = 0;
 };
 struct ProbeOptions { std::uint32_t seconds{10}; std::size_t retained_minutes{1440}; bool keyboard_count{}; InputCallbacks* callbacks{}; };
@@ -48,6 +52,8 @@ private:
     void handle_raw(LPARAM lparam) noexcept;
     void sample_memory() noexcept;
     void sync_clock() noexcept;
+    bool verify_registration() noexcept;
+    void sync_session() noexcept;
     ProbeOptions options_;
     MouseMonitor mouse_;
     ProbeMetrics metrics_;
@@ -56,7 +62,7 @@ private:
     LARGE_INTEGER frequency_{};
     std::uint64_t anchor_tick_{}, start_tick_{};
     std::int64_t anchor_utc_ms_{};
-    bool registered_{};
+    bool registered_{},session_notifications_{},session_locked_{};
 };
 [[nodiscard]] std::int64_t utc_now_ms() noexcept;
 }

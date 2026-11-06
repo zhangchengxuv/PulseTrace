@@ -368,7 +368,7 @@
   "widget.floating_visible": "悬浮窗已显示",
   "widget.geometry": "窗口位置异常，已安全回退",
   "native.save_failed": "PulseTrace 保存失败",
-  "native.save_prompt": "数据库保存失败。“取消”将保留未写入统计，排除磁盘问题后再次退出重试；“确定”将退出并丢弃未写入数据。",
+  "native.save_prompt": "数据库保存失败。“取消”将保持程序运行并继续尝试保存；“确定”将退出，尚未可靠写入的数据可能丢失。已保存的恢复快照会在下次启动时重试。",
   "native.data_title": "PulseTrace 数据目录",
   "native.data_prompt": "数据目录不可写。是否手动选择其他目录？不会自动写入其他位置。",
   "native.start_failed": "PulseTrace 启动失败",
@@ -541,5 +541,14 @@
   "settings.data": "数据",
   "settings.updates": "更新",
   "settings.about": "关于",
-  "settings.license": "MIT 开源协议；第三方组件保留各自许可。"
+  "settings.license": "MIT 开源协议；第三方组件保留各自许可。",
+  "storage.retry": "重试保存",
+  "error.query": "历史查询失败，当前显示可能是上次成功结果。",
+  "status.locked": "锁屏暂停",
+  "status.suspended": "休眠暂停",
+  "error.archive": "月度归档暂不可用，核心统计仍在保存。",
+  "error.recovery": "部分待恢复统计尚未导入，原文件已保留。",
+  "error.input": "输入采集出现异常，请查看诊断。",
+  "status.saving": "正在保存",
+  "status.stopped": "监测已停止"
 }

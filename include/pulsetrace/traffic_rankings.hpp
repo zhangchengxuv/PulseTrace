@@ -42,7 +42,9 @@ class TrafficRankings {
  public:
   explicit TrafficRankings(const std::filesystem::path &data);~TrafficRankings();
   void configure(const Json &config,bool monitoring);
-  void stop();Json status()const;Json rows()const;Json rates()const;
+  void stop();
+  bool quiesce(const Json &config);
+  Json status()const;Json rows()const;Json rates()const;
   void persisted_before(std::int64_t minute);
   void clear(bool domains_only);void set_secret(const std::string &secret);
  private:struct Impl;std::unique_ptr<Impl> p_;

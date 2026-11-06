@@ -26,6 +26,7 @@ NetworkMonitor::NetworkMonitor(CaptureWindow *window) : capture_(std::make_uniqu
 NetworkMonitor::~NetworkMonitor() = default;
 NetworkMonitor::NetworkMonitor(NetworkMonitor &&) noexcept = default;
 NetworkMonitor &NetworkMonitor::operator=(NetworkMonitor &&) noexcept = default;
+void NetworkMonitor::reset_baseline(){previous_.clear();last_tick_=0;was_enabled_=false;capture_->configure(false,0,0,{});}
 NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const std::string &selected) {
     MIB_IF_TABLE2 *raw{};
     if (GetIfTable2(&raw) != NO_ERROR)

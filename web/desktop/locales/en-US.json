@@ -368,7 +368,7 @@
   "widget.floating_visible": "Floating window visible",
   "widget.geometry": "Window geometry invalid; safe fallback active",
   "native.save_failed": "PulseTrace could not save data",
-  "native.save_prompt": "Database save failed. Cancel keeps pending statistics so you can resolve the problem and retry exiting. OK exits and discards unsaved statistics.",
+  "native.save_prompt": "Database save failed. Cancel keeps the app running and retrying. OK exits; data not durably saved may be lost. Published recovery snapshots will be retried on the next start.",
   "native.data_title": "PulseTrace data directory",
   "native.data_prompt": "The data directory is not writable. Choose another directory? No other location will be used automatically.",
   "native.start_failed": "PulseTrace could not start",
@@ -541,5 +541,14 @@
   "settings.data": "Data",
   "settings.updates": "Updates",
   "settings.about": "About",
-  "settings.license": "MIT License; third-party components retain their own licenses."
+  "settings.license": "MIT License; third-party components retain their own licenses.",
+  "storage.retry": "Retry saving",
+  "error.query": "History query failed. Previously loaded results may still be shown.",
+  "status.locked": "Paused while locked",
+  "status.suspended": "Paused for sleep",
+  "error.archive": "Monthly archive unavailable. Primary statistics are still being saved.",
+  "error.recovery": "Some pending statistics could not be restored. Their files are preserved.",
+  "error.input": "Input collection reported a problem. Check the diagnostic details.",
+  "status.saving": "Saving",
+  "status.stopped": "Monitoring stopped"
 }

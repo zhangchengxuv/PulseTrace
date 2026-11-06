@@ -32,8 +32,10 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         auto after = request(core, "get_statistics",
                              {{"from", m - 1}, {"to", m + 2}, {"bucket", 1}})["protocol_samples"];
-        if (before != after)
+        if (before != after) {
+            std::ofstream(dir/"pause-difference.json")<<Json({{"before",before},{"after",after}}).dump(2);
             throw std::runtime_error("Paused protocol samples changed");
+        }
         const auto exported = request(core, "export_csv", {{"from", m - 1}, {"to", m + 2}});
         std::ifstream csv(dir / exported["protocol_file"].get<std::string>());
         std::string contents((std::istreambuf_iterator<char>(csv)), {});

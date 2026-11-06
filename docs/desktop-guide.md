@@ -16,7 +16,7 @@
 
 设置提供 Deep Ocean、Pearl Mist 和跟随系统主题。使用统计分开显示前台停留与有效活跃，默认空闲阈值 120 秒，可排除应用、调整保留期及导出 CSV。阅读或视频可能被判断为空闲，不记录窗口标题、文档或 URL。流量排行的可选来源与域名历史需主动启用，不与物理接口计量相加。
 
-数据库升级至 Schema v5 前自动创建一致性备份。降级时使用兼容备份，不要用旧程序写新结构。
+当前开发构建使用 Schema v6，升级前自动创建一致性备份。保存失败保留待写入聚合并自动重试，详见 [恢复说明](persistence-recovery.md)。降级时使用兼容备份，不要用旧程序写新结构。已发布 RC4 仍为 v5。
 
 更新支持 GitHub/Gitee。尚未配置可信发布签名，下载核对 SHA-256 后只提供手动安装，不自动执行 EXE。IPv4/IPv6 为真实物理接口观测，仍带未完成独立抓包对照的质量标识，不等于校园网账单。
 
@@ -34,7 +34,7 @@ The calendar edits a draft and commits on confirmation, with minute precision an
 
 Settings offers Deep Ocean, Pearl Mist and System themes. App Usage separates foreground dwell from input-idle activity (120 seconds by default), with exclusions, retention and CSV export. Reading or video may appear idle. No titles, documents or URLs are recorded. Optional ranking sources and domain history require opt-in; do not add their totals to physical-interface traffic.
 
-Schema v5 upgrades create a consistent backup first. Use a compatible backup for downgrades, rather than writing a newer database with older binaries.
+The development build uses schema v6 and creates a consistent backup before migration. Failed saves retain pending aggregates and retry; see [recovery notes](persistence-recovery.md). Use a compatible backup for downgrades rather than writing a newer database with older binaries. The published RC4 still uses v5.
 
 GitHub/Gitee update sources are supported. A trusted publisher signature is not configured, so hash-checked downloads require manual installation and never run automatically. IPv4/IPv6 values remain physical-interface observations with explicit quality limitations, not a billing total.
 

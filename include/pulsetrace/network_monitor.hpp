@@ -15,6 +15,7 @@ class NetworkMonitor {
     ~NetworkMonitor();
     NetworkMonitor(NetworkMonitor &&) noexcept;
     NetworkMonitor &operator=(NetworkMonitor &&) noexcept;
+    void reset_baseline();
     NetworkSample sample(std::int64_t minute, bool enabled, const std::string &selected);
 
   private:

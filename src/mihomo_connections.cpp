@@ -48,7 +48,7 @@ std::string decrypt(const std::filesystem::path &path){
 }
 void validate_controller(const std::string &url){if(!url.empty())endpoint(url);}
 struct TrafficRankings::Impl {
- std::filesystem::path data;mutable std::mutex mutex;std::condition_variable wake;std::thread worker;bool quit{},active{},native{},mihomo{},domains{};unsigned generation{};
+ std::filesystem::path data;mutable std::mutex mutex;std::condition_variable wake;std::thread worker;bool quit{},active{},native{},mihomo{},domains{};unsigned generation{},applied_generation{~0u};
  std::string controller,secret;RankingAccumulator bins;Json state=Json::object(),speed=Json::array();ProcessTrafficCapture capture;
  Impl(std::filesystem::path dir):data(std::move(dir)){try{secret=decrypt(data/"mihomo.secret");}catch(...){state["credential_error"]="credential_unavailable";}worker=std::thread([this]{run();});}
  void run(){
@@ -69,7 +69,7 @@ struct TrafficRankings::Impl {
      bins.add(r["minute"],r["source"],r["kind"],{r["key"],r["name"],r["path"],r["attribution"]},r["family"],r["upload"],r["download"],r["quality"]);
      auto rate=r;rate["up_bps"]=r["upload"].get<double>()/seconds;rate["down_bps"]=r["download"].get<double>()/seconds;rate["sample_ms"]=now;speed.push_back(std::move(rate));
     }
-    state["windows_etw"]=ws;state["mihomo"]=ms;state["sample_ms"]=now;
+    state["windows_etw"]=ws;state["mihomo"]=ms;state["sample_ms"]=now;applied_generation=revision;wake.notify_all();
    }
    prior=now;if(!win&&!mi)wake.wait(lock,[&]{return quit||generation!=seen;});else wake.wait_for(lock,std::chrono::seconds(2),[&]{return quit||generation!=seen;});
   }
@@ -84,6 +84,7 @@ void TrafficRankings::stop(){{std::lock_guard l(p_->mutex);p_->quit=true;p_->wak
 void TrafficRankings::configure(const Json &c,bool running){std::lock_guard l(p_->mutex);const bool native=c.value("ranking_windows_enabled",false),mi=c.value("ranking_mihomo_enabled",false),domains=c.value("ranking_domains_enabled",false);const auto origin=c.value("mihomo_controller",std::string());
  if(p_->active==running&&p_->native==native&&p_->mihomo==mi&&p_->domains==domains&&p_->controller==origin)return;
  p_->active=running;p_->native=native;p_->mihomo=mi;p_->domains=domains;p_->controller=origin;p_->capture.gate(running&&native);++p_->generation;p_->speed=Json::array();p_->wake.notify_all();}
+bool TrafficRankings::quiesce(const Json &config){configure(config,false);std::unique_lock lock(p_->mutex);return p_->wake.wait_for(lock,std::chrono::seconds(5),[&]{return p_->quit||p_->applied_generation==p_->generation;});}
 Json TrafficRankings::status()const{std::lock_guard l(p_->mutex);auto s=p_->state;s["monitoring"]=p_->active;s["domains_enabled"]=p_->domains;s["has_secret"]=!p_->secret.empty();s["reference_validated"]=false;s["sources_additive"]=false;s["capacity_events"]=p_->bins.capacity_events();return s;}
 Json TrafficRankings::rows()const{std::lock_guard l(p_->mutex);return p_->bins.rows();}
 Json TrafficRankings::rates()const{std::lock_guard l(p_->mutex);return p_->active&&milliseconds()-p_->state.value("sample_ms",0LL)<6000?p_->speed:Json::array();}
