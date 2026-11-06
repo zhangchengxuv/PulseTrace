@@ -8,7 +8,7 @@ using namespace pulsetrace;
 namespace {
 void legacy_schema(const std::filesystem::path &path){
  sqlite3 *db{};const auto file=path.u8string();if(sqlite3_open(reinterpret_cast<const char*>(file.c_str()),&db)!=SQLITE_OK)throw std::runtime_error("Fixture open failed");
- const auto rc=sqlite3_exec(db,"BEGIN;DROP TABLE network_events;DROP TABLE protocol_samples;DROP TABLE traffic_rankings;DROP TABLE app_usage;PRAGMA user_version=1;COMMIT;",nullptr,nullptr,nullptr);sqlite3_close(db);if(rc!=SQLITE_OK)throw std::runtime_error("Fixture downgrade failed");
+ const auto rc=sqlite3_exec(db,"BEGIN;DROP TABLE persistence_receipts;DROP TABLE network_events;DROP TABLE protocol_samples;DROP TABLE traffic_rankings;DROP TABLE app_usage;PRAGMA user_version=1;COMMIT;",nullptr,nullptr,nullptr);sqlite3_close(db);if(rc!=SQLITE_OK)throw std::runtime_error("Fixture downgrade failed");
 }
 void verify_readonly(const std::filesystem::path &directory){
  sqlite3 *db{};const auto file=(directory/L"monitor.db").u8string();if(sqlite3_open_v2(reinterpret_cast<const char*>(file.c_str()),&db,SQLITE_OPEN_READONLY,nullptr)!=SQLITE_OK){if(db)sqlite3_close(db);throw std::runtime_error("Read-only fixture open failed");}
