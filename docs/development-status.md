@@ -1,5 +1,13 @@
 # PulseTrace 开发状态
 
+## v0.6.0 已发布（2026-11-06）
+
+- 发布源码提交/Tag `v0.6.0` 指向 `059dfbb2540c77c47a81e11595bcefaaf773f860`（`build: prepare v0.6.0 release`）。[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.0) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.0) 均为正式版；GitHub 已核验为 latest stable。
+- Release/Debug 实际构建且各 29/29 CTest 通过；安装向导、中英独立 AppId 安装/升级/卸载、旧布局迁移及便携包测试通过。便携清单 67 文件，800×600 DIP 原生自检和七种图标尺寸通过；测试未替换用户正式安装或数据库。
+- 安装版、便携 ZIP、两个校验旁文件和 SHA256SUMS 共五个附件上传到两端，名称/大小/SHA-256 一致。GitHub 使用服务端 digest 核验，Gitee 逐个下载复核；两端分支及标签提交已读取核对。
+- 安装包 SHA-256：`1737752c9b66d5e6742524ca16179fe5965d39950b248b56bd541858539a4494`；便携 ZIP：`8da9823d5c7e073e0a00d1464aa8860f5956fa4bb30b3002e32cc27d65124ad4`。
+- 真实高校认证/学校官方接口、真实 OS 转换、长期后台资源及其他 DPI/刷新率仍待外部验收，已在中英 Release 说明明确。不提供发行者代码签名，不自动执行下载的安装包。发布凭据未写入项目文件或日志。
+
 ## 校园网后台同步与恢复补全（2026-11-06，开发构建）
 
 - 已启用并确认规则后，门户关闭及主窗口到托盘改为隐藏门户并继续同步；正常应用重启恢复隐藏门户。禁用校园网或改变授权范围会释放旧门户。默认关闭时不创建可选浏览器；该功能使用一个额外的隔离 WebView2，页面切换资源数据不包含其后台开销。
