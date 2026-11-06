@@ -4,6 +4,21 @@ param([string]$BuildDirectory='build\llvm-release',[switch]$Publish,
 # No remote mutation, tag creation, credential lookup, or upload occurs without -Publish.
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
+function Confirm-GiteeRelease {
+ param([string]$Api,[long]$ReleaseId,[string]$ExpectedTag,[string]$ExpectedCommit,[bool]$Prerelease,[string]$Token)
+ $uri=$Api+'/releases/'+$ReleaseId
+ $valid={param($r) $r.tag_name -eq $ExpectedTag -and $r.target_commitish -eq $ExpectedCommit -and $r.prerelease -is [bool]}
+ $final=Invoke-RestMethod $uri
+ if(-not (& $valid $final)){throw 'Gitee release identity or state could not be verified'}
+ # Creation already uses prerelease=true. Do not issue a redundant write after verified uploads.
+ if($final.prerelease -ne $Prerelease){
+  if(-not $Token){throw 'Gitee release-state change needs authentication'}
+  Invoke-RestMethod -Method Patch $uri -Body @{access_token=$Token;prerelease=$Prerelease.ToString().ToLower()} | Out-Null
+  $final=Invoke-RestMethod $uri
+ }
+ if(-not (& $valid $final) -or $final.prerelease -ne $Prerelease){throw 'Gitee release final state verification failed'}
+ return $final
+}
 Push-Location -LiteralPath $root
 try {
  $v=Get-Content -LiteralPath (Join-Path $BuildDirectory 'version.json') -Raw | ConvertFrom-Json
@@ -77,7 +92,7 @@ try {
      try{Invoke-WebRequest -UseBasicParsing $uri.AbsoluteUri -OutFile $verify;if((Get-FileHash -LiteralPath $verify -Algorithm SHA256).Hash.ToLower() -ne $a.Sha256){throw 'Gitee uploaded attachment hash mismatch'}}finally{if(Test-Path -LiteralPath $verify){Remove-Item -LiteralPath $verify -Force}}
      $receipt.Assets+=@{Name=$a.Name;Sha256=$a.Sha256;Size=$a.Size}
     }
-    Invoke-RestMethod -Method Patch ($t.API+'/releases/'+$release.id) -Body @{access_token=$gt;prerelease=($v.version -match '-').ToString().ToLower()} | Out-Null
+    Confirm-GiteeRelease -Api $t.API -ReleaseId $release.id -ExpectedTag $tag -ExpectedCommit $commit -Prerelease ($v.version -match '-') -Token $gt | Out-Null
     $receipt.URL='https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/'+$tag
    }
    $receipt.Success=$true

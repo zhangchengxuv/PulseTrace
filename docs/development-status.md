@@ -1,9 +1,12 @@
 # PulseTrace 开发状态
 
-## 0.3.0-rc4 默认安装目录与发布准备（2026-11-06）
+## 0.3.0-rc4 已发布：默认安装目录（2026-11-06）
 
 - 用户明确授权将新安装默认目录改为 D:\Program Files (x86)\PulseTrace，并重新发布；按现有不可覆盖已发布附件的规则递增为 0.3.0-rc4，保留 rc3 及其历史附件。程序继续为 x64，升级沿用原安装位置，data 跟随实际安装目录；D 不存在的回退、权限检查及中英双语逻辑不变。
-- 同步修改真实 Inno 默认路径、原生向导回归断言、双语使用说明、统一版本源和 rc4 更新说明。Release 已实际编译；新 Inno 安装包的中英真实向导均通过启动、默认路径、返回重选、data 预览与取消，证据留 build/installer-wizard-f35371c837da478f9edc72d48d882cc9。完整 Debug/CTest/安装升级回归及最终发布结果以本轮后续验证和发布回执为准；不修改用户当前安装或数据库。
+- 发布源码 c4328895b15a97c5ac482620129783e28be6e98f，GitHub/Gitee 的 v0.3.0-rc4 标签均指向它。[GitHub](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.3.0-rc4) / [Gitee](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.3.0-rc4) 均已发布，四个附件及版本/提交/更新说明已核对；GitHub 使用服务端 SHA-256，Gitee 上传后逐个下载核对 SHA-256。旧 rc3 附件未覆盖。
+- Release/Debug 实际构建且各 20/20 CTest 通过；中英文真实向导确认新默认路径、返回重选、data 预览及取消。隔离中英安装/运行中升级/卸载保留/重装、程序只读与 data 可写、旧外置数据迁移及已占用目标保护通过。便携 ZIP 的 63 项文件清单、800×600 DIP 真实界面及图标测试通过。不修改用户当前安装或数据库；受保护默认目录的提升权限安装、D 盘缺失和其他系统仍非本轮实际环境验收。
+- 本地安装包 build/release/PulseTrace-Setup-v0.3.0-rc4-x64.exe（SHA-256 c50c007e8b98b113e9ecd9296f5ed561dc2f23d4f9db82adef8b4663bfc31257）；便携 ZIP build/release/PulseTrace-v0.3.0-rc4-x64.zip（7d18a77d15bc46cb0545bc2b632afdffd70b7aed2649925f8d0673aebd0acb79）。绑定源码/资产的验证报告及发布回执留在忽略目录 build/release，不提交构建产物或个人数据。
+- Gitee 首次在附件上传及哈希通过后，对已为 true 的预发布状态再次 PATCH 返回 406；公开 API 复核实际发布状态/源码/中文说明和附件均正确，原始错误保留于回执，最终核验记录为 publish-v0.3.0-rc4-verified.json。发布脚本改为先验证身份与当前状态，仅必要时写入并再次读取确认；9 项离线回归、12 项只读发布计划测试及真实 Gitee 无令牌只读确认通过。此次脚本修复不替换已发布附件或移动标签。
 
 ## 月度归档恢复性能优化（2026-11-06）
 
