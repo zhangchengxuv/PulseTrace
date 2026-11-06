@@ -7,6 +7,8 @@
 - 手动流量可按账期设置重新确认；支持 B/KB/MB/GB/KiB/MiB/GiB。门户真实值、手动值、公式值、本地计算值分别标注。
 - 页面切换根因是渲染前先清空共享内容区。现在页面内容先在离屏容器完成构建和事件绑定，再单次替换内容区，并恢复各页面滚动位置；WebView2、侧边栏和顶部公共组件不重建。
 - 新增自动识别模式、三种 DOM、手动/公式、单位、账期、零单价、除零、循环引用、旧规则兼容、门户快照和原子页面替换测试。Release/Debug 实际构建且各 27/27 CTest 通过；真实 WebView2 模拟门户及 1600×900 Settings/Dashboard/Network 自检通过。
+- `v0.5.0` 发布提交/Tag 为 `90db099715984060cdf11f41493b7fb3b074cce4`；[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.5.0) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.5.0) 均为正式版。五个附件已上传，Gitee 附件逐个下载复核 SHA-256。
+- 安装包 SHA-256 `ac87b1869dd78903b35c79955e606c260e9a91f1af1e5fd8c84e88ca70d61634`；便携 ZIP SHA-256 `2275c6ca3ee58edf037f12adeebb41f3c171d20eaf24cd8bd6ad1c2289e9abde`。发布工具后续修复 `e44dbe8` 已要求 Gitee 更新携带 tag_name/name/body，当前双仓库 main 指向该提交。
 
 ## 0.4.0 通用校园网门户（2026-11-06）
 
