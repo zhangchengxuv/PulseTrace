@@ -2,6 +2,8 @@
 
 Windows 10/11 x64，CMake 3.24+、VS 2022 C++ 工具和 Windows SDK。先运行固定依赖下载脚本，再构建和测试：
 
+可选的前端及校园网后台集成测试建议使用 Node.js 24 LTS；后台测试使用其内置 `node:sqlite` 检查隔离数据库。本轮测试版本为 24.21.0。应用和安装包不依赖 Node.js 运行时。
+
 ```powershell
 .\tools\bootstrap-deps.ps1
 cmake -S . -B build/msvc -A x64

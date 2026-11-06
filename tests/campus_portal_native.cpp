@@ -6,6 +6,7 @@
 #include <atomic>
 #include <iostream>
 #include <thread>
+#include <wtsapi32.h>
 using namespace pulsetrace;
 namespace {
 class PortalServer{
@@ -20,12 +21,14 @@ class PortalServer{
   }
   ~PortalServer(){closed_=true;if(listener_!=INVALID_SOCKET){shutdown(listener_,SD_BOTH);closesocket(listener_);}if(worker_.joinable())worker_.join();WSACleanup();}
   std::string url()const{return "http://127.0.0.1:"+std::to_string(port_)+"/usage";}
-  void change_balance(){changed_=true;}
+  void change_balance(){++revision_;}
+  void reject_requests(bool value){reject_=value;}
  private:
   void serve(){
     while(!closed_){
       auto client=accept(listener_,nullptr,nullptr);if(client==INVALID_SOCKET)return;
       char request[4096]{};recv(client,request,sizeof(request)-1,0);
+      if(reject_){closesocket(client);continue;}
       std::string body=R"HTML(<!doctype html><html><head><meta charset="utf-8"><title>Campus mock</title></head><body>
 <h1>Usage Center</h1><table>
 <tr><th>Balance</th><td id="balance">¥ 27.50</td></tr>
@@ -35,12 +38,12 @@ class PortalServer{
 <tr><th>Fee</th><td id="fee">¥ 1.20</td></tr>
 <tr><th>Billing cycle</th><td id="cycle">2026-11</td></tr>
 </table><button id="manual">Balance ¥ 30.00</button><script>setTimeout(()=>document.getElementById('manual').click(),2500);</script></body></html>)HTML";
-      if(changed_)body.replace(body.find("27.50"),5,"28.50");
+      if(revision_)body.replace(body.find("27.50"),5,std::to_string(27.5+revision_.load()));
       const std::string response="HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "+std::to_string(body.size())+"\r\nConnection: close\r\n\r\n"+body;
       send(client,response.data(),static_cast<int>(response.size()),0);closesocket(client);
     }
   }
-  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},changed_{};std::thread worker_;
+  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},reject_{};std::atomic<unsigned> revision_{};std::thread worker_;
 };
 }
 int wmain(){
@@ -64,7 +67,10 @@ int wmain(){
       {"fee",{{"selector","#fee"},{"kind","currency"},{"unit","CNY"},{"confidence",1}}},
       {"billing_cycle",{{"selector","#cycle"},{"kind","text"},{"unit","text"},{"confidence",1}}}
     }}};
-    host.open(server.url(),5,rule,{campus_origin(server.url())});
+    host.open(server.url(),5,rule,{campus_origin(server.url())},true);host.close();
+    host.open(server.url(),5,rule,{campus_origin(server.url())},true);
+    host.open(server.url(),5,rule,{campus_origin(server.url())},true);
+    if(host.visible())throw std::runtime_error("Background portal opened a visible window");
     const auto deadline=GetTickCount64()+25000;MSG message{};
     bool picker_started=false;
     while(GetTickCount64()<deadline&&(snapshot.is_null()||candidates.is_null()||manual.is_null())){
@@ -81,8 +87,32 @@ int wmain(){
     }if(!done())throw std::runtime_error("Campus portal update timed out");};
     rule["fields"]["balance"]["selector"]="#manual";snapshot=nullptr;host.update_rule(rule);host.rescan();
     pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==30;});
-    rule["fields"]["balance"]["selector"]="#balance";host.update_rule(rule);server.change_balance();snapshot=nullptr;host.synchronize();
+    rule["fields"]["balance"]["selector"]="#balance";host.update_rule(rule);host.hide();server.change_balance();snapshot=nullptr;host.synchronize();
     pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==28.5;});
+    if(host.visible())throw std::runtime_error("Background sync showed the portal");
+    const Json context={{"enabled",true},{"portal_url",server.url()},{"allowed_origins",Json::array({campus_origin(server.url())})}};
+    if(!host.matches_scope(context))throw std::runtime_error("Unchanged authorized scope was rejected");
+    auto disabled=context;disabled["enabled"]=false;
+    if(host.matches_scope(disabled))throw std::runtime_error("Disabled monitoring retained authorization");
+    HWND portal_window{};EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM target)->BOOL{wchar_t name[128]{};GetClassNameW(h,name,128);if(std::wstring(name)==L"PulseTrace.CampusPortal"){*reinterpret_cast<HWND*>(target)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&portal_window));
+    if(!portal_window)throw std::runtime_error("Own portal test window not found");
+    SendMessageW(portal_window,WM_CLOSE,0,0);snapshot=nullptr;server.change_balance();
+    SendMessageW(portal_window,WM_TIMER,2,0);
+    pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==29.5;});
+    snapshot=nullptr;server.change_balance();
+    SendMessageW(portal_window,WM_WTSSESSION_CHANGE,WTS_SESSION_LOCK,0);
+    SendMessageW(portal_window,WM_POWERBROADCAST,PBT_APMSUSPEND,0);
+    SendMessageW(portal_window,WM_WTSSESSION_CHANGE,WTS_SESSION_UNLOCK,0);
+    SendMessageW(portal_window,WM_TIMER,2,0);
+    const auto paused=GetTickCount64()+300;while(GetTickCount64()<paused){while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}Sleep(20);}
+    if(!snapshot.is_null())throw std::runtime_error("Unlock resumed scanning while power was suspended");
+    SendMessageW(portal_window,WM_POWERBROADCAST,PBT_APMRESUMEAUTOMATIC,0);
+    pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==30.5;});
+    if(host.visible())throw std::runtime_error("Resume showed a hidden portal window");
+    server.reject_requests(true);error=nullptr;host.synchronize();pump_until([&]{return !error.is_null();});
+    if(snapshot.value("balance",0.0)!=30.5)throw std::runtime_error("Failed query replaced valid data");
+    server.reject_requests(false);server.change_balance();SendMessageW(portal_window,WM_TIMER,2,0);
+    pump_until([&]{return snapshot.value("balance",0.0)==31.5;});
     host.close();
     CoUninitialize();
     std::cout<<"Native campus WebView2 portal recognition passed; candidates="<<candidates.size()<<"\n";return 0;

@@ -651,5 +651,6 @@
   "campus.free_first": "确认本账期总已用流量优先消耗免费额度",
   "campus.billing_hint": "仅填必要原始参数；GB = 10⁹ B，GiB = 2³⁰ B。已扣费用不会再次从余额扣除，缺失数据时无法计算。",
   "campus.syncing": "正在同步门户…",
-  "campus.auth_required": "登录已失效，请重新登录；保留上次有效数据"
+  "campus.auth_required": "登录已失效，请重新登录；保留上次有效数据",
+  "campus.background_hint": "登录确认后自动同步；关闭门户或主窗口到托盘仍继续。停用此开关或退出应用可停止。浏览器会话由 WebView2 管理，密码、Cookie、Token 不写入应用配置、SQLite 或日志。"
 }

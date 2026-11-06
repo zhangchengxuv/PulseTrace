@@ -40,4 +40,8 @@ vm.runInContext(`campusFieldState={};campusData={rule:null};campusCandidates={ba
 assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','recognized values prefill for explicit confirmation');
 vm.runInContext(`campusCandidates.balance[0].selector='#changed';campusSuggest();`,context);
 assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','automatic rescans do not replace a pending selection');
+vm.runInContext(`campusData={origin:'https://campus.example',runtime_status:'campus_auth_required'};campusEventStatus='';`,context);
+assert.equal(vm.runInContext('campusQuality()',context),'campus.auth_required','background authentication failure survives reopening the main UI');
+vm.runInContext(`PulseCampus.ingest({type:'campus_candidate',portal_origin:'https://other.example',field:'balance',candidate:{selector:'#unrelated',kind:'currency',unit:'CNY',confidence:1}});`,context);
+assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','events from a previous portal cannot replace the current selection');
 console.log('Campus calculations: manual, formula, GB/GiB, missing data, cycle reset, free/paid separation and zero-price checks passed');

@@ -326,5 +326,6 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.free_first",L"确认本账期总已用流量优先消耗免费额度",L"Confirm current-cycle total usage consumes the free allowance first"},
 {"campus.billing_hint",L"仅填必要原始参数；GB = 10⁹ B，GiB = 2³⁰ B。已扣费用不会再次从余额扣除，缺失数据时无法计算。",L"Enter only necessary parameters. GB = 10⁹ B; GiB = 2³⁰ B. Paid fees are never deducted again. Missing data prevents calculation."},
 {"campus.syncing",L"正在同步门户…",L"Synchronizing portal…"},
-{"campus.auth_required",L"登录已失效，请重新登录；保留上次有效数据",L"Sign-in required; last valid data retained"}
+{"campus.auth_required",L"登录已失效，请重新登录；保留上次有效数据",L"Sign-in required; last valid data retained"},
+{"campus.background_hint",L"登录确认后自动同步；关闭门户或主窗口到托盘仍继续。停用此开关或退出应用可停止。浏览器会话由 WebView2 管理，密码、Cookie、Token 不写入应用配置、SQLite 或日志。",L"Sync continues after confirmed sign-in, including when the portal is closed or the app is in the tray. Disable this switch or exit to stop. WebView2 manages the browser session; passwords, cookies and tokens are never written to app settings, SQLite or logs."}
 };}

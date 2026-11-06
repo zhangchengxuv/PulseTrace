@@ -8,8 +8,11 @@ class CampusPortalHost {
     CampusPortalHost(HINSTANCE instance,std::filesystem::path data,std::filesystem::path assets,
                      std::function<void(Json)> event,std::function<void(std::string)> diagnostic);
     ~CampusPortalHost();
-    void open(const std::string &url,unsigned refresh_minutes,const Json &rule,const std::vector<std::string> &allowed_origins);
+    void open(const std::string &url,unsigned refresh_minutes,const Json &rule,const std::vector<std::string> &allowed_origins,bool background=false);
     void close();
+    void hide();
+    bool matches_scope(const Json &context) const;
+    void set_refresh(unsigned minutes);
     void rescan();
     void synchronize();
     void update_rule(const Json &rule){++generation_;rule_=rule;}
@@ -37,7 +40,7 @@ class CampusPortalHost {
     std::vector<std::string> allowed_origins_;
     Json rule_=nullptr;
     unsigned refresh_minutes_{5},scan_round_{};
-    unsigned generation_{};
-    bool creating_{},ready_{};
+    unsigned generation_{},lifecycle_{};
+    bool creating_{},ready_{},show_requested_{},locked_{},suspended_{},process_failed_{};
 };
 }
