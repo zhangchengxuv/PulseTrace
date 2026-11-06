@@ -41,6 +41,27 @@ int main(){try{
  {MonthlyTrafficStore reopened(dir/"months");reopened.recover(source);check(reopened.query("2026-12")["totals"]["download_bytes"]==400,"main DB committed before archive: restart recovers");}
  std::ifstream in(dir/"months/2026-11.json");Json json;in>>json;in.close();check(json["upload_bytes"]==170&&json["quality"]=="incomplete_observation"&&json["windows_timezone"].is_string(),"readable JSON agrees with committed SQLite");
  {DatabaseManager archive(dir/"months/2026-11.sqlite3");auto all=archive.query(nov,nov+1,1);check(std::none_of(all.begin(),all.end(),[](auto &r){return r["module"]=="keyboard";}),"monthly archive contains no keyboard data");}
+ // Keep source and byte-length basis observable across day/month/all summaries.
+ const auto jan=local_minute(2027,1,1),feb=local_minute(2027,2,1),mar=local_minute(2027,3,1);
+ MonthlyTrafficStore comparison(dir/"comparison");
+ comparison.save("a",Json::array({ip(jan)}));comparison.save("b",Json::array({ip(feb)}));
+ check(comparison.query("all")["totals"]["has_ip"]==true&&comparison.query("all")["totals"]["ipv4_up"]==88,"same source and basis remain additive across months");
+ auto changed=ip(mar);changed["ip_record"]["source"]="another_source";comparison.save("c",Json::array({changed}));
+ auto mixed=comparison.query("all")["totals"];
+ check(!mixed["has_ip"].get<bool>()&&mixed["quality"]=="incomparable_bases"&&mixed["ipv4_up"].is_null(),"cross-month sources cannot become a single family total");
+ check(comparison.query("2027-03")["totals"]["has_ip"]==true,"single-source month remains usable");
+ changed=ip(jan);changed["ip_record"]["basis"]="another_basis";comparison.save("d",Json::array({changed}));
+ mixed=comparison.query("2027-01")["totals"];
+ check(!mixed["has_ip"].get<bool>()&&mixed["quality"]=="incomparable_bases"&&mixed["ipv6_down"].is_null(),"within-month incompatible bases have no aggregate byte total");
+ check(comparison.daily("2027-01")["days"][0]["quality"]=="incomparable_bases","daily calendar retains incompatibility state");
+ {DatabaseManager archive(dir/"comparison/2027-01.sqlite3");check(archive.protocol_samples(jan,jan+1,1).size()==2,"incompatible raw observations preserved separately");}
+ // A stale old JSON cache must be rebuilt from SQLite rather than trusted as a new total.
+ {std::ofstream old(dir/"comparison/2027-01.json");old<<Json{{"format_version",1}};}
+ check(comparison.query("2027-01")["totals"]["quality"]=="incomparable_bases","legacy summary cache regenerated without altering archive records");
+ changed=ip(feb);changed["ip_record"]["basis"]="rejected_only";changed["ip_record"]["accepted"]=0;
+ for(const char *key:{"ipv4_up","ipv4_down","ipv6_up","ipv6_down"})changed["ip_record"][key]=0;
+ comparison.save("rejected",Json::array({changed}));
+ check(comparison.query("2027-02")["totals"]["has_ip"]==true,"rejected-only diagnostics do not change observed byte basis");
  bool invalid=false;try{store.query("../bad");}catch(...){invalid=true;}check(invalid,"path traversal rejected");
  invalid=false;try{parse_message(R"({"type":"get_monthly_traffic","request_id":1,"params":{"month":"2026-13"}})");}catch(...){invalid=true;}check(invalid,"bridge rejects malformed month");
  check(parse_message(R"({"type":"get_monthly_traffic","request_id":1,"params":{"month":"all"}})")["type"]=="get_monthly_traffic","all-month bridge validated");

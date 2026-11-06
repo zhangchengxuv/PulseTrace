@@ -431,19 +431,23 @@ Json CoreService::execute(const Json &request, DatabaseManager &db) {
                 events.push_back(e);
         }
         auto protocol = db.protocol_samples(from, to, bucket, session_, floor);
-        std::map<std::pair<std::int64_t, std::string>, Json> live_protocol;
+        // Capture sources and packet-length bases are distinct observations, never additive.
+        using ProtocolKey = std::tuple<std::int64_t, std::string, std::string, std::string>;
+        const auto protocol_key = [](const Json &record) -> ProtocolKey {
+            return {record.at("minute"), record.at("interface_id"), record.at("source"), record.at("basis")};
+        };
+        std::map<ProtocolKey, Json> live_protocol;
         for (const auto &r : network_rows_)
             if (r.contains("ip_record")) {
                 const auto &p = r["ip_record"];
                 auto m = p["minute"].get<std::int64_t>();
                 if (m >= floor && m >= from && m < to)
-                    live_protocol[{m, p["interface_id"]}] = p;
+                    live_protocol[protocol_key(p)] = p;
             }
-        std::map<std::pair<std::int64_t, std::string>, Json> grouped;
+        std::map<ProtocolKey, Json> grouped;
         const auto merge = [&](Json p) {
             p["minute"] = p["minute"].get<std::int64_t>() / bucket * bucket;
-            const auto key =
-                std::make_pair(p["minute"].get<std::int64_t>(), p["interface_id"].get<std::string>());
+            const auto key = protocol_key(p);
             if (!grouped.contains(key)) {
                 grouped[key] = std::move(p);
                 return;

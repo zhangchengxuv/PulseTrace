@@ -245,6 +245,23 @@ int main() {
                     "paused network sampling persists no usage");
         }
         {
+            const auto fixture=dir/"protocol-identities";std::filesystem::create_directories(fixture);
+            const auto minute=utc_now_ms()/60000-5;
+            {DatabaseManager seed(fixture/"monitor.db");
+                for(const auto &[source,basis]:{std::pair{"capture_a","ip_lengths"},std::pair{"capture_b","ip_lengths"},std::pair{"capture_a","other_lengths"}}){
+                    Json record={{"minute",minute},{"interface_id","fixture"},{"source",source},{"basis",basis},{"quality","observed_unverified_reference"},{"ipv4_up",10},{"ipv4_down",20},{"ipv6_up",30},{"ipv6_down",40},{"accepted",1},{"rejected",0},{"unsupported",0},{"events_lost",0},{"buffers_lost",0}};
+                    seed.save("fixture",Json::array({{{"minute",minute},{"module","network_ip"},{"metric","fixture/quality_state"},{"value",0},{"ip_record",record}}}));
+                }
+            }
+            CoreService identity_core(fixture);identity_core.start();
+            for(int bucket:{1,60,1440}){
+                const auto samples=rpc(identity_core,"get_statistics",{{"from",minute},{"to",minute+1},{"bucket",bucket}})["protocol_samples"];
+                require(samples.size()==3,"core range query preserves capture source and basis identities at every granularity");
+                for(const auto &record:samples)require(record["ipv4_up"]==10&&record["accepted"]==1,"incompatible byte observations are never merged by core overlay");
+            }
+            identity_core.stop();
+        }
+        {
             CoreService core(dir);
             core.start();
             bool ready = false;

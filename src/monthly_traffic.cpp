@@ -44,7 +44,7 @@ void MonthlyTrafficStore::recover(const DatabaseManager &source){source.visit_tr
     for(const auto &entry:std::filesystem::directory_iterator(directory_))if(entry.path().extension()==".sqlite3"&&valid_month(entry.path().stem().string()))publish(entry.path().stem().string());
 }
 void MonthlyTrafficStore::publish(const std::string &month) const {
-    DatabaseManager db(directory_/(month+".sqlite3"));auto value=db.traffic_summary();value["month"]=month;value["windows_timezone"]=zone_key_;value["format_version"]=1;
+    DatabaseManager db(directory_/(month+".sqlite3"));auto value=db.traffic_summary();value["month"]=month;value["windows_timezone"]=zone_key_;value["format_version"]=2;
     value["updated_ms"]=utc_now_ms();value["database_file"]=utf8(directory_/(month+".sqlite3"));value["summary_file"]=utf8(directory_/(month+".json"));
     value["scope"]="Monitoring-enabled intervals on the selected interface; totals are interface octets, family values are incomplete/unverified IP observations; not campus billing.";
     atomic_json(directory_/(month+".json"),value);
@@ -56,15 +56,28 @@ Json MonthlyTrafficStore::query(const std::string &requested) const {
     for(const auto &entry:std::filesystem::directory_iterator(directory_))if(entry.path().extension()==".sqlite3"&&valid_month(entry.path().stem().string()))months.insert(entry.path().stem().string());
     Json result={{"month",month},{"months",months},{"directory",utf8(directory_)},{"windows_timezone",zone_key_},{"persisted_only",true}};
     Json totals={{"upload_bytes",0},{"download_bytes",0},{"ipv4_up",0},{"ipv4_down",0},{"ipv6_up",0},{"ipv6_down",0},{"accepted",0},{"rejected",0},{"unsupported",0},{"events_lost",0},{"buffers_lost",0},{"has_totals",false},{"has_ip",false},{"quality","no_data"},{"reference_validated",false}};
+    std::set<std::pair<std::string,std::string>> identities;
+    bool incompatible=false;
     for(const auto &key:months){if(month!="all"&&key!=month)continue;
         if(!std::filesystem::exists(directory_/(key+".json")))publish(key);
-        std::ifstream summary(directory_/(key+".json"));Json t;summary>>t;
-        for(const char *k:{"upload_bytes","download_bytes","ipv4_up","ipv4_down","ipv6_up","ipv6_down","accepted","rejected","unsupported"})totals[k]=totals[k].get<std::int64_t>()+t[k].get<std::int64_t>();
+        Json t;
+        {std::ifstream summary(directory_/(key+".json"));summary>>t;}
+        // JSON is a derived cache. Refresh older summaries using the preserved SQLite records.
+        if(t.value("format_version",0)<2){publish(key);std::ifstream summary(directory_/(key+".json"));summary>>t;}
+        for(const char *k:{"upload_bytes","download_bytes","accepted","rejected","unsupported"})totals[k]=totals[k].get<std::int64_t>()+t[k].get<std::int64_t>();
+        if(t["has_ip"].get<bool>()){
+            identities.emplace(t.at("source").get<std::string>(),t.at("basis").get<std::string>());
+            for(const char *k:{"ipv4_up","ipv4_down","ipv6_up","ipv6_down"})totals[k]=totals[k].get<std::int64_t>()+t[k].get<std::int64_t>();
+        }else if(t["accepted"].get<std::int64_t>()>0)incompatible=true;
         for(const char *k:{"events_lost","buffers_lost"})totals[k]=std::max(totals[k].get<std::int64_t>(),t[k].get<std::int64_t>());
         totals["has_totals"]=totals["has_totals"].get<bool>()||t["has_totals"].get<bool>();totals["has_ip"]=totals["has_ip"].get<bool>()||t["has_ip"].get<bool>();
         if(t["quality"]=="incomplete_observation")totals["quality"]="incomplete_observation";
     }
     if(totals["quality"]!="incomplete_observation"&&totals["has_ip"].get<bool>())totals["quality"]="observed_unverified_reference";
+    if(incompatible||identities.size()>1){
+        totals["has_ip"]=false;totals["quality"]="incomparable_bases";
+        for(const char *k:{"ipv4_up","ipv4_down","ipv6_up","ipv6_down"})totals[k]=nullptr;
+    }
     result["totals"]=totals;result["database_file"]=month=="all"?utf8(directory_):utf8(directory_/(month+".sqlite3"));result["summary_file"]=month=="all"?utf8(directory_):utf8(directory_/(month+".json"));return result;
 }
 Json MonthlyTrafficStore::daily(const std::string &requested) const {
@@ -84,8 +97,6 @@ Json MonthlyTrafficStore::daily(const std::string &requested) const {
         const auto from=boundary(day),to=boundary(day+1);Json data=db?db->traffic_summary(from,to):Json{{"has_totals",false},{"has_ip",false},{"quality","no_data"}};
         std::ostringstream date;date<<month<<'-'<<std::setfill('0')<<std::setw(2)<<day;
         data["date"]=date.str();data["from"]=from;data["to"]=to;data["expected_minutes"]=to-from;
-        // Different packet-length bases cannot become a comparable family total.
-        if(data.value("basis_count",0)>1){data["has_ip"]=false;data["quality"]="incomparable_bases";}
         days.push_back(std::move(data));
     }
     return {{"month",month},{"days",days},{"windows_timezone",zone_key_},{"persisted_only",true},{"sources_additive",false},{"reference_validated",false}};

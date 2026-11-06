@@ -2,7 +2,7 @@
 function protocolSelection(){const id=state.network?.selected;return protocolSamples.filter(r=>r.interface_id===id);}
 function protocolTotal(records,key){return records.reduce((n,r)=>n+Number(r[key]||0),0);}
 function protocolTrend(title=tr("ui.ed82077242cc")){
- const id=state.network?.selected||'';const valid=new Set(protocolSelection().filter(r=>r.accepted>0).map(r=>r.minute)),actual=rows.filter(r=>r.module==='network_ip'&&valid.has(r.minute)&&r.metric.startsWith(id+'/'));
+ const id=state.network?.selected||'',actual=PulseDashboard.protocolRows(protocolSamples,id);
  return trend('network_ip',null,title,[[id+'/ipv4_up',tr("ui.59a323e0fe04"),'--protocol-ipv4',[]],[id+'/ipv4_down',tr("ui.c0159992fdcc"),'--protocol-ipv4',[6,4]],[id+'/ipv6_up',tr("ui.31e3f3c697c3"),'--protocol-ipv6',[]],[id+'/ipv6_down',tr("ui.147a719fb501"),'--protocol-ipv6',[6,4]]],actual);
 }
 function renderProtocolNetwork(c){

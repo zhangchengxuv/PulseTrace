@@ -11,6 +11,7 @@ check(PulseCalendar.value(day,'all','total').bytes===30&&PulseCalendar.value(day
 check(PulseCalendar.value(day,'6','total').state==='zero','known zero family is distinct');
 check(PulseCalendar.value({...day,ip_minutes:1},'4','total').state==='partial','partial coverage retains actual bytes and quality');
 check(PulseCalendar.value({...day,has_ip:false},'4','total').bytes===null,'unknown family never replaced with zero');
+check(PulseCalendar.value({...day,has_ip:false,quality:'incomparable_bases'},'4','total').state==='partial'&&PulseCalendar.value({...day,has_ip:false,quality:'incomparable_bases'},'4','total').reason==='incomparable_bases','incompatible calendar observation is not mislabeled as no observations');
 require('../web/desktop/mouse-view.js');
 check(!PulseMouse.model([]).has,'mouse missing coverage stays missing');
 const mouse=PulseMouse.model([{module:'coverage',metric:'observed_ms',value:60000},{module:'mouse',metric:'mouse4',value:1},{module:'mouse',metric:'mouse5',value:3}]);
@@ -31,6 +32,18 @@ const sample={accepted:1,source:'ndis',basis:'ip',ipv4_up:10,ipv4_down:20,ipv6_u
 check(dash.protocol([sample]).ratio[0]===.5&&dash.protocol([sample]).quality==='不完整观测','observed ratio retains quality');
 check(!dash.protocol([sample,{...sample,basis:'other'}]).has,'incomparable protocol bases are not summed');
 check(!dash.protocol([{...sample,accepted:0}]).has,'rejected-only samples are not a valid zero');
+check(!dash.protocol([sample,{...sample,source:'other'}]).has,'different capture sources are not additive');
+check(!dash.protocol([{...sample,source:''}]).has,'unknown source cannot establish comparable traffic');
+check(!dash.protocol([{...sample,source:'a|b',basis:'c'},{...sample,source:'a',basis:'b|c'}]).has,'source and basis pair cannot collide');
+const ipRows=dash.protocolRows([{...sample,minute:60,interface_id:'19'},{...sample,minute:61,interface_id:'19',accepted:0},{...sample,minute:62,interface_id:'20'}],'19');
+check(ipRows.length===4&&ipRows.every(r=>r.minute===60&&r.module==='network_ip')&&ipRows[0].value===10,'protocol chart uses accepted identity-preserving records, not unrelated generic rows');
+check(dash.protocolRows([{...sample,minute:60,interface_id:'19'},{...sample,minute:60,interface_id:'19',basis:'other'}],'19').length===0,'chart suppresses incompatible bases in the same bucket');
+check(dash.protocolRows([{...sample,minute:60,interface_id:'19'},{...sample,minute:120,interface_id:'19',source:'other'}],'19').length===0,'chart suppresses incompatible sources across time');
+const chartContext={state:{network:{selected:'19'}},protocolSamples:[{...sample,minute:60,interface_id:'19'}],rows:[r(60,'network_ip','19/ipv4_up',999)],PulseDashboard:dash,tr};
+chartContext.trend=(...args)=>args;require('node:vm').runInNewContext(fs.readFileSync(path.join(root,'web/desktop/protocol-view.js'),'utf8'),chartContext);
+check(chartContext.protocolTrend()[4][0].value===10,'actual chart renderer ignores incompatible legacy generic rows');
+chartContext.protocolSamples.push({...sample,minute:60,interface_id:'19',basis:'other'});
+check(chartContext.protocolTrend()[4].length===0,'actual chart renderer leaves incompatible observation gaps empty');
 const monitored=(ms,presses)=>[r(1,'coverage','observed_ms',ms),r(1,'keyboard','30',presses)];
 check(dash.comparison(monitored(60000,12),monitored(60000,10))===.2,'comparison uses actual equivalent observation periods');
 check(dash.comparison(monitored(30000,12),monitored(60000,10))===null&&dash.comparison(monitored(60000,12),[])===null,'incomparable coverage suppresses change percentage');
