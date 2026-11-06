@@ -26,6 +26,9 @@ class CampusPortalHost {
     void run_scan();
     void execute_engine(const std::wstring &expression,std::function<void(Json)> complete);
     void send_picker_ready();
+    void present();
+    void arm_picker();
+    void cancel_picker();
     HINSTANCE instance_{};
     std::filesystem::path data_,assets_;
     std::function<void(Json)> event_;
@@ -40,7 +43,7 @@ class CampusPortalHost {
     std::vector<std::string> allowed_origins_;
     Json rule_=nullptr;
     unsigned refresh_minutes_{5},scan_round_{};
-    unsigned generation_{},lifecycle_{};
-    bool creating_{},ready_{},show_requested_{},locked_{},suspended_{},process_failed_{};
+    unsigned generation_{},lifecycle_{},picker_request_{};
+    bool creating_{},ready_{},show_requested_{},locked_{},suspended_{},process_failed_{},picker_armed_{},navigating_{};
 };
 }

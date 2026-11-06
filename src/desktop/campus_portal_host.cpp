@@ -48,12 +48,13 @@ void CampusPortalHost::open(const std::string &url,unsigned refresh_minutes,cons
     if(view_){view_->Navigate(widen(url_).c_str());}
     else if(!creating_)initialize_webview();
 }
-void CampusPortalHost::hide(){show_requested_=false;if(controller_)controller_->put_IsVisible(FALSE);if(window_)ShowWindow(window_,SW_HIDE);}
+void CampusPortalHost::hide(){cancel_picker();show_requested_=false;if(controller_)controller_->put_IsVisible(FALSE);if(window_)ShowWindow(window_,SW_HIDE);}
 bool CampusPortalHost::matches_scope(const Json &context)const{
     return context.value("enabled",false)&&context.value("portal_url",std::string())==url_&&context.value("allowed_origins",Json::array())==Json(allowed_origins_);
 }
 void CampusPortalHost::set_refresh(unsigned minutes){refresh_minutes_=std::clamp(minutes,5u,1440u);if(window_&&!locked_&&!suspended_)SetTimer(window_,refresh_timer,refresh_minutes_*60000,nullptr);}
 void CampusPortalHost::close(){
+    ++picker_request_;pending_picker_.clear();picker_armed_=false;navigating_=false;
     ++generation_;++lifecycle_;
     if(window_&&IsWindow(window_))DestroyWindow(window_);
     window_=nullptr;ready_=false;creating_=false;scan_round_=0;
@@ -67,16 +68,42 @@ void CampusPortalHost::synchronize(){
     const auto hr=view_->Navigate(widen(url_).c_str());if(FAILED(hr))fail(hr,"synchronize");
 }
 void CampusPortalHost::pick(const std::string &field){
-    if(!ready_)throw std::runtime_error("Open and finish loading the campus portal first");
-    pending_picker_=field;
-    show_requested_=true;ShowWindow(window_,SW_SHOWNORMAL);controller_->put_IsVisible(TRUE);SetForegroundWindow(window_);
-    execute_engine(L";PulseCampusEngine.installPicker(document,"+widen(Json(field).dump())+L",m=>chrome.webview.postMessage(m))",[this](Json result){
-        if(!result.value("picker","").empty())send_picker_ready();
+    if(!window_||process_failed_)open(url_,refresh_minutes_,rule_,allowed_origins_);
+    pending_picker_=field;++picker_request_;picker_armed_=false;present();
+    if(ready_&&!locked_&&!suspended_)arm_picker();
+    else{
+        event_({{"type","campus_picker_pending"},{"field",field}});
+        if(!creating_&&!locked_&&!suspended_&&!navigating_)synchronize();
+    }
+}
+void CampusPortalHost::present(){
+    show_requested_=true;
+    ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);
+    SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW);
+    SetForegroundWindow(window_);
+    if(controller_){controller_->put_IsVisible(TRUE);controller_->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);}
+}
+void CampusPortalHost::arm_picker(){
+    if(pending_picker_.empty()||picker_armed_||!ready_||locked_||suspended_)return;
+    const auto request=picker_request_,generation=generation_,lifecycle=lifecycle_;
+    execute_engine(L";location.origin==="+widen(Json(origin_).dump())+L"?PulseCampusEngine.installPicker(document,"+widen(Json(pending_picker_).dump())+L",m=>chrome.webview.postMessage(m)):{picker:'login_required'}",[this,request,generation,lifecycle](Json result){
+        if(request!=picker_request_||generation!=generation_||lifecycle!=lifecycle_||pending_picker_.empty())return;
+        const auto state=result.is_object()?result.value("picker",std::string()):std::string();
+        if(state=="armed"){picker_armed_=true;send_picker_ready();}
+        else if(state=="login_required")event_({{"type","campus_picker_pending"},{"field",pending_picker_},{"auth_required",true}});
+        else{event_({{"type","campus_picker_failed"},{"field",pending_picker_}});pending_picker_.clear();}
     });
+}
+void CampusPortalHost::cancel_picker(){
+    if(pending_picker_.empty())return;
+    const auto field=pending_picker_;pending_picker_.clear();++picker_request_;picker_armed_=false;
+    if(view_)execute_engine(L";PulseCampusEngine.cancelPicker(document)",[](Json){});
+    event_({{"type","campus_picker_cancelled"},{"field",field}});
 }
 void CampusPortalHost::send_picker_ready(){event_({{"type","campus_picker_ready"},{"field",pending_picker_}});}
 void CampusPortalHost::fail(HRESULT hr,const char *operation){
     creating_=false;ready_=false;
+    if(!pending_picker_.empty()){event_({{"type","campus_picker_failed"},{"field",pending_picker_}});pending_picker_.clear();picker_armed_=false;++picker_request_;}
     const auto text=std::string("Campus portal ")+operation+" failed (HRESULT "+std::to_string(static_cast<unsigned long>(hr))+")";
     diagnostic_(text);event_({{"type","campus_error"},{"message",text}});
 }
@@ -113,7 +140,7 @@ void CampusPortalHost::initialize_webview(){
                         auto register_handler=[&](auto *cb,auto call){const auto rc=call(cb);cb->Release();if(FAILED(rc))throw std::runtime_error("Campus WebView2 handler registration failed");};
                         register_handler(new ComCallback<ICoreWebView2NavigationStartingEventHandler,ICoreWebView2*,ICoreWebView2NavigationStartingEventArgs*>(
                             [this,alive,creation_generation](auto*,auto*args){if(!*alive||lifecycle_!=creation_generation)return S_OK;LPWSTR uri{};args->get_Uri(&uri);if(!trusted_source(uri,allowed_origins_))args->put_Cancel(TRUE);
-                                else{++generation_;ready_=false;KillTimer(window_,scan_timer);}CoTaskMemFree(uri);return S_OK;}),
+                                else{++generation_;ready_=false;navigating_=true;picker_armed_=false;KillTimer(window_,scan_timer);}CoTaskMemFree(uri);return S_OK;}),
                             [&](auto*cb){return view_->add_NavigationStarting(cb,&token);});
                         register_handler(new ComCallback<ICoreWebView2NavigationStartingEventHandler,ICoreWebView2*,ICoreWebView2NavigationStartingEventArgs*>(
                             [this,alive,creation_generation](auto*,auto*args){if(!*alive||lifecycle_!=creation_generation)return S_OK;LPWSTR uri{};args->get_Uri(&uri);if(!trusted_source(uri,allowed_origins_))args->put_Cancel(TRUE);CoTaskMemFree(uri);return S_OK;}),
@@ -134,13 +161,15 @@ void CampusPortalHost::initialize_webview(){
                                     // Portal pages may only publish a manual candidate. Snapshots are
                                     // generated from the injected scanner and never accepted from page JS.
                                     if(message.value("type","")!="campus_candidate")throw std::runtime_error("Campus page message type rejected");
+                                    if(!picker_armed_||message.value("field",std::string())!=pending_picker_){CoTaskMemFree(raw);return S_OK;}
+                                    pending_picker_.clear();picker_armed_=false;++picker_request_;
                                     message["portal_origin"]=origin_;event_(std::move(message));
                                 }
                                 catch(const std::exception &e){event_({{"type","campus_error"},{"message",e.what()}});}CoTaskMemFree(raw);return S_OK;
                             }),[&](auto*cb){return view_->add_WebMessageReceived(cb,&token);});
                         register_handler(new ComCallback<ICoreWebView2NavigationCompletedEventHandler,ICoreWebView2*,ICoreWebView2NavigationCompletedEventArgs*>(
-                            [this,alive,creation_generation](auto*,auto*args){if(!*alive||lifecycle_!=creation_generation)return S_OK;BOOL ok{};args->get_IsSuccess(&ok);ready_=ok;
-                                if(ok){diagnostic_("Campus portal loaded");scan_round_=0;SetTimer(window_,scan_timer,800,nullptr);SetTimer(window_,refresh_timer,refresh_minutes_*60000,nullptr);WTSRegisterSessionNotification(window_,NOTIFY_FOR_THIS_SESSION);}
+                            [this,alive,creation_generation](auto*,auto*args){if(!*alive||lifecycle_!=creation_generation)return S_OK;BOOL ok{};args->get_IsSuccess(&ok);ready_=ok;navigating_=false;
+                                if(ok){diagnostic_("Campus portal loaded");scan_round_=0;SetTimer(window_,scan_timer,800,nullptr);SetTimer(window_,refresh_timer,refresh_minutes_*60000,nullptr);WTSRegisterSessionNotification(window_,NOTIFY_FOR_THIS_SESSION);arm_picker();}
                                 else fail(E_FAIL,"navigate");return S_OK;}),
                             [&](auto*cb){return view_->add_NavigationCompleted(cb,&token);});
                         register_handler(new ComCallback<ICoreWebView2ProcessFailedEventHandler,ICoreWebView2*,ICoreWebView2ProcessFailedEventArgs*>(
@@ -174,6 +203,7 @@ void CampusPortalHost::run_scan(){
         if(result.contains("error")){event_({{"type","campus_error"},{"message",result["error"]}});return;}
         if(campus_origin(result.value("portal_url",std::string()))!=origin_){event_({{"type","campus_rule_stale"}});return;}
         if(result.value("auth_required",false)){event_({{"type","campus_auth_required"}});return;}
+        arm_picker();
         event_({{"type","campus_candidates"},{"portal_origin",origin_},{"candidates",result.value("candidates",Json::object())},
                 {"ambiguous",result.value("candidates",Json::object())}});
         if(result.value("rule_valid",false)&&result.contains("snapshot")&&!result["snapshot"].is_null()){
@@ -195,7 +225,7 @@ LRESULT CampusPortalHost::message(HWND h,UINT m,WPARAM w,LPARAM l){
         if(w==scan_timer){if(ready_)run_scan();if(++scan_round_>=3)KillTimer(h,scan_timer);else SetTimer(h,scan_timer,2200,nullptr);return 0;}
         // A DOM rescan alone repeats cached server-rendered values indefinitely.
         // Navigate to the configured, query-free GET URL; never replay a login POST.
-        if(w==refresh_timer){if(!locked_&&!suspended_)synchronize();return 0;}
+        if(w==refresh_timer){if(!locked_&&!suspended_&&pending_picker_.empty())synchronize();return 0;}
     case WM_WTSSESSION_CHANGE:
         if(w==WTS_SESSION_LOCK){locked_=true;++generation_;KillTimer(h,scan_timer);KillTimer(h,refresh_timer);ready_=false;diagnostic_("Campus portal paused while locked");}
         else if(w==WTS_SESSION_UNLOCK){locked_=false;if(!suspended_){set_refresh(refresh_minutes_);synchronize();}}

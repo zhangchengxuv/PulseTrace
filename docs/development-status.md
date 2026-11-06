@@ -1,5 +1,12 @@
 # PulseTrace 开发状态
 
+## 校园网点选入口修复（2026-11-06，开发构建）
+
+- 定位 v0.6.0 点选入口：门户不存在时直接拒绝，加载期在显示窗口前检查 ready 并抛错；反馈在长列表底部，用户难以看到。现在自动打开已配置门户、恢复/置前窗口并移入 WebView 焦点，加载后再安装最新字段的点选请求，复用已登录页面且不重载。
+- 点选提示及错误显示在对应按钮下方；等待配置保存完成后再打开，避免读取旧地址。关闭门户取消点击拦截，登录表单不进入点选，选择期间定时刷新不打断操作。
+- Release/Debug 构建且相关 CTest 各 14/14 通过；最后增加配置保存等待后两配置相关 3/3 再次通过。真实 WebView2 本地门户覆盖初始化前请求、快速切换字段、隐藏/最小化/已关闭窗口恢复及不增加网页请求；前端覆盖邻近提示、原生就绪反馈、失败保存与失败点选。未访问真实学校账号，未修改用户数据库。
+- 本轮仅提交开发修复，不更改 v0.6.0 Tag、已发布安装包或用户当前安装。
+
 ## v0.6.0 已发布（2026-11-06）
 
 - 发布源码提交/Tag `v0.6.0` 指向 `059dfbb2540c77c47a81e11595bcefaaf773f860`（`build: prepare v0.6.0 release`）。[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.0) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.0) 均为正式版；GitHub 已核验为 latest stable。

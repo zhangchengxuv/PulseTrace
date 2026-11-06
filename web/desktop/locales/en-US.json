@@ -652,5 +652,9 @@
   "campus.billing_hint": "Enter only necessary parameters. GB = 10⁹ B; GiB = 2³⁰ B. Paid fees are never deducted again. Missing data prevents calculation.",
   "campus.syncing": "Synchronizing portal…",
   "campus.auth_required": "Sign-in required; last valid data retained",
-  "campus.background_hint": "Sync continues after confirmed sign-in, including when the portal is closed or the app is in the tray. Disable this switch or exit to stop. WebView2 manages the browser session; passwords, cookies and tokens are never written to app settings, SQLite or logs."
+  "campus.background_hint": "Sync continues after confirmed sign-in, including when the portal is closed or the app is in the tray. Disable this switch or exit to stop. WebView2 manages the browser session; passwords, cookies and tokens are never written to app settings, SQLite or logs.",
+  "campus.pick_opening": "Opening or restoring the portal; selection starts when the page loads…",
+  "campus.pick_failed": "Could not prepare selection. Check the portal connection and try again.",
+  "campus.pick_cancelled": "Selection cancelled; click the button again to reopen the portal.",
+  "campus.pick_login": "Finish signing in in the portal window. Selection resumes after navigation; you can also click this button again."
 }

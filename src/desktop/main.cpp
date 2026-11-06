@@ -276,7 +276,8 @@ void DesktopApplication::command(Json request) {
                 portal_->update_rule(core_->campus_portal_context().value("rule",Json(nullptr)));
                 portal_->rescan();
             }else{
-                if(!portal_)throw std::runtime_error("Open the campus portal first");
+                const auto context=core_->campus_portal_context();
+                if(!portal_||!portal_->matches_scope(context))open_campus();
                 portal_->pick(request["params"].at("field").get<std::string>());
             }
             web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"opened",true}}}});

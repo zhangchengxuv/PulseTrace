@@ -56,4 +56,7 @@ assert.equal(E.scan(loginDoc,{fields:nineFields}).snapshot,null,'expired authent
 const ambiguous=document([new Element('section','Balance ¥12.00',{id:'a'}),new Element('section','Balance ¥13.00',{id:'b'})]);context.document=ambiguous;const ambiguousResult=E.scan(ambiguous,null);assert.equal(ambiguousResult.candidates.balance.ambiguous,true);
 const login=document([new Element('form','Account Password Login',{id:'login'})]);context.document=login;assert.equal(Object.keys(E.scan(login,null).candidates).length,0);
 let picked=null;context.document=tableDoc;E.installPicker(tableDoc,'balance',event=>picked=event);const target=tableDoc.querySelector('#balance');tableDoc.listeners.click({preventDefault(){},stopPropagation(){},target});assert.equal(picked.field,'balance');assert.ok(picked.candidate&&picked.candidate.manual);
+E.installPicker(tableDoc,'balance',()=>{});E.cancelPicker(tableDoc);assert.equal(tableDoc.listeners.click,undefined,'closing the portal cancels click interception');
+assert.equal(E.installPicker(loginDoc,'balance',()=>{}).picker,'login_required','picker never intercepts login form clicks');
+assert.equal(loginDoc.listeners.click,undefined);
 console.log('Campus engine: units, three DOM structures, ambiguity, login-empty, manual selection, confirmation and stale-rule checks passed');

@@ -1,5 +1,5 @@
 'use strict';
-let campusData=null,campusCandidates={},campusEventStatus='',campusPickerField='',campusFieldState={},campusRenderHost=null,campusStateOrigin="";
+let campusData=null,campusCandidates={},campusEventStatus='',campusPickerField='',campusPickerMessage='',campusFieldState={},campusRenderHost=null,campusStateOrigin="";
 const GiB=1024**3,GB=1e9,MiB=1024**2;
 const campusFields=[
  ['balance','currency'],['free_quota_bytes','bytes'],['free_remaining_bytes','bytes'],['used_free_bytes','bytes'],
@@ -118,6 +118,7 @@ function campusCandidateSelect(field,current){
  select.onchange=()=>{if(select.value==='')return;const item=items[Number(select.value)];if(item?.value==null)return;campusFieldState[field]={mode:'selector',selector:item.selector,kind:campusFieldKind[field],unit:item.unit||'',confidence:Number(item.confidence||0)};};
  return select;
 }
+function campusPickerFeedback(){document.querySelectorAll('.campus-pick-feedback').forEach(node=>node.textContent=node.dataset.field===campusPickerField?campusPickerMessage:'');}
 function renderCampusSettings(host){
  campusRenderHost=host;host.classList.add('campus-settings');const cfg=state.config||{};
  if(campusStateOrigin!==campusData?.origin){campusFieldState=structuredClone(campusData?.rule?.fields||{});campusStateOrigin=campusData?.origin||'';}
@@ -144,8 +145,13 @@ function renderCampusSettings(host){
   rulesHost.replaceChildren();campusSuggest();const recognized=[];
   for(const [field]of campusFields){const current=campusFieldState[field]||campusData?.rule?.fields?.[field]||{mode:'disabled'},items=campusCandidates[field]||[];
    const selected=items.find(item=>item.selector===current.selector);if(selected)recognized.push(tr('campus.field.'+field)+': '+selected.raw);
-   const pick=el('button',{class:'secondary',onclick:async()=>{try{campusPickerField=field;await rpc('campus_pick_field',{field});feedback.textContent=tr('campus.pick_hint',{field:tr('campus.field.'+field)});}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.pick'));
-   rulesHost.append(el('div',{class:'campus-candidate-row'},el('strong',{},tr('campus.field.'+field)),campusCandidateSelect(field,current),pick));
+   const localStatus=el('small',{class:'campus-pick-feedback','data-field':field,role:'status'},field===campusPickerField?campusPickerMessage:'');
+   const pick=el('button',{class:'secondary',onclick:async()=>{
+    campusPickerField=field;campusPickerMessage=tr('campus.pick_opening');localStatus.textContent=campusPickerMessage;campusPickerFeedback();pick.disabled=true;
+    try{await saves;await rpc('campus_pick_field',{field});}catch(e){campusPickerMessage=String(e.message||e);localStatus.textContent=campusPickerMessage;feedback.textContent=campusPickerMessage;}
+    finally{pick.disabled=false;campusPickerFeedback();}
+   }},tr('campus.pick'));
+   rulesHost.append(el('div',{class:'campus-candidate-row'},el('strong',{},tr('campus.field.'+field)),campusCandidateSelect(field,current),pick,localStatus));
   }
   preview.textContent=recognized.length?tr('campus.review_hint')+' '+recognized.join(' · '):tr('campus.login_hint');
  };
@@ -174,8 +180,13 @@ const PulseCampus={
  renderLive(){document.querySelectorAll('.campus-live-target').forEach(node=>node.replaceChildren(campusLivePanel(false)));},
  ingest(event){
   if(!event||!event.type||event.portal_origin&&event.portal_origin!==campusData?.origin)return;campusEventStatus='';
+  if(['campus_picker_pending','campus_picker_ready','campus_picker_failed','campus_picker_cancelled'].includes(event.type)){
+   campusPickerField=event.field||campusPickerField;
+   campusPickerMessage=tr(event.type==='campus_picker_ready'?'campus.pick_hint':event.type==='campus_picker_failed'?'campus.pick_failed':event.type==='campus_picker_cancelled'?'campus.pick_cancelled':event.auth_required?'campus.pick_login':'campus.pick_opening',{field:tr('campus.field.'+campusPickerField)});
+   campusPickerFeedback();return;
+  }
   if(event.type==='campus_candidates'){campusCandidates={};for(const [field,items]of Object.entries(event.candidates||{}))if(campusFieldKind[field]&&Array.isArray(items))campusCandidates[field]=items;campusSuggest();if(!campusData?.rule)campusEventStatus='low_confidence';}
-  else if(event.type==='campus_candidate'&&event.field&&event.candidate){const items=campusCandidates[event.field]||[];items.unshift(event.candidate);campusCandidates[event.field]=items.slice(0,5);campusFieldState[event.field]={mode:'selector',selector:event.candidate.selector,kind:event.candidate.kind||campusFieldKind[event.field],unit:event.candidate.unit||'',confidence:Number(event.candidate.confidence||0)};campusEventStatus=tr('campus.manual_candidate');}
+  else if(event.type==='campus_candidate'&&event.field&&event.candidate){const items=campusCandidates[event.field]||[];items.unshift(event.candidate);campusCandidates[event.field]=items.slice(0,5);campusFieldState[event.field]={mode:'selector',selector:event.candidate.selector,kind:event.candidate.kind||campusFieldKind[event.field],unit:event.candidate.unit||'',confidence:Number(event.candidate.confidence||0)};campusEventStatus=tr('campus.manual_candidate');campusPickerMessage=campusEventStatus;}
   else if(event.type==='campus_syncing')campusEventStatus=tr('campus.syncing');
   else if(event.type==='campus_auth_required')campusEventStatus=tr('campus.auth_required');
   else if(event.type==='campus_rule_stale')campusEventStatus='stale';

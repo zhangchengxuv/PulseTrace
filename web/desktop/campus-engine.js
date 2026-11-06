@@ -127,7 +127,8 @@
       portal_url:location.origin+location.pathname,observed_at:Date.now()};
   }
   function installPicker(document,field,send){
-    const previous=root.__pulseCampusPicker;if(previous){document.removeEventListener('click',previous,true);}
+    cancelPicker(document);
+    if([...document.querySelectorAll('input[type="password"]')].some(visible))return {picker:'login_required',field};
     const handler=event=>{
       event.preventDefault();event.stopPropagation();document.removeEventListener('click',handler,true);root.__pulseCampusPicker=null;
       const element=event.target.closest?.('td,th,dd,dt,li,div,span,strong,b,p')||event.target;
@@ -137,5 +138,9 @@
     root.__pulseCampusPicker=handler;document.addEventListener('click',handler,true);
     return {picker:'armed',field};
   }
-  root.PulseCampusEngine={parseBytes,parseMoney,parseCycle,normalize,scan,installPicker,stableSelector};
+  function cancelPicker(document){
+    const previous=root.__pulseCampusPicker;if(previous)document.removeEventListener('click',previous,true);
+    root.__pulseCampusPicker=null;return {picker:'cancelled'};
+  }
+  root.PulseCampusEngine={parseBytes,parseMoney,parseCycle,normalize,scan,installPicker,cancelPicker,stableSelector};
 })(globalThis);

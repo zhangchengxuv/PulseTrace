@@ -23,11 +23,13 @@ class PortalServer{
   std::string url()const{return "http://127.0.0.1:"+std::to_string(port_)+"/usage";}
   void change_balance(){++revision_;}
   void reject_requests(bool value){reject_=value;}
+  unsigned requests()const{return requests_;}
  private:
   void serve(){
     while(!closed_){
       auto client=accept(listener_,nullptr,nullptr);if(client==INVALID_SOCKET)return;
       char request[4096]{};recv(client,request,sizeof(request)-1,0);
+      ++requests_;
       if(reject_){closesocket(client);continue;}
       std::string body=R"HTML(<!doctype html><html><head><meta charset="utf-8"><title>Campus mock</title></head><body>
 <h1>Usage Center</h1><table>
@@ -43,7 +45,7 @@ class PortalServer{
       send(client,response.data(),static_cast<int>(response.size()),0);closesocket(client);
     }
   }
-  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},reject_{};std::atomic<unsigned> revision_{};std::thread worker_;
+  SOCKET listener_{INVALID_SOCKET};unsigned short port_{};std::atomic<bool> closed_{},reject_{};std::atomic<unsigned> revision_{},requests_{};std::thread worker_;
 };
 }
 int wmain(){
@@ -51,13 +53,14 @@ int wmain(){
     CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     PortalServer server;const auto root=executable_data_directory()/("campus-portal-native-"+std::to_string(GetTickCount64()));
     std::filesystem::create_directories(root);
-    Json candidates=nullptr,snapshot=nullptr,manual=nullptr,error=nullptr;
+    Json candidates=nullptr,snapshot=nullptr,manual=nullptr,error=nullptr;unsigned picker_ready_count{};std::string ready_field;
     CampusPortalHost host(GetModuleHandleW(nullptr),root,executable_data_directory().parent_path(),
       [&](Json event){
         if(event.value("type","")=="campus_candidates")candidates=event["candidates"];
         else if(event.value("type","")=="campus_snapshot")snapshot=event["snapshot"];
         else if(event.value("type","")=="campus_candidate")manual=event;
         else if(event.value("type","")=="campus_error")error=event.value("message","");
+        else if(event.value("type","")=="campus_picker_ready"){++picker_ready_count;ready_field=event.value("field","");}
       },[&](std::string text){if(text.find("failed")!=std::string::npos)error=text;});
     Json rule={{"fields",{
       {"balance",{{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",1}}},
@@ -71,15 +74,18 @@ int wmain(){
     host.open(server.url(),5,rule,{campus_origin(server.url())},true);
     host.open(server.url(),5,rule,{campus_origin(server.url())},true);
     if(host.visible())throw std::runtime_error("Background portal opened a visible window");
+    // Click before WebView2 initialization completes. The portal must appear now,
+    // with the most recent field armed after loading, rather than throwing.
+    host.pick("used_free_bytes");host.pick("balance");
+    if(!host.visible())throw std::runtime_error("Early picker request did not show the portal");
     const auto deadline=GetTickCount64()+25000;MSG message{};
-    bool picker_started=false;
     while(GetTickCount64()<deadline&&(snapshot.is_null()||candidates.is_null()||manual.is_null())){
       while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}
       if(!error.is_null())throw std::runtime_error(error.get<std::string>());
-      if(!picker_started&&!candidates.is_null()){picker_started=true;host.pick("balance");}
       Sleep(20);
     }
     if(candidates.is_null()||snapshot.is_null()||manual.is_null())throw std::runtime_error("Campus portal WebView2 scan or manual picker timed out");
+    if(ready_field!="balance"||!picker_ready_count)throw std::runtime_error("Latest pending picker field did not become ready");
     if(snapshot.value("balance",0.0)!=27.5||snapshot.value("used_bytes",0.0)!=2.5*1024.0*1024.0*1024.0||snapshot.value("quota_bytes",0.0)!=10.0*1024.0*1024.0*1024.0)
       throw std::runtime_error("Campus portal parsed values mismatch");
     const auto pump_until=[&](auto done){const auto end=GetTickCount64()+10000;while(GetTickCount64()<end&&!done()){
@@ -96,6 +102,11 @@ int wmain(){
     if(host.matches_scope(disabled))throw std::runtime_error("Disabled monitoring retained authorization");
     HWND portal_window{};EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM target)->BOOL{wchar_t name[128]{};GetClassNameW(h,name,128);if(std::wstring(name)==L"PulseTrace.CampusPortal"){*reinterpret_cast<HWND*>(target)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&portal_window));
     if(!portal_window)throw std::runtime_error("Own portal test window not found");
+    const auto requests_before_pick=server.requests(),ready_before_pick=picker_ready_count;
+    ShowWindow(portal_window,SW_MINIMIZE);host.pick("balance");
+    if(!host.visible()||IsIconic(portal_window))throw std::runtime_error("Picker did not restore the minimized portal");
+    pump_until([&]{return picker_ready_count>ready_before_pick;});
+    if(server.requests()!=requests_before_pick)throw std::runtime_error("Picking reloaded the authenticated page");
     SendMessageW(portal_window,WM_CLOSE,0,0);snapshot=nullptr;server.change_balance();
     SendMessageW(portal_window,WM_TIMER,2,0);
     pump_until([&]{return !snapshot.is_null()&&snapshot.value("balance",0.0)==29.5;});
@@ -113,7 +124,9 @@ int wmain(){
     if(snapshot.value("balance",0.0)!=30.5)throw std::runtime_error("Failed query replaced valid data");
     server.reject_requests(false);server.change_balance();SendMessageW(portal_window,WM_TIMER,2,0);
     pump_until([&]{return snapshot.value("balance",0.0)==31.5;});
-    host.close();
+    host.close();const auto ready_before_reopen=picker_ready_count;host.pick("balance");
+    if(!host.visible())throw std::runtime_error("Picker did not recreate the closed portal");
+    pump_until([&]{return picker_ready_count>ready_before_reopen;});host.close();
     CoUninitialize();
     std::cout<<"Native campus WebView2 portal recognition passed; candidates="<<candidates.size()<<"\n";return 0;
   }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}
