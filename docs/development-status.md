@@ -1,5 +1,13 @@
 # PulseTrace 开发状态
 
+## v0.6.1 已发布（2026-11-06）
+
+- 发布源码提交/Tag `v0.6.1` 指向 `a271d79f1fae32c645973bba7a85727647ec5429`（`build: prepare v0.6.1 release`），包含校园网点选自动打开、窗口恢复、加载等待及邻近反馈修复。[GitHub Release](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.1) 与 [Gitee Release](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.1) 均为正式版，GitHub latest stable 已核验。
+- Release/Debug 实际构建且各 29/29 CTest 通过；安装向导、中英独立 AppId 安装/升级/卸载、旧布局迁移及便携包回归通过。便携清单 67 文件、800×600 DIP 原生自检及七种图标尺寸通过；未替换用户正式安装或数据库。
+- 两端五个附件名称、大小和 SHA-256 一致；GitHub 服务端 digest 核验，Gitee 逐个下载复核。两端分支、标签和发布源提交已读取核对；旧版附件及标签保留。
+- 安装包 SHA-256：`26b1b2212865e55b669672f05adf16a8d0e7d2073a4a979acdbc6f9daf36cfc5`；便携 ZIP：`557e646a26bfa6a84565341d8daf1e976a59b0c96afce50aa319e01ce9d2c785`。
+- 真实高校/学校官方接口、真实 OS 转换、长期后台资源及其他 DPI/刷新率仍待外部验收，已在中英发布说明记录；安装包未提供发行者代码签名，保持手动安装。发布凭据未写入项目文件或日志。
+
 ## 校园网点选入口修复（2026-11-06，开发构建）
 
 - 定位 v0.6.0 点选入口：门户不存在时直接拒绝，加载期在显示窗口前检查 ready 并抛错；反馈在长列表底部，用户难以看到。现在自动打开已配置门户、恢复/置前窗口并移入 WebView 焦点，加载后再安装最新字段的点选请求，复用已登录页面且不重载。
