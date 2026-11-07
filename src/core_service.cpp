@@ -431,11 +431,24 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             for(const auto &field:p["mapped_fields"])if(field.is_string()&&field.get<std::string>().size()<=32)mapped.push_back(field);
         }
         Json web_values=Json::object();for(const auto *key:campus_values)if(p.contains(key)&&!p[key].is_null())web_values[key]=p[key];
+        Json web_units=Json::object();
+        if(p.contains("source_units")){
+            const auto &units=p["source_units"];
+            if(!units.is_object()||units.size()>7)throw std::invalid_argument("Invalid campus source units");
+            for(const char *key:{"free_quota_bytes","free_remaining_bytes","used_free_bytes","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes"}){
+                if(!units.contains(key)||!web_values.contains(key))continue;
+                if(!units[key].is_string())throw std::invalid_argument("Invalid campus source unit");
+                const auto unit=units[key].get<std::string>();
+                if(unit!="B"&&unit!="KB"&&unit!="MB"&&unit!="GB"&&unit!="TB"&&unit!="KiB"&&unit!="MiB"&&unit!="GiB"&&unit!="TiB")
+                    throw std::invalid_argument("Invalid campus source unit");
+                web_units[key]=unit;
+            }
+        }
         Json snapshot={{"observed_ms",utc_now_ms()},{"portal_origin",origin},{"portal_url",url},
                        {"balance",p.value("balance",Json(nullptr))},{"used_bytes",p.value("used_bytes",Json(nullptr))},
                        {"remaining_bytes",p.value("remaining_bytes",Json(nullptr))},{"quota_bytes",p.value("quota_bytes",Json(nullptr))},
                        {"fee",p.value("fee",Json(nullptr))},{"cycle_text",cycle},{"quality",quality},{"confidence",confidence},
-                       {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"},{"web_values",web_values}}}};
+                       {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"},{"web_values",web_values},{"web_units",web_units}}}};
         database().save_campus_snapshot(snapshot);
         try{
             Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}

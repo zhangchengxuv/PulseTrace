@@ -8,6 +8,12 @@ const campusFields=[
 ];
 const campusFieldKind=Object.fromEntries(campusFields);
 function campusBytes(value){return value==null?'—':bytes(Number(value));}
+function campusPortalBytes(field,value,source){
+ const unit=source==='portal'?campusData?.latest?.details?.web_units?.[field]:null;
+ if(value==null||!['B','KB','MB','GB','TB','KiB','MiB','GiB','TiB'].includes(unit))return campusBytes(value);
+ return (Number(value)/campusUnitFactor(unit)).toLocaleString(PulseI18n.locale,{useGrouping:false,maximumFractionDigits:6})+' '+unit;
+}
+function campusConversion(value){return tr('campus.converted',{value:campusBytes(value)});}
 function campusMoney(value){return value==null?'—':'¥'+Number(value).toFixed(2);}
 function campusLatestText(){return campusData?.latest?.observed_ms?new Date(campusData.latest.observed_ms).toLocaleString(PulseI18n.locale):tr('campus.never_synced');}
 function campusQuality(){const runtime={campus_syncing:'campus.syncing',campus_auth_required:'campus.auth_required',campus_rule_stale:'campus.rule_stale',campus_error:'campus.sync_failed',snapshot_failed:'campus.sync_failed',snapshot_saved:'campus.confirmed',campus_candidates:'campus.needs_confirmation'};const s=campusEventStatus||(runtime[campusData?.runtime_status]?tr(runtime[campusData.runtime_status]):campusData?.latest?.quality)||'';if(s&&!['confirmed','auto_recognized','low_confidence','stale','unknown'].includes(s))return s;return s==='confirmed'?tr('campus.confirmed'):s==='auto_recognized'?tr('campus.auto_short'):s==='low_confidence'?tr('campus.needs_confirmation'):s==='stale'?tr('campus.rule_stale'):s==='unknown'?tr('campus.unknown'):tr('campus.never_synced');}
@@ -82,15 +88,16 @@ function campusLivePanel(compact=false){
  const host=el('div',{class:'campus-live-host'});
  host.append(el('div',{class:'campus-live'},
   el('div',{},el('small',{},tr('campus.balance')),el('strong',{},campusMoney(c.resolved.balance)),el('small',{},tr('campus.source.'+c.sources.balance))),
-  el('div',{},el('small',{},tr('campus.used')),el('strong',{},campusBytes(c.resolved.used_bytes)),el('small',{},tr('campus.source.'+c.sources.used_bytes))),
-  el('div',{},el('small',{},tr('campus.free_remaining')),el('strong',{},c.freeRemaining==null?tr('campus.unavailable'):campusBytes(c.freeRemaining)),el('small',{},tr('campus.source.'+c.freeRemainingSource))),
+  el('div',{},el('small',{},tr('campus.used')),el('strong',{},campusPortalBytes('used_bytes',c.resolved.used_bytes,c.sources.used_bytes)),el('small',{},tr('campus.source.'+c.sources.used_bytes)),c.sources.used_bytes==='portal'&&c.resolved.used_bytes!=null?el('small',{},campusConversion(c.resolved.used_bytes)):null),
+  el('div',{},el('small',{},tr('campus.free_remaining')),el('strong',{},c.freeRemaining==null?tr('campus.unavailable'):campusPortalBytes('free_remaining_bytes',c.freeRemaining,c.freeRemainingSource)),el('small',{},tr('campus.source.'+c.freeRemainingSource))),
   el('div',{},el('small',{},tr('campus.funded_bytes')),el('strong',{},c.funded==null?tr('campus.unavailable'):campusBytes(c.funded)),el('small',{},c.funded!=null?tr('campus.calculated'):tr('campus.unavailable'))),
   el('div',{},el('small',{},tr('campus.total_available')),el('strong',{},c.total==null?tr('campus.unavailable'):campusBytes(c.total)),el('small',{},c.total!=null?tr('campus.calculated'):tr('campus.unavailable')))));
  if(!compact){
   host.append(el('div',{class:'campus-quality'},el('span',{class:'quality-badge'},campusQuality()),el('span',{},tr('campus.last_sync')+' '+campusLatestText()),el('span',{},tr('campus.data_source')+' '+(campusData?.latest?.portal_url||'—')),
    el('span',{},tr('campus.portal_fee')+' '+(c.resolved.fee==null?'—':campusMoney(c.resolved.fee))+' · '+tr('campus.source.'+c.sources.fee)),
    el('span',{},tr('campus.estimated_fee')+' '+(c.estimated==null?'—':campusMoney(c.estimated))),
-   el('span',{},tr('campus.paid_used')+' '+campusBytes(c.resolved.paid_used_bytes)+' · '+tr('campus.source.'+c.sources.paid_used_bytes))));
+   el('span',{},tr('campus.paid_used')+' '+campusPortalBytes('paid_used_bytes',c.resolved.paid_used_bytes,c.sources.paid_used_bytes)+' · '+tr('campus.source.'+c.sources.paid_used_bytes))));
+  host.append(el('p',{class:'muted campus-unit-note'},tr('campus.units_hint')));
   if(c.progress!=null)host.append(el('div',{class:'campus-progress','aria-label':tr('campus.progress')},el('i',{style:`width:${c.progress*100}%`}),el('span',{},(c.progress*100).toFixed(1)+'%')));
   else host.append(el('small',{class:'muted'},tr('campus.progress_unknown')));
   if(c.errors.length)host.append(el('p',{class:'capture-error'},c.errors.map(e=>tr('campus.field.'+e.field)+': '+e.message).join('; ')));
@@ -121,12 +128,13 @@ function campusOverviewModel(){
  const segments=['used','free','funded'].filter(key=>values[key]!=null&&values[key]>0).map(key=>({key,value:values[key]}));
  const sum=segments.reduce((sum,item)=>sum+item.value,0);
  if(!Number.isFinite(sum))segments.length=0;
- return {values,status,percent,segments,sum,freeSource:raw('free_remaining_bytes')?c.sources.free_remaining_bytes:'calculated',balanceSource:c.sources.balance,
+ return {values,status,percent,segments,sum,usedSource:c.sources.used_bytes,units:campusData?.latest?.details?.web_units||{},freeSource:raw('free_remaining_bytes')?c.sources.free_remaining_bytes:'calculated',balanceSource:c.sources.balance,
   syncing:runtime==='campus_syncing',observed:campusData?.latest?.observed_ms||null,
   source:campusData?.latest?.portal_url||campusData?.portal_url||cfg.campus_portal_url||''};
 }
 function campusOverviewContent(host,m){
- const value=(key,money=false)=>m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):campusBytes(m.values[key]);
+ const value=(key,money=false)=>m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):
+  key==='used'?campusPortalBytes('used_bytes',m.values[key],m.usedSource):key==='free'?campusPortalBytes('free_remaining_bytes',m.values[key],m.freeSource):campusBytes(m.values[key]);
  const statusKey={disabled:'campus.card.disabled',auth:'campus.auth_required',error:'campus.sync_failed',stale:'campus.rule_stale',empty:'campus.card.empty',partial:'campus.card.partial',ready:'campus.card.ready'}[m.status];
  const header=el('header',{class:'campus-overview-header'},el('div',{class:'campus-overview-heading'},metricIcon('network'),el('h3',{},tr('campus.title')),
   el('span',{class:'campus-sync-state',role:'status'},tr(m.syncing&&m.status!=='disabled'?'campus.syncing':statusKey))),
@@ -153,9 +161,9 @@ function campusOverviewContent(host,m){
  }
  chart.append(track,el('p',{class:'campus-chart-caption'},tr(['used','free','funded'].some(key=>m.values[key]!=null)?'campus.card.known_mix':'campus.progress_unknown')),
   el('div',{class:'campus-legend'},...Object.entries(legendNames).map(([key,label])=>el('div',{'data-campus-part':key},
-   el('span',{},el('i',{class:'campus-swatch campus-tone-'+key,'aria-hidden':'true'}),tr(label)),el('strong',{},value(key))))),
+   el('span',{},el('i',{class:'campus-swatch campus-tone-'+key,'aria-hidden':'true'}),tr(label)),el('div',{},el('strong',{},value(key)),key==='used'&&m.values[key]!=null?el('small',{class:'campus-conversion'},campusConversion(m.values[key])):null)))),
   el('div',{class:'campus-available-total'},el('span',{},tr('campus.total_available')),el('strong',{},value('total'))),
-  el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')));
+  el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')),el('small',{class:'campus-total-basis'},tr('campus.units_hint')));
  host.append(el('div',{class:'campus-overview-body'},metrics,chart));
  if(['auth','error','stale'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(Object.values(m.values).some(v=>v!=null)?'campus.card.retained':'campus.card.empty_hint')));
  else if(m.status==='empty'||m.status==='partial')host.append(el('p',{class:'campus-overview-notice'},tr(m.status==='empty'?'campus.card.empty_hint':'campus.card.partial_hint')));

@@ -734,5 +734,7 @@
   "campus.card.free_percent": "Free allowance used: {percent}%",
   "campus.card.total_basis": "Available = free remaining + estimated paid data",
   "campus.card.retained": "Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference.",
-  "settings.invalid": "Check the retention period and save interval."
+  "settings.invalid": "Check the retention period and save interval.",
+  "campus.converted": "Converted: ≈ {value}",
+  "campus.units_hint": "Portal readings keep their source units; calculations use bytes. MB = 10⁶ B, GB = 10⁹ B; MiB = 2²⁰ B, GiB = 2³⁰ B."
 }

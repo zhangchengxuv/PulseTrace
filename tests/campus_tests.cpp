@@ -85,11 +85,17 @@ void core(const std::filesystem::path &root){
     check(status["rule"]["fields"]["free_quota_bytes"]["mode"]=="manual"&&status["rule"]["fields"]["free_remaining_bytes"]["mode"]=="formula","manual and formula mappings persisted");
     const auto saved=snapshot_rpc(service,{{"portal_url","https://campus.example/usage"},{"balance",8.5},
         {"used_bytes",1073741824},{"free_quota_bytes",10737418240},{"remaining_bytes",5368709120},{"quota_bytes",6442450944},{"fee",2.0},
-        {"cycle_text","2026-11"},{"quality","confirmed"},{"confidence",1.0},{"mapped_fields",Json::array({"balance","used_bytes"})}});
+        {"cycle_text","2026-11"},{"quality","confirmed"},{"confidence",1.0},{"source_units",{{"used_bytes","MB"},{"balance","password"}}},{"mapped_fields",Json::array({"balance","used_bytes"})}});
     check(saved["saved"]==true,"internal confirmed snapshot save");
     status=rpc(service,"get_campus_status");
     check(status["latest"]["used_bytes"]==1073741824&&status["latest"]["balance"]==8.5,"campus snapshot available through bridge");
     check(status["latest"]["details"]["web_values"]["free_quota_bytes"]==10737418240,"additional portal fields persist in structured snapshot details");
+    check(status["latest"]["details"]["web_units"]["used_bytes"]=="MB","portal display unit persists through SQLite and bridge");
+    check(!status["latest"]["details"]["web_units"].contains("balance"),"non-byte metadata is never stored as a source unit");
+    auto invalid_source_unit=saved["snapshot"];invalid_source_unit["source_units"]={{"used_bytes","invalid"}};
+    bool unit_rejected=false;try{snapshot_rpc(service,invalid_source_unit);}catch(...){unit_rejected=true;}
+    check(unit_rejected,"invalid portal source unit rejected");
+    check(rpc(service,"get_campus_status")["latest"]==status["latest"],"invalid metadata preserves the last valid snapshot");
     auto extended=saved["snapshot"];extended["mapped_fields"]=Json::array({"balance","free_quota_bytes","free_remaining_bytes","used_free_bytes","spendable_balance","paid_used_bytes","used_bytes","remaining_bytes","quota_bytes","fee","billing_cycle"});
     check(snapshot_rpc(service,extended)["saved"]==true,"all eleven mapped fields can synchronize");
     check(status["rule"]["last_status"]=="confirmed"&&status["rule"]["last_sync_ms"].get<std::int64_t>()>0,"per-portal latest recognition state persisted");

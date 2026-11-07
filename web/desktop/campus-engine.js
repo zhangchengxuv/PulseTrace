@@ -61,7 +61,7 @@
   function parsedField(field,text){
     const kind=kindFor(field),parsed=parseKind(kind,text);
     if(!parsed)return null;
-    return {field,kind,value:parsed.value,unit:parsed.unit};
+    return {field,kind,value:parsed.value,unit:parsed.unit,...(parsed.display_unit?{display_unit:parsed.display_unit}:{})};
   }
   function candidate(field,text,element,selector,base){
     const parsed=parsedField(field,text);if(!parsed)return null;
@@ -138,16 +138,17 @@
     for(const [field,items]of Object.entries(fields))fields[field].ambiguous=items.some(item=>item.value!==items[0].value&&items[0].confidence-item.confidence<.12);
     const mappings=Object.fromEntries(Object.entries(rule?.fields||{}).filter(([,mapping])=>
       mapping&&(mapping.mode==='auto'||mapping.mode==='selector'||(!mapping.mode&&mapping.selector))));
-    const values={},missing=[],mapped=[];
+    const values={},source_units={},missing=[],mapped=[];
     for(const [field,mapping]of Object.entries(mappings)){
       let element=null;try{element=document.querySelector(mapping.selector);}catch{missing.push(field);continue;}
       if(!element||!visible(element)){missing.push(field);continue;}
       const parsed=parseKind(mapping.kind,normalize(element.textContent));if(!parsed){missing.push(field);continue;}
       values[field]=parsed.value;mapped.push(field);
+      if(parsed.display_unit)source_units[field]=parsed.display_unit;
     }
     const enough=!missing.length&&mapped.length>=1;
     return {candidates:fields,rule_valid:enough,missing,values,
-      snapshot:enough?{...values,cycle_text:String(values.billing_cycle||''),mapped_fields:mapped,quality:'confirmed',confidence:Math.min(1,mapped.length/6)}:null,
+      snapshot:enough?{...values,source_units,cycle_text:String(values.billing_cycle||''),mapped_fields:mapped,quality:'confirmed',confidence:Math.min(1,mapped.length/6)}:null,
       portal_url:location.origin+location.pathname,observed_at:Date.now()};
   }
   function installPicker(document,field,send){

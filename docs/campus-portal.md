@@ -2,7 +2,7 @@
 
 ## 使用
 
-在“设置 → 监测 → 校园网”的基础设置中启用并填写门户 URL，修改自动保存并反馈结果。点击“打开门户并识别”，在独立 WebView2 窗口完成学校登录。页面加载后依次执行有限次数分析，复杂 SPA 可在高级设置中点击“重新识别”。登录重定向域名也在高级设置中，每行一个。
+在“设置 → 校园网”的基础设置中启用并填写门户 URL，修改自动保存并反馈结果。点击“打开门户并识别”，在独立 WebView2 窗口完成学校登录。页面加载后依次执行有限次数分析，复杂 SPA 可在高级设置中点击“重新识别”。登录重定向域名也在高级设置中，每行一个。
 
 自动结果预填在概览下方，只在设置页预览，点击“确认识别结果”后才能形成规则。低置信度、冲突字段或页面改版不会覆盖已有规则。无法可靠识别时，展开默认折叠的高级设置，选择候选或点击“点击网页选择”，再回到门户页面点选对应值。调整计费参数不会隐式确认网页候选。
 
@@ -21,6 +21,10 @@
 卡片根据容器宽度调整左右/上下布局，沿用 Deep Ocean、Pearl Mist 和双语资源。数据变化只更新必要卡片内容，外层节点保持不变，数据未变时不更新 DOM；不新增轮询或图表实例。
 
 ## 识别与单位
+
+门户读取的流量值保留页面原单位，已用流量同时注明换算值，设置概览与 Dashboard/Network 使用相同口径。MB = 10⁶ B、GB = 10⁹ B；MiB = 2²⁰ B、GiB = 2³⁰ B，因此相同字节数用 MB 和 GiB 表达时数字不同。计算仍统一使用字节。原单位仅保存已识别的单位标记，不保存整段页面文字；旧快照保持原值，后续成功同步时补齐单位信息。如果学校实际以“MB”表示 MiB，需先取得其计量说明，不能据页面标签擅自改换算倍率。
+
+Portal readings retain their source units, with a conversion note for used data. MB/GB use decimal factors and MiB/GiB use binary factors; internal calculations use bytes. Older snapshots remain compatible and gain unit metadata on the next successful sync. A school's nonstandard use of MB for MiB requires confirmation of its billing convention.
 
 识别器分析可见文本、标签、表格、相邻 DOM 和 aria/class/id 提示，支持余额、已用、剩余、额度、费用和计费周期的中英文关键词。名称和数值分列时，也会检查同一视觉行右侧的临近可见数值，作为较低置信度候选供用户确认；确认后保存数值元素的选择器，后续无需重新推断布局。含义不明确的“流量”不会直接映射为已用或剩余流量。字节使用 B、KB、MB、GB、TB 与 KiB、MiB、GiB、TiB；金额使用元/¥/RMB/CNY。每个字段包含置信度，重复且接近的候选会标记为歧义。
 

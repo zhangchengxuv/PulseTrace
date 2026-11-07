@@ -24,6 +24,9 @@ assert.equal(E.parseMoney('-12.00'),null);
 assert.equal(E.parseMoney('12 GB'),null);
 assert.equal(E.parseBytes('1.5 GiB').value,1.5*1024**3);
 assert.equal(E.parseBytes('2048 KB').value,2048000);
+assert.equal(E.parseBytes('12345.67 MB').value,12345670000);
+assert.equal(E.parseBytes('12345.67 MB').display_unit,'MB');
+assert.equal(E.parseBytes('12345.67 MiB').value,12345.67*1024**2);
 assert.equal(E.parseMoney('余额 ¥ 12.30 元').value,12.3);
 assert.equal(E.parseCycle('2026-11-01 至 2026-11-30').unit,'text');
 function cell(tag,text,id){return new Element(tag,text,{id});}
@@ -43,6 +46,13 @@ const ruleResult=E.scan(tableDoc,{fields:{balance:{mode:'auto',selector:'#balanc
 assert.ok(ruleResult.rule_valid,JSON.stringify({missing:ruleResult.missing,values:ruleResult.values}));
 assert.equal(ruleResult.snapshot.free_remaining_bytes,undefined,'manual fields are not overwritten by page scan');
 assert.equal(ruleResult.snapshot.paid_used_bytes,undefined,'formula fields are not overwritten by page scan');
+assert.equal(ruleResult.snapshot.source_units.used_bytes,'GiB','source unit survives confirmed reads');
+assert.equal(ruleResult.candidates.used_bytes[0].display_unit,'GiB','recognition retains the unit');
+const decimalDoc=document([row('Used data','12345.67 MB','decimal-used')]);
+context.document=decimalDoc;
+const decimalRead=E.scan(decimalDoc,{fields:{used_bytes:{mode:'selector',selector:'#decimal-used',kind:'bytes'}}});
+assert.equal(decimalRead.snapshot.used_bytes,12345670000);
+assert.equal(decimalRead.snapshot.source_units.used_bytes,'MB');
 const cards=document([new Element('section','',{},[new Element('strong','Balance',{id:'b1'}),new Element('b','$42.10')]),new Element('section','',{},[new Element('strong','Data remaining',{id:'r1'}),new Element('b','512 MB')])]);
 context.document=cards;const cardResult=E.scan(cards,null);assert.equal(cardResult.candidates.balance[0].value,42.1);assert.equal(cardResult.candidates.remaining_bytes[0].value,512*1e6);
 const dl=document([new Element('dl','',{},[new Element('dt','Usage'),new Element('dd','1.2 GB')]),new Element('dl','',{},[new Element('dt','Quota'),new Element('dd','10 GB')])]);

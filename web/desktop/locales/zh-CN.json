@@ -734,5 +734,7 @@
   "campus.card.free_percent": "免费额度已用 {percent}%",
   "campus.card.total_basis": "总可用 = 免费剩余 + 估算付费可用",
   "campus.card.retained": "当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。",
-  "settings.invalid": "请检查数据保留天数和保存间隔。"
+  "settings.invalid": "请检查数据保留天数和保存间隔。",
+  "campus.converted": "换算后：约 {value}",
+  "campus.units_hint": "门户读取值保留原单位，计算统一使用字节。MB = 10⁶ B、GB = 10⁹ B；MiB = 2²⁰ B、GiB = 2³⁰ B。"
 }

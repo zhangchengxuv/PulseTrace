@@ -48,6 +48,7 @@ async function validateCampusOverview(){
   for(const scenario of ['disabled','empty','partial','full','auth','error']){
    state.config={...saved.config,campus_enabled:scenario!=='disabled',campus_unit_price:scenario==='partial'?0:.5,campus_price_unit:'GiB'};
    campusData={origin:'https://campus.example',portal_url:'https://campus.example/usage',rule:{fields},latest:scenario==='empty'?null:{observed_ms:1794017725000,details:{web_values:scenario==='partial'?{balance:10}:{balance:10,used_bytes:20*GiB,free_quota_bytes:100*GiB,used_free_bytes:20*GiB,free_remaining_bytes:80*GiB}}}};
+   if(scenario==='full')campusData.latest.details.web_units={used_bytes:'MB',free_remaining_bytes:'GiB'};
    campusLastEventType=scenario==='auth'?'campus_auth_required':scenario==='error'?'campus_error':'';
    PulseCampus.renderLive();await tick();
    if(document.querySelector('.campus-overview')!==host||content.firstChild!==first)throw Error('Campus refresh replaced the page or outer card');
@@ -56,6 +57,7 @@ async function validateCampusOverview(){
    const metrics=host.querySelectorAll('[data-campus-value]');
    if(scenario==='disabled'&&metrics.length||scenario!=='disabled'&&metrics.length!==3)throw Error('Campus metric layout mismatch');
    if(scenario==='full'){
+    if(host.querySelector('[data-campus-part="used"] strong').textContent!=='21474.83648 MB'||!host.querySelector('.campus-conversion'))throw Error('Portal units or conversion label missing');
     const model=campusOverviewModel();if(model.values.total!==100*GiB||model.values.funded!==20*GiB||host.querySelectorAll('.campus-segment').length!==3)throw Error('Campus components or total mismatch');
     if(!host.textContent.includes(tr('campus.card.funded')))throw Error('Campus estimate label missing');
     const track=host.querySelector('.campus-segment-track');

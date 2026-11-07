@@ -2,6 +2,7 @@
 .campus-live>div{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
 .campus-live small{display:block;color:var(--muted);margin-bottom:5px}
 .campus-live strong,.campus-card-values strong{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.campus-live strong{overflow-wrap:anywhere}.campus-conversion{display:block;color:var(--muted);font-size:11px}.campus-unit-note{font-size:12px}
 .campus-quality{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0;color:var(--muted);font-size:.85rem}
 .campus-progress{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
 .campus-progress:before{content:'';grid-column:1;grid-row:1;height:7px;border-radius:999px;background:var(--surface-2)}
