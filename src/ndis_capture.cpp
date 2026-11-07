@@ -29,7 +29,7 @@ struct NdisCapture::Impl {
     TRACEHANDLE session{}, consumer{INVALID_PROCESSTRACE_HANDLE};
     GUID provider{};
     unsigned index{};
-    std::uint64_t luid{}, generation{}, last_tick{};
+    std::uint64_t luid{}, generation{}, last_tick{}, last_attempt{};
     std::array<std::uint8_t, 6> mac{};
     std::array<Bin, 120> bins{};
     std::map<std::pair<std::int64_t, std::uint64_t>, Json> archived;
@@ -175,6 +175,7 @@ struct NdisCapture::Impl {
         last_tick = 0;
     }
     void start() {
+        last_attempt = GetTickCount64();
         buffer = {};
         auto &p = buffer.p;
         p.Wnode.BufferSize = sizeof(buffer);
@@ -237,15 +238,21 @@ NdisCapture::~NdisCapture() { p_->stop(); }
 void NdisCapture::configure(bool enabled, unsigned index, std::uint64_t luid,
                             const std::array<std::uint8_t, 6> &mac) {
     auto &p = *p_;
+    if (p.active && p.consumer_done.load()) {
+        p.error = "ETW consumer stopped: " + std::to_string(p.processing.load());
+        p.stop();
+    }
     if (p.active && (!enabled || p.index != index || p.luid != luid || p.mac != mac))
         p.stop();
     if (!enabled || !index) {
         p.index = 0;
+        p.last_attempt = 0;
         return;
     }
     if (p.active)
         return;
-    if (p.index == index && p.luid == luid && !p.error.empty())
+    if (p.index == index && p.luid == luid && p.last_attempt &&
+        GetTickCount64() - p.last_attempt < 30000)
         return;
     p.index = index;
     p.luid = luid;
@@ -317,7 +324,7 @@ Json NdisCapture::snapshot(std::int64_t minute, Json &rows) {
     const auto tick = GetTickCount64();
     Json rates = Json::array();
     for (unsigned i = 0; i < 4; i++) {
-        rates.push_back(p.active && p.last_tick && lifetime[i] >= p.previous[i]
+        rates.push_back(p.active && !p.consumer_done.load() && p.error.empty() && p.last_tick && lifetime[i] >= p.previous[i]
                             ? Json(double(lifetime[i] - p.previous[i]) * 1000 /
                                    double(std::max<std::uint64_t>(1, tick - p.last_tick)))
                             : Json(nullptr));

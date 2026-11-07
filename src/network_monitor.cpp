@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "pulsetrace/network_monitor.hpp"
+#include "pulsetrace/network_selection.hpp"
 #include <iphlpapi.h>
 #include <memory>
 #include <netioapi.h>
@@ -72,16 +73,34 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
             ((static_cast<std::uint64_t>(wall.dwHighDateTime) << 32) | wall.dwLowDateTime) / 10000) -
         11644473600000LL;
     Json interfaces = Json::array();
-    std::string chosen = selected;
-    if (chosen.empty())
-        for (ULONG i = 0; i < raw->NumEntries; ++i) {
-            auto &r = raw->Table[i];
-            if (r.OperStatus == IfOperStatusUp && r.InterfaceAndOperStatusFlags.HardwareInterface &&
-                r.Type != IF_TYPE_SOFTWARE_LOOPBACK) {
-                chosen = std::to_string(r.InterfaceLuid.Value);
-                break;
-            }
+    std::map<std::uint64_t, std::uint64_t> route_costs;
+    MIB_IPFORWARD_TABLE2 *route_table{};
+    if (selected.empty() && GetIpForwardTable2(AF_UNSPEC, &route_table) == NO_ERROR) {
+        std::unique_ptr<MIB_IPFORWARD_TABLE2, decltype(&FreeMibTable)> routes(route_table, FreeMibTable);
+        for (ULONG i = 0; i < routes->NumEntries; ++i) {
+            const auto &route = routes->Table[i];
+            if (route.DestinationPrefix.PrefixLength || !route.ValidLifetime || route.Loopback) continue;
+            MIB_IPINTERFACE_ROW ip{};
+            InitializeIpInterfaceEntry(&ip);
+            ip.Family = route.DestinationPrefix.Prefix.si_family;
+            ip.InterfaceLuid = route.InterfaceLuid;
+            if (GetIpInterfaceEntry(&ip) != NO_ERROR || !ip.Connected || ip.DisableDefaultRoutes) continue;
+            const auto cost = std::uint64_t(route.Metric) + ip.Metric;
+            auto [entry, inserted] = route_costs.emplace(route.InterfaceLuid.Value, cost);
+            if (!inserted) entry->second = std::min(entry->second, cost);
         }
+    }
+    std::vector<NetworkCandidate> candidates;
+    for (ULONG i = 0; i < raw->NumEntries; ++i) {
+        const auto &r = raw->Table[i];
+        if (r.Type == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        const auto route = route_costs.find(r.InterfaceLuid.Value);
+        candidates.push_back({std::to_string(r.InterfaceLuid.Value), r.OperStatus == IfOperStatusUp,
+                              bool(r.InterfaceAndOperStatusFlags.HardwareInterface),
+                              route == route_costs.end() ? std::numeric_limits<std::uint64_t>::max()
+                                                        : route->second});
+    }
+    const auto chosen = select_network_interface(candidates, selected, last_selected_);
     double in_rate = 0, out_rate = 0;
     const MIB_IF_ROW2 *physical_selected = nullptr;
     for (ULONG i = 0; i < raw->NumEntries; ++i) {
