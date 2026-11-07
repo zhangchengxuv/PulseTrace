@@ -13,7 +13,7 @@
 - **校园网**：可选通用门户监控，独立 WebView2 登录、DOM 字段识别与确认、余额/额度/周期快照；默认关闭。
 - **页面精简**：网络页移除应用流量排行及其刷新请求，保留原历史；键位使用排名默认收起，展开状态随刷新保留。
 - **云备份**：分类设置导航，坚果云 HTTPS WebDAV、DPAPI 凭据保存、强制加密归档及确认恢复。[云备份说明与验证范围](docs/cloud-backup.md)。
-- **实时网速**：在总览和网络页显示；开发分支已移除任务栏网速组件，保留托盘后台运行。
+- **实时网速**：在总览和网络页显示；已移除任务栏网速组件，保留托盘后台运行。
 - **历史与设置**：默认全部数据、分钟/小时/天及自定义范围，SQLite、月度归档、备份与导出；中英双语、Deep Ocean / Pearl Mist、托盘后台及双源更新检查。
 
 首次启动默认暂停，不记录输入文本、窗口标题或鼠标轨迹。活跃时长使用空闲阈值；IPv4/IPv6 与排行受权限、采样及质量限制，不代表全系统流量或校园网计费。校园网监控默认关闭，无法确认的门户字段保持未知。未签名更新包只支持校验后手动安装。[统计边界](docs/traffic-rankings.md) · [应用使用说明](docs/app-usage.md) · [校园网说明](docs/campus-portal.md)
@@ -53,14 +53,14 @@ main `b3a2cbf` 的历史 x64 Release 构建截图；独立空数据目录、暂�
 
 ## 下载安装
 
-[GitHub v0.7.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.0) · [Gitee v0.7.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.0)
+[GitHub v0.7.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.1) · [Gitee v0.7.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.1)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-版本 **v0.7.0** 新增加密 WebDAV 备份、八类设置导航、校园网概览卡片及紧凑任务栏排版，精简网络/键盘页面并包含全部校园网点选修复。保留既有数据和配置；真实坚果云与长期运行等外部验收范围见[发布说明](docs/releases/v0.7.0.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+版本 **v0.7.1** 修复 IPv4/IPv6 自动选卡与采集恢复，移除任务栏网速及设置，保留托盘后台、校园网和加密 WebDAV。升级保留数据和配置；验证范围见[发布说明](docs/releases/v0.7.1.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
