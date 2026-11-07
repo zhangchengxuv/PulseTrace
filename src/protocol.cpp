@@ -86,7 +86,7 @@ void validate_request(const Json &r) {
     } else if (type == "selftest_snapshot") {
         allowed={"phase","metrics"};
         const auto phase=p.value("phase",std::string());
-        if(phase!="top"&&phase!="scrolled"&&phase!="opaque"&&phase!="calendar-en"&&phase!="calendar-zh"&&phase!="navigation"&&phase!="campus-empty"&&phase!="campus-partial"&&phase!="campus-full")throw std::invalid_argument("Invalid selftest phase");
+        if(phase!="top"&&phase!="scrolled"&&phase!="opaque"&&phase!="calendar-en"&&phase!="calendar-zh"&&phase!="navigation"&&phase!="campus-empty"&&phase!="campus-partial"&&phase!="campus-full"&&phase!="settings-general"&&phase!="settings-taskbar"&&phase!="settings-campus"&&phase!="settings-cloud")throw std::invalid_argument("Invalid selftest phase");
         if(p.contains("metrics")){
             const std::set<std::string> keys={"frames","mean_ms","p95_ms","fps","scroll_px","toolbar_top","blur_enabled","opacity_fallback","navigation_count","cached_count","empty_frames","dom_mean_ms","dom_p95_ms"};
             if(!p["metrics"].is_object()||p["metrics"].size()>keys.size())throw std::invalid_argument("Invalid selftest metrics");
@@ -133,7 +133,15 @@ void validate_request(const Json &r) {
         if (p.contains("bucket") && (!p["bucket"].is_number_integer() ||
                                      (p["bucket"] != 1 && p["bucket"] != 60 && p["bucket"] != 1440)))
             throw std::invalid_argument("Invalid aggregation bucket");
-    } else if (type == "set_config")
+    } else if(type=="cloud_status"||type=="cloud_test"||type=="cloud_backup"||type=="cloud_list"||type=="cloud_cancel"||type=="cloud_cancel_restore"||type=="cloud_snapshot")allowed={};
+    else if(type=="cloud_configure"){
+        allowed={"enabled","server","directory","automatic","interval_minutes","account","app_password","encryption_password"};
+        for(const auto *key:{"server","directory","account","app_password","encryption_password"})if(p.contains(key)&&(!p[key].is_string()||p[key].get<std::string>().size()>2048))throw std::invalid_argument("Invalid cloud settings");
+    }else if(type=="cloud_prepare_restore"){
+        allowed={"name"};if(!p.contains("name")||!p["name"].is_string()||p["name"].get<std::string>().size()>160)throw std::invalid_argument("Invalid backup name");
+    }else if(type=="cloud_confirm_restore"){
+        allowed={"token","confirmation"};if(!p.contains("token")||!p["token"].is_string()||p["token"].get<std::string>().size()!=32||p.value("confirmation",std::string())!="RESTORE")throw std::invalid_argument("Explicit restore confirmation required");
+    }else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
                    "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days","campus_enabled","campus_portal_url","campus_allowed_origins","campus_refresh_minutes","campus_unit_price","campus_price_unit"};
     else if (type == "clear_data")

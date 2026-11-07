@@ -7,6 +7,8 @@
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
 #include "pulsetrace/update.hpp"
+#include "pulsetrace/cloud_backup.hpp"
+#include <future>
 #include "pulsetrace/installation.hpp"
 #include "pulsetrace/localization.hpp"
 #include "resource.h"
@@ -35,6 +37,7 @@ class DesktopApplication {
     ~DesktopApplication() {
         if (exit_thread_.joinable())
             exit_thread_.join();
+        if(cloud_)cloud_->stop();
         if (core_)
             core_->stop();
         if(portal_)
@@ -84,6 +87,7 @@ class DesktopApplication {
     std::string campus_runtime_status_;
     std::unique_ptr<TaskbarWidgetHost> widget_;
     std::unique_ptr<UpdateService> updates_;
+    std::unique_ptr<CloudBackupService> cloud_;
     CaptionBar caption_;
     std::thread exit_thread_;
     HANDLE instance_mutex_{},data_lock_{INVALID_HANDLE_VALUE};
@@ -237,6 +241,17 @@ void DesktopApplication::command(Json request) {
         return;
     validate_request(request);
     const auto kind=request["type"].get<std::string>();
+    if(kind.starts_with("cloud_")){
+        try{if(!cloud_)throw std::runtime_error("CLOUD_UNAVAILABLE");
+            if(kind=="cloud_configure"&&!web_->secure_forms())throw std::runtime_error("CLOUD_WEBVIEW_RUNTIME_REQUIRED");
+            if(kind=="cloud_confirm_restore"){
+                const auto status=cloud_->status();if(selftest_||status.value("restore_token",std::string())!=request["params"].value("token",std::string()))throw std::runtime_error("CLOUD_RESTORE_CONFIRM_REQUIRED");
+                set_ui_language(core_->status()["config"].value("language","system"));
+                if(MessageBoxW(window_,ui_text("cloud.confirm_notice"),L"PulseTrace",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES){web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"cancelled",true}}}});return;}
+            }
+            auto result=cloud_->command(kind,request["params"]);if(kind=="cloud_status")result["secure_forms"]=web_->secure_forms();web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",std::move(result)}});}
+        catch(const std::exception &e){std::string code=e.what();if(!code.starts_with("CLOUD_")||code.size()>80||!std::all_of(code.begin(),code.end(),[](char c){return c=='_'||(c>='A'&&c<='Z');}))code="CLOUD_REQUEST_FAILED";web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",false},{"error",{{"code",code},{"message","Cloud operation rejected"}}}});}return;
+    }
     if(kind=="get_update_status"||kind=="check_updates"||kind=="download_update"||kind=="cancel_update"||kind=="open_update_folder"||kind=="open_release_page"||kind=="install_update"){
         try{
             if(kind=="check_updates"){const auto cfg=core_->status()["config"];updates_->check(cfg.value("update_channel","stable"),cfg.value("update_source","auto"));}
@@ -378,6 +393,7 @@ void DesktopApplication::quit() {
     if (exit_thread_.joinable())
         exit_thread_.join();
     exit_thread_ = std::thread([this] {
+        if(cloud_)cloud_->stop();
         const bool ready=core_->prepare_stop();
         if(ready||ending_session_)core_->stop();
         PostMessageW(window_, WM_APP + 52, ready||ending_session_?0:1, 0);
@@ -746,9 +762,17 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     log_.open(logfile, std::ios::app);
     if (!log_)
         throw std::runtime_error("Application data directory is not writable");
+    if(!selftest_)cloud_apply_pending_restore(data_);
     core_ = std::make_unique<CoreService>(data_);
     set_ui_language(core_->status()["config"].value("language","system"));
     core_->start();
+    cloud_=std::make_unique<CloudBackupService>(data_,[this]{
+        if(!core_->flush_now(std::chrono::seconds(10)))throw std::runtime_error("CLOUD_SNAPSHOT_FLUSH_FAILED");
+        auto promise=std::make_shared<std::promise<Json>>();auto future=promise->get_future();
+        core_->request({{"type","cloud_snapshot"},{"request_id",0},{"params",Json::object()}},[promise](Json response){promise->set_value(std::move(response));});
+        if(future.wait_for(std::chrono::seconds(20))!=std::future_status::ready)throw std::runtime_error("CLOUD_SNAPSHOT_TIMEOUT");auto response=future.get();
+        if(!response.value("ok",false))throw std::runtime_error("CLOUD_SNAPSHOT_FAILED");return std::filesystem::path(widen(response["data"]["directory"].get<std::string>()));
+    },cloud_https_request,!selftest_);
     updates_ = std::make_unique<UpdateService>(data_);
     if(!selftest_&&core_->status()["config"].value("check_updates_on_start",false)){
         const auto cfg=core_->status()["config"];updates_->check(cfg.value("update_channel","stable"),cfg.value("update_source","auto"));

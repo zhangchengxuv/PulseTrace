@@ -11,7 +11,8 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV export.
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
 - **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
-- **Traffic rankings**: optional Mihomo application/connection-domain rankings with family, range, search and sorting filters; domain history requires separate consent.
+- **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.
+- **Cloud backup (development build)**: eight settings categories, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide](docs/cloud-backup.md). Published installers do not change automatically with source updates.
 - **Taskbar speed**: a transparent native two-line widget with font, size, units, precision, color and position settings; floating/tray fallback.
 - **History and settings**: All Data by default, minute/hour/day and custom ranges, SQLite, monthly archives, backups and export; Chinese/English, Deep Ocean / Pearl Mist, tray operation and dual-source update checks.
 

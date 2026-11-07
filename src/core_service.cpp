@@ -635,8 +635,11 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         usage_->configure(config_,enabled_.load()&&!session_locked_.load());
         return config_;
     }
-    if(type=="backup_database"){
-        const auto folder=data_/"backups"/("manual-"+std::to_string(utc_now_ms()));std::filesystem::create_directories(folder);
+    if(type=="backup_database"||type=="cloud_snapshot"){
+        const bool temporary=type=="cloud_snapshot";
+        const auto base=temporary?data_/"cloud"/"snapshots":data_/"backups";
+        const auto folder=base/((temporary?"snapshot-":"manual-")+std::to_string(utc_now_ms())+"-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+        try{
         database().backup(folder/"monitor.db");
         if(std::filesystem::exists(data_/"network-months"))for(const auto &item:std::filesystem::directory_iterator(data_/"network-months")){
             if(!item.is_regular_file())continue;const auto ext=item.path().extension();
@@ -646,6 +649,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         }
         {std::ofstream cfg(folder/"config.json");cfg<<config_.dump(2);if(!cfg)throw std::runtime_error("Cannot backup configuration");}
         const auto name=folder.u8string();return {{"directory",std::string(name.begin(),name.end())},{"basis","committed SQLite snapshots"}};
+        }catch(...){if(temporary&&std::filesystem::weakly_canonical(folder).parent_path()==std::filesystem::weakly_canonical(data_/"cloud")/"snapshots"){std::error_code error;std::filesystem::remove_all(folder,error);}throw;}
     }
     if (type == "export_csv") {
         auto name = "pulsetrace-export-" + std::to_string(utc_now_ms()) + ".csv";

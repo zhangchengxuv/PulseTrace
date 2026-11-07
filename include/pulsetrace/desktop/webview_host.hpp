@@ -96,6 +96,7 @@ class WebViewHost {
     void capture_preview(const std::filesystem::path &file, std::function<void(bool)> complete);
     bool crash_browser_for_test();
     bool ready() const { return ready_; }
+    bool secure_forms() const { return secure_forms_; }
     bool closing() const { return closing_; }
     unsigned long browser_pid() const { return browser_pid_; }
     std::uint64_t generation() const { return generation_; }
@@ -115,7 +116,7 @@ class WebViewHost {
     std::function<void(std::string)> diagnostic_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     std::uint64_t generation_{};
-    bool creating_{}, ready_{}, closing_{}, browser_exited_{true};
+    bool creating_{}, ready_{}, closing_{}, browser_exited_{true}, secure_forms_{};
     UINT32 browser_pid_{};
     COLORREF background_{RGB(7,19,33)};
 };

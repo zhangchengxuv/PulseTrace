@@ -185,12 +185,16 @@ void WebViewHost::configure() {
         return;
     }
     ComPtr<ICoreWebView2Settings> settings;
+    secure_forms_=false;
     view_->get_Settings(settings.put());
     if (settings) {
         settings->put_AreHostObjectsAllowed(FALSE);
         settings->put_AreDefaultScriptDialogsEnabled(FALSE);
         settings->put_AreDevToolsEnabled(FALSE);
         settings->put_IsStatusBarEnabled(FALSE);
+        ComPtr<ICoreWebView2Settings4> privacy;
+        if(SUCCEEDED(settings->QueryInterface(__uuidof(ICoreWebView2Settings4),reinterpret_cast<void**>(privacy.put()))))
+            secure_forms_=SUCCEEDED(privacy->put_IsPasswordAutosaveEnabled(FALSE))&&SUCCEEDED(privacy->put_IsGeneralAutofillEnabled(FALSE));
     }
     EventRegistrationToken token{};
     attach<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2 *,
