@@ -25,6 +25,8 @@ function validateCompactPages(){
   if(!node)throw Error('Keyboard ranking disclosure missing');
   const previous=disclosureState.get('keyboard.ranking'),open=node.open;
   if(!previous&&open)throw Error('Keyboard ranking must start collapsed');
+  node.open=true;if(!keyboardRanking({},null).open)throw Error('Pending keyboard expansion lost during redraw');
+  node.open=false;if(keyboardRanking({},null).open)throw Error('Pending keyboard collapse lost during redraw');
   node.open=true;node.dispatchEvent(new Event('toggle'));
   if(!disclosure('keyboard.ranking','fixture',null).open)throw Error('Keyboard ranking state lost during redraw');
   node.open=open;if(previous)disclosureState.set('keyboard.ranking',previous);else disclosureState.delete('keyboard.ranking');

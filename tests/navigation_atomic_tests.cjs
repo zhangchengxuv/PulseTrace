@@ -1,4 +1,20 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+// A details toggle event is asynchronous: redraw must preserve the live property
+// even if that event has not reached the saved disclosure state yet.
+{
+ let live=null;
+ const rankingContext=vm.createContext({document:{querySelector:()=>live},tr:key=>key,fmt:String,keyLabel:id=>'Key '+id,
+  el:(tag,attrs,...children)=>({tag,children,append(node){this.children.push(node);},addEventListener(){},querySelector(){return this.children[0];}})});
+ vm.runInContext(fs.readFileSync('web/desktop/disclosure.js','utf8'),rankingContext);
+ rankingContext.pagedTable=(key,headers,values)=>({values});
+ vm.runInContext(fs.readFileSync('web/desktop/keyboard-view.js','utf8'),rankingContext);
+ const render=()=>rankingContext.keyboardRanking(Object.fromEntries(Array.from({length:75},(_,i)=>[i,i+1])),['74',75]);
+ assert.equal(render().open,false,'ranking starts collapsed');
+ live={open:true};assert.equal(render().open,true,'pending expansion survives redraw');
+ live={open:false};assert.equal(render().open,false,'pending collapse survives redraw');
+ assert.equal(render().children[1].values.length,75,'ranking preserves all keys');
+ assert.equal(render().children[0].children.at(-1).children[0],'Key 74 · 75');
+}
 const source=fs.readFileSync('web/desktop/product.js','utf8');
 assert.match(source,/pendingScrollTop=pageScrollPositions\.get\(next\)/);
 assert.doesNotMatch(source,/page=next;window\.scrollTo/);
