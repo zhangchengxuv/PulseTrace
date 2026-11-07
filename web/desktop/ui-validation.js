@@ -1,4 +1,46 @@
 'use strict';
+async function validateCampusOverview(){
+ if(!state.self_test||!['dashboard','network'].includes(page))return;
+ // Memory-only synthetic display fixtures. Never configure/open a real portal,
+ // persist a mapping, or write a snapshot through the native application.
+ const saved={data:campusData,fields:campusFieldState,status:campusEventStatus,event:campusLastEventType,config:state.config,scroll:window.scrollY};
+ const host=document.querySelector('.campus-overview'),content=$('content'),first=content.firstChild;
+ if(!host)throw Error('Campus overview missing from '+page);
+ const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+ try{
+  campusFieldState={};campusEventStatus='';campusLastEventType='';
+  const fields=Object.fromEntries(['balance','used_bytes','free_quota_bytes','used_free_bytes','free_remaining_bytes'].map(field=>[field,{mode:'auto',kind:field==='balance'?'currency':'bytes',selector:'#'+field}]));
+  fields.spendable_balance={mode:'formula',kind:'currency',formula:'balance'};
+  for(const scenario of ['disabled','empty','partial','full','auth','error']){
+   state.config={...saved.config,campus_enabled:scenario!=='disabled',campus_unit_price:scenario==='partial'?0:.5,campus_price_unit:'GiB'};
+   campusData={origin:'https://campus.example',portal_url:'https://campus.example/usage',rule:{fields},latest:scenario==='empty'?null:{observed_ms:1794017725000,details:{web_values:scenario==='partial'?{balance:10}:{balance:10,used_bytes:20*GiB,free_quota_bytes:100*GiB,used_free_bytes:20*GiB,free_remaining_bytes:80*GiB}}}};
+   campusLastEventType=scenario==='auth'?'campus_auth_required':scenario==='error'?'campus_error':'';
+   PulseCampus.renderLive();await tick();
+   if(document.querySelector('.campus-overview')!==host||content.firstChild!==first)throw Error('Campus refresh replaced the page or outer card');
+   const expected=scenario==='full'?'ready':scenario;
+   if(host.dataset.status!==expected)throw Error('Campus state mismatch: '+scenario);
+   const metrics=host.querySelectorAll('[data-campus-value]');
+   if(scenario==='disabled'&&metrics.length||scenario!=='disabled'&&metrics.length!==3)throw Error('Campus metric layout mismatch');
+   if(scenario==='full'){
+    const model=campusOverviewModel();if(model.values.total!==100*GiB||model.values.funded!==20*GiB||host.querySelectorAll('.campus-segment').length!==3)throw Error('Campus components or total mismatch');
+    if(!host.textContent.includes(tr('campus.card.funded')))throw Error('Campus estimate label missing');
+    const track=host.querySelector('.campus-segment-track');
+    for(const segment of track.children)if(segment.getBoundingClientRect().width<1)throw Error('Campus segment width blocked by CSP');
+   }
+   if(scenario==='partial'&&host.querySelector('.campus-tone-funded.campus-segment'))throw Error('Unknown paid data has a segment');
+   if(['auth','error'].includes(scenario)&&host.querySelector('.campus-free-percent'))throw Error('Stale data displays a live usage percentage');
+   for(const node of host.querySelectorAll('*'))if(node.clientWidth&&node.scrollWidth>node.clientWidth+2)throw Error('Campus overview overflow: '+node.className);
+   if(['empty','partial','full'].includes(scenario)){
+    host.scrollIntoView({block:'center',behavior:'instant'});await tick();
+    await rpc('selftest_snapshot',{phase:'campus-'+scenario});
+   }
+  }
+  window.pulseCampusOverviewReport={page,states:6,outerCardPreserved:true};
+ }finally{
+  campusData=saved.data;campusFieldState=saved.fields;campusEventStatus=saved.status;campusLastEventType=saved.event;state.config=saved.config;
+  PulseCampus.renderLive();window.scrollTo({top:saved.scroll,behavior:'instant'});
+ }
+}
 async function validateCampusPickerBridge(){
  if(!state.self_test||state.config?.campus_enabled)return;
  // Disabled monitoring lets the real UI -> WebView2 parser -> native dispatch

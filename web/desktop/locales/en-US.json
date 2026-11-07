@@ -656,5 +656,22 @@
   "campus.pick_opening": "Opening or restoring the portal; selection starts when the page loads…",
   "campus.pick_failed": "Could not prepare selection. Check the portal connection and try again.",
   "campus.pick_cancelled": "Selection cancelled; click the button again to reopen the portal.",
-  "campus.pick_login": "Finish signing in in the portal window. Selection resumes after navigation; you can also click this button again."
+  "campus.pick_login": "Finish signing in in the portal window. Selection resumes after navigation; you can also click this button again.",
+  "campus.card.disabled": "Campus monitoring is off",
+  "campus.card.disabled_hint": "Enable campus monitoring and confirm portal fields to view your balance and data here.",
+  "campus.card.configure": "Open settings",
+  "campus.card.empty": "No confirmed data yet",
+  "campus.card.empty_hint": "Sign in through Settings and confirm detected fields. Missing values are not treated as zero.",
+  "campus.card.partial": "Partial data available",
+  "campus.card.partial_hint": "Missing values cannot be calculated. Review fields, price and billing period in Settings.",
+  "campus.card.ready": "Data ready",
+  "campus.card.synced": "Last successful sync: {time}",
+  "campus.card.portal": "Confirmed portal data",
+  "campus.card.estimate": "Includes estimated paid data",
+  "campus.card.usage": "Data usage overview",
+  "campus.card.funded": "Paid available (estimated)",
+  "campus.card.known_mix": "Known components only; not a plan usage percentage",
+  "campus.card.free_percent": "Free allowance used: {percent}%",
+  "campus.card.total_basis": "Available = free remaining + estimated paid data",
+  "campus.card.retained": "Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."
 }

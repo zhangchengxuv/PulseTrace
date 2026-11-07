@@ -13,11 +13,11 @@ const nodes={content,state:node(),toggle:node(),title:node(),error:node()};
 const context=vm.createContext({
  $:id=>nodes[id],loading:false,nativeVisible:true,document:{hidden:false,createElement:tag=>{assert.equal(tag,'section');return stage;},createDocumentFragment:()=>fragment,querySelectorAll:()=>[]},
  viewGeneration:0,refreshTimer:0,refreshQueued:false,page:'settings',range:{from:1,to:2,bucket:1},rangePreset:'custom',rangeDirty:false,pendingScrollTop:null,pageScrollPositions:new Map(),selectedTrafficMonth:'all',
- state:{},campusData:null,rows:[],protocolSamples:[],networkEvents:[],monthlyTraffic:null,renderKey:'',updateOpenPending:false,window:{scrollTo(){throw new Error('refresh must not reset scroll');}},
+ state:{},campusData:null,rows:[],protocolSamples:[],networkEvents:[],comparisonRows:[],comparisonRange:'',comparisonFetched:0,monthlyTraffic:null,renderKey:'',updateOpenPending:false,window:{scrollTo(){throw new Error('refresh must not reset scroll');}},
  PulseCampus:{refresh:async()=>{}},PulseI18n:{use:()=>false},PulseDatePicker:{current:null,close(){}},applyTheme(){},applyAppearance(){},tr:k=>k,error(e){throw e;},clearCharts(){},finishStartup(){},
  mountRangeControls(){},names:{settings:'Settings'},settings(){rendered=true;stage.childNodes.push({kind:'rendered'});},dashboard(){},networkPage(){},keyboardPage(){},mousePage(){},history(){},appUsage(){},
  scheduleRefresh(){},clearTimeout,queueMicrotask,requestAnimationFrame:fn=>fn(),
- rpc:async type=>{if(type==='get_status')return {version:'test',config:{},monitoring:false,effective_language:'en-US'};if(type==='get_monthly_traffic')return null;throw new Error(type);}
+ rpc:async type=>{if(type==='get_status')return {version:'test',config:{},monitoring:false,effective_language:'en-US'};if(type==='get_monthly_traffic')return null;if(type==='get_statistics')return {rows:[]};throw new Error(type);}
 });
 vm.runInContext(refreshSource,context);
 (async()=>{await context.refresh(true);assert.equal(rendered,true);assert.equal(replaceCalls,1);assert.equal(replacedAfterRender,true,'content must be replaced only after detached rendering completes');assert.equal(content.children.length,2);
@@ -25,4 +25,7 @@ vm.runInContext(refreshSource,context);
  context.window.scrollTo=options=>{assert.equal(options.top,42);scrolled=true;};context.requestAnimationFrame=()=>{throw Error('scroll restoration was delayed until another frame');};
  await context.refresh(true);assert.equal(scrolled,true,'scroll restoration finishes in the same render task');
  await context.refresh(true);assert.equal(replaceCalls,2,'unchanged data must not reconstruct a page even for an explicit refresh');
+ context.page='dashboard';context.names.dashboard='Dashboard';context.renderKey='';await context.refresh(true);const beforeCampusUpdate=replaceCalls;
+ context.campusData={latest:{balance:12,observed_ms:1234}};await context.refresh(true);
+ assert.equal(replaceCalls,beforeCampusUpdate,'campus-only refresh must not reconstruct the Dashboard');
  console.log('Atomic page replacement, same-frame scroll and unchanged-data reuse checks passed');})().catch(e=>{console.error(e);process.exitCode=1;});

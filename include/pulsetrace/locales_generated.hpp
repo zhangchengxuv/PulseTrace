@@ -331,5 +331,22 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.pick_opening",L"正在打开或恢复门户，页面加载后即可点选…",L"Opening or restoring the portal; selection starts when the page loads…"},
 {"campus.pick_failed",L"无法准备网页点选。请检查门户连接后重试。",L"Could not prepare selection. Check the portal connection and try again."},
 {"campus.pick_cancelled",L"已取消点选；可再次点击右侧按钮打开门户。",L"Selection cancelled; click the button again to reopen the portal."},
-{"campus.pick_login",L"请先在门户窗口完成登录；登录后自动准备点选，也可再次点击此按钮。",L"Finish signing in in the portal window. Selection resumes after navigation; you can also click this button again."}
+{"campus.pick_login",L"请先在门户窗口完成登录；登录后自动准备点选，也可再次点击此按钮。",L"Finish signing in in the portal window. Selection resumes after navigation; you can also click this button again."},
+{"campus.card.disabled",L"校园网监控未启用",L"Campus monitoring is off"},
+{"campus.card.disabled_hint",L"启用校园网监控并确认门户字段后，在这里查看余额与流量。",L"Enable campus monitoring and confirm portal fields to view your balance and data here."},
+{"campus.card.configure",L"前往设置",L"Open settings"},
+{"campus.card.empty",L"尚未同步或确认字段",L"No confirmed data yet"},
+{"campus.card.empty_hint",L"请先在设置中登录门户并确认识别结果；缺失数值不会按零计算。",L"Sign in through Settings and confirm detected fields. Missing values are not treated as zero."},
+{"campus.card.partial",L"部分数据可用",L"Partial data available"},
+{"campus.card.partial_hint",L"缺失项显示“无法计算”；请在设置中核对字段、单价及账期。",L"Missing values cannot be calculated. Review fields, price and billing period in Settings."},
+{"campus.card.ready",L"数据已就绪",L"Data ready"},
+{"campus.card.synced",L"上次成功同步：{time}",L"Last successful sync: {time}"},
+{"campus.card.portal",L"已确认网页数据",L"Confirmed portal data"},
+{"campus.card.estimate",L"含付费可用估算",L"Includes estimated paid data"},
+{"campus.card.usage",L"流量使用概览",L"Data usage overview"},
+{"campus.card.funded",L"付费可用（估算）",L"Paid available (estimated)"},
+{"campus.card.known_mix",L"已知部分构成（含估算），非套餐使用率",L"Known components only; not a plan usage percentage"},
+{"campus.card.free_percent",L"免费额度已用 {percent}%",L"Free allowance used: {percent}%"},
+{"campus.card.total_basis",L"总可用 = 免费剩余 + 估算付费可用",L"Available = free remaining + estimated paid data"},
+{"campus.card.retained",L"当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。",L"Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."}
 };}

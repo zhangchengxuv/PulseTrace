@@ -656,5 +656,22 @@
   "campus.pick_opening": "正在打开或恢复门户，页面加载后即可点选…",
   "campus.pick_failed": "无法准备网页点选。请检查门户连接后重试。",
   "campus.pick_cancelled": "已取消点选；可再次点击右侧按钮打开门户。",
-  "campus.pick_login": "请先在门户窗口完成登录；登录后自动准备点选，也可再次点击此按钮。"
+  "campus.pick_login": "请先在门户窗口完成登录；登录后自动准备点选，也可再次点击此按钮。",
+  "campus.card.disabled": "校园网监控未启用",
+  "campus.card.disabled_hint": "启用校园网监控并确认门户字段后，在这里查看余额与流量。",
+  "campus.card.configure": "前往设置",
+  "campus.card.empty": "尚未同步或确认字段",
+  "campus.card.empty_hint": "请先在设置中登录门户并确认识别结果；缺失数值不会按零计算。",
+  "campus.card.partial": "部分数据可用",
+  "campus.card.partial_hint": "缺失项显示“无法计算”；请在设置中核对字段、单价及账期。",
+  "campus.card.ready": "数据已就绪",
+  "campus.card.synced": "上次成功同步：{time}",
+  "campus.card.portal": "已确认网页数据",
+  "campus.card.estimate": "含付费可用估算",
+  "campus.card.usage": "流量使用概览",
+  "campus.card.funded": "付费可用（估算）",
+  "campus.card.known_mix": "已知部分构成（含估算），非套餐使用率",
+  "campus.card.free_percent": "免费额度已用 {percent}%",
+  "campus.card.total_basis": "总可用 = 免费剩余 + 估算付费可用",
+  "campus.card.retained": "当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。"
 }
