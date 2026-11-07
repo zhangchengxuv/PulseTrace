@@ -25,5 +25,7 @@ function renderKeyboard(c){
 
  const keyboard=panel(tr("ui.48b68cef28ad"),el('div',{class:'heat-toolbar'},chooser),viewport,legend,detail);
  c.append(keyboard);if(selectedPhysicalKey!==null&&layout.some(k=>k.id===selectedPhysicalKey))drawDetail(selectedPhysicalKey);else detail.append(el('span',{class:'muted'},tr("ui.53cdabcd167c")));
- c.append(trend('keyboard',null,tr("ui.5ab2a33a8977")),panel(tr("ui.afb1428869e9"),table([tr("ui.ff669c9b40a3"),tr("ui.edbd5432c859"),tr("ui.05c518eb94a0")],Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([id,n])=>[keyLabel(Number(id)),id,fmt(n)]))));
+ const ranking=disclosure('keyboard.ranking',tr("ui.afb1428869e9"),null,pagedTable('keyboard.ranking.rows',[tr("ui.ff669c9b40a3"),tr("ui.edbd5432c859"),tr("ui.05c518eb94a0")],Object.entries(counts).sort((a,b)=>b[1]-a[1]),([id,n])=>[keyLabel(Number(id)),id,fmt(n)]));
+ ranking.querySelector('summary').append(el('small',{},top?keyLabel(Number(top[0]))+' ? '+fmt(top[1]):'?'));
+ c.append(trend('keyboard',null,tr("ui.5ab2a33a8977")),ranking);
 }

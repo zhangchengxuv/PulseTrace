@@ -1,4 +1,17 @@
 'use strict';
+function validateCompactPages(){
+ if(!state.self_test)return;
+ if(page==='network'&&document.querySelector('.traffic-ranking'))throw Error('Removed network ranking is still mounted');
+ if(page==='keyboard'){
+  const node=document.querySelector('[data-disclosure="keyboard.ranking"]');
+  if(!node)throw Error('Keyboard ranking disclosure missing');
+  const previous=disclosureState.get('keyboard.ranking'),open=node.open;
+  if(!previous&&open)throw Error('Keyboard ranking must start collapsed');
+  node.open=true;node.dispatchEvent(new Event('toggle'));
+  if(!disclosure('keyboard.ranking','fixture',null).open)throw Error('Keyboard ranking state lost during redraw');
+  node.open=open;if(previous)disclosureState.set('keyboard.ranking',previous);else disclosureState.delete('keyboard.ranking');
+ }
+}
 async function validateCampusOverview(){
  if(!state.self_test||!['dashboard','network'].includes(page))return;
  // Memory-only synthetic display fixtures. Never configure/open a real portal,
