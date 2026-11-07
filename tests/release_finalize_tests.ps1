@@ -4,23 +4,38 @@ $root=Split-Path -Parent $PSScriptRoot
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'tools\publish-dual.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Publisher parse error'}
+$readerDefinition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Read-ReleaseJson'},$true)
+if(-not $readerDefinition){throw 'Production UTF-8 reader not found'}
+. ([ScriptBlock]::Create($readerDefinition.Extent.Text))
+$script:unicodeNotes=([string][char]0x4e2d)+[char]0x6587+' / Release notes'
+function Invoke-WebRequest {
+ param($Uri,$Headers,[switch]$UseBasicParsing)
+ $bytes=[Text.Encoding]::UTF8.GetBytes((@{body=$script:unicodeNotes}|ConvertTo-Json))
+ [pscustomobject]@{RawContentStream=[IO.MemoryStream]::new($bytes);Content=[Text.Encoding]::GetEncoding(28591).GetString($bytes)}
+}
+if((Read-ReleaseJson 'https://example.invalid/utf8' @{}).body -ne $script:unicodeNotes){throw 'Charset-free JSON must decode as UTF-8'}
+# The finalizer fault matrix below keeps its controlled in-memory API transport.
+function Read-ReleaseJson {param($Uri,$Headers) Invoke-RestMethod $Uri -Headers $Headers}
 $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Confirm-GiteeRelease'},$true)
 if(-not $definition){throw 'Production finalizer not found'}
 . ([ScriptBlock]::Create($definition.Extent.Text))
-$checks=0
+$checks=1
 function Check($ok,$message){$script:checks++;if(-not $ok){throw $message}}
 function Reset([bool]$state){
- $script:remote=[pscustomobject]@{tag_name='v1.2.3';name='PulseTrace v1.2.3';body='fixture notes';target_commitish=('a'*40);prerelease=$state}
+ $script:remote=[pscustomobject]@{tag_name='v1.2.3';name='PulseTrace v1.2.3';body=$script:unicodeNotes;target_commitish=('a'*40);prerelease=$state}
  $script:reads=0;$script:writes=0;$script:ignoreWrite=$false;$script:failWrite=$false
 }
 function Invoke-RestMethod {
- param($Uri,$Method='Get',$Body,$Headers)
+ param($Uri,$Method='Get',$Body,$Headers,$ContentType)
  if($Uri -ne 'https://example.invalid/releases/12'){throw 'Unexpected test endpoint'}
  if($Headers.Authorization -ne 'token fixture-token'){throw 'Gitee requests must authenticate via header'}
  if($Method -eq 'Patch'){
+  if($ContentType -ne 'application/json; charset=utf-8' -or $Body -isnot [byte[]]){throw 'Release updates must send explicit UTF-8 JSON bytes'}
+  $decoded=[Text.Encoding]::UTF8.GetString($Body)|ConvertFrom-Json
+  if($decoded.body -ne $script:unicodeNotes -or $decoded.tag_name -ne $script:remote.tag_name -or $decoded.name -ne $script:remote.name){throw 'UTF-8 release update changed notes or identity'}
   $script:writes++
   if($script:failWrite){throw 'Controlled HTTP 406'}
-  if(-not $script:ignoreWrite){$script:remote.prerelease=($Body.prerelease -eq 'true')}
+  if(-not $script:ignoreWrite){$script:remote.prerelease=$decoded.prerelease}
   return $script:remote
  }
  $script:reads++;return $script:remote

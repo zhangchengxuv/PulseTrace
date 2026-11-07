@@ -4,20 +4,30 @@ param([string]$BuildDirectory='build\llvm-release',[switch]$Publish,
 # No remote mutation, tag creation, credential lookup, or upload occurs without -Publish.
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
+function Read-ReleaseJson {
+ param([string]$Uri,[hashtable]$Headers)
+ # Gitee may omit the JSON charset. Windows PowerShell otherwise interprets
+ # UTF-8 notes as a legacy encoding and can persist that corruption on PATCH.
+ $response=Invoke-WebRequest -UseBasicParsing -Uri $Uri -Headers $Headers
+ $response.RawContentStream.Position=0
+ $reader=[IO.StreamReader]::new($response.RawContentStream,[Text.Encoding]::UTF8)
+ try {Write-Output -NoEnumerate ($reader.ReadToEnd() | ConvertFrom-Json)} finally {$reader.Dispose()}
+}
 function Confirm-GiteeRelease {
  param([string]$Api,[long]$ReleaseId,[string]$ExpectedTag,[string]$ExpectedCommit,[bool]$Prerelease,[string]$Token)
  $uri=$Api+'/releases/'+$ReleaseId
  $headers=@{Authorization=('token '+$Token);'User-Agent'='PulseTrace-publisher'}
  $valid={param($r) $r.tag_name -eq $ExpectedTag -and $r.target_commitish -eq $ExpectedCommit -and $r.prerelease -is [bool]}
- $final=Invoke-RestMethod $uri -Headers $headers
+ $final=Read-ReleaseJson $uri -Headers $headers
  if(-not (& $valid $final)){throw 'Gitee release identity or state could not be verified'}
  # Creation already uses prerelease=true. Do not issue a redundant write after verified uploads.
  if($final.prerelease -ne $Prerelease){
   if(-not $Token){throw 'Gitee release-state change needs authentication'}
   # Gitee requires tag_name, name and body on every update even when only
   # prerelease changes.
-  Invoke-RestMethod -Method Patch $uri -Headers $headers -ContentType 'application/x-www-form-urlencoded' -Body @{tag_name=$final.tag_name;name=$final.name;body=$final.body;prerelease=$Prerelease.ToString().ToLower()} | Out-Null
-  $final=Invoke-RestMethod $uri -Headers $headers
+  $payload=@{tag_name=$final.tag_name;name=$final.name;body=$final.body;prerelease=$Prerelease} | ConvertTo-Json
+  Invoke-RestMethod -Method Patch $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($payload)) | Out-Null
+  $final=Read-ReleaseJson $uri -Headers $headers
  }
  if(-not (& $valid $final) -or $final.prerelease -ne $Prerelease){throw 'Gitee release final state verification failed'}
  return $final
