@@ -16,7 +16,7 @@
 
 设置按常规、监测、任务栏、校园网、云备份、数据、更新及关于分类，提供 Deep Ocean、Pearl Mist 和跟随系统主题。使用统计分开显示前台停留与有效活跃，默认空闲阈值 120 秒，可排除应用、调整保留期及导出 CSV。阅读或视频可能被判断为空闲，不记录窗口标题、文档或 URL。网络排行界面已移除，旧历史和高级来源配置保留。键位排名默认收起，展开状态随刷新保留。
 
-开发构建新增默认关闭的坚果云 WebDAV 加密备份。使用第三方应用密码与独立恢复口令；从云端下载校验、明确确认后，于下次启动且数据库未打开时恢复。详见 [云备份说明](cloud-backup.md)。已发布安装包不随源码自动更新。
+v0.7.0 新增默认关闭的坚果云 WebDAV 加密备份。使用第三方应用密码与独立恢复口令；从云端下载校验、明确确认后，于下次启动且数据库未打开时恢复。详见云备份文档 `docs/cloud-backup.md`。
 
 校园网监控默认关闭。配置门户与允许登录域名后，在独立 WebView2 窗口完成登录；自动识别结果需在设置页确认，无法识别时可点击网页字段手动映射。门户真实值、本地估算费用和未知状态分开显示；详见 [校园网说明](campus-portal.md)。
 
@@ -38,7 +38,7 @@ The calendar edits a draft and commits on confirmation, with minute precision an
 
 Settings has General, Monitoring, Taskbar, Campus, Cloud backup, Data, Updates and About categories, with Deep Ocean, Pearl Mist and System themes. App Usage separates foreground dwell from input-idle activity (120 seconds by default), with exclusions, retention and CSV export. Reading or video may appear idle. No titles, documents or URLs are recorded. Network ranking UI is removed while historical data and advanced source settings remain. Keyboard rankings collapse by default and preserve their state.
 
-Development builds add opt-in encrypted Jianguoyun WebDAV backup using a third-party app password and a separate recovery passphrase. Restore verifies first, requires confirmation, and runs before opening SQLite on the next startup. See the [backup guide](cloud-backup.md). Published installers do not automatically include source changes.
+v0.7.0 adds opt-in encrypted Jianguoyun WebDAV backup using a third-party app password and a separate recovery passphrase. Restore verifies first, requires confirmation, and runs before opening SQLite on the next startup. See `docs/cloud-backup.md`.
 
 Campus monitoring is disabled by default. After configuring the portal and allowed sign-in origins, complete sign-in in an isolated WebView2 window. Recognition proposals require confirmation, and fields can be selected manually. Portal values, local estimates and unknown states remain separate; see [campus portal details](campus-portal.md).
 

@@ -1,6 +1,6 @@
 # 坚果云 WebDAV 云备份 / WebDAV backup
 
-当前开发构建的“设置 → 云备份”提供连接测试、立即备份、自动备份、云端列表及确认恢复。默认关闭，默认服务器 `https://dav.jianguoyun.com/dav/`，目录 `PulseTrace/Backups`，自动周期默认一天、最少 60 分钟；不会做多设备实时双向同步。
+v0.7.0 的“设置 → 云备份”提供连接测试、立即备份、自动备份、云端列表及确认恢复。默认关闭，默认服务器 `https://dav.jianguoyun.com/dav/`，目录 `PulseTrace/Backups`，自动周期默认一天、最少 60 分钟；不会做多设备实时双向同步。
 
 ## 配置与加密
 

@@ -12,7 +12,7 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
 - **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
 - **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.
-- **Cloud backup (development build)**: eight settings categories, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide](docs/cloud-backup.md). Published installers do not change automatically with source updates.
+- **Cloud backup**: eight settings categories, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide and validation scope](docs/cloud-backup.md).
 - **Taskbar speed**: a transparent native two-line widget with font, size, units, precision, color and position settings; floating/tray fallback.
 - **History and settings**: All Data by default, minute/hour/day and custom ranges, SQLite, monthly archives, backups and export; Chinese/English, Deep Ocean / Pearl Mist, tray operation and dual-source update checks.
 
@@ -53,14 +53,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.6.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.6.1) · [Gitee v0.6.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.6.1)
+[GitHub v0.7.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.0) · [Gitee v0.7.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.0)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Public release **v0.6.1** fixes campus picker window opening, restoration and loading, while retaining background sync and page-view reuse. The same source, installer and portable archive are published to both repositories. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Version **v0.7.0** adds encrypted WebDAV backup, eight settings categories, campus overview cards and compact taskbar rates; simplifies Network/Keyboard views and includes all campus-picker fixes. Existing data and settings remain compatible. Live Jianguoyun and long-running validation limits are listed in the [release notes](docs/releases/v0.7.0.md). [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
