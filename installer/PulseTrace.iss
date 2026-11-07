@@ -94,7 +94,6 @@ Name: desktopicon; Description: "{cm:desktop}"; Flags: unchecked
 Name: portableimport; Description: "{cm:importtask}"; Flags: unchecked
 [Files]
 Source: "{#StageDir}\PulseTrace.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#StageDir}\PulseTraceWidget.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\PulseTraceMaintenance.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\web\desktop\*"; DestDir: "{app}\web\desktop"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -102,6 +101,10 @@ Source: "{#StageDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversio
 Source: "{#StageDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+
+[InstallDelete]
+Type: files; Name: "{app}\PulseTraceWidget.exe"
+Type: files; Name: "{app}\web\desktop\widget-view.js"
 
 [Icons]
 Name: "{group}\PulseTrace"; Filename: "{app}\PulseTrace.exe"

@@ -733,5 +733,6 @@
   "campus.card.known_mix": "Known components only; not a plan usage percentage",
   "campus.card.free_percent": "Free allowance used: {percent}%",
   "campus.card.total_basis": "Available = free remaining + estimated paid data",
-  "campus.card.retained": "Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."
+  "campus.card.retained": "Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference.",
+  "settings.invalid": "Check the retention period and save interval."
 }

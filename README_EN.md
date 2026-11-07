@@ -12,15 +12,15 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
 - **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
 - **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.
-- **Cloud backup**: eight settings categories, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide and validation scope](docs/cloud-backup.md).
-- **Taskbar speed**: a transparent native two-line widget with font, size, units, precision, color and position settings; floating/tray fallback.
+- **Cloud backup**: grouped settings, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide and validation scope](docs/cloud-backup.md).
+- **Live network speed**: displayed on Dashboard and Network; the development branch removes the taskbar speed widget while keeping tray background operation.
 - **History and settings**: All Data by default, minute/hour/day and custom ranges, SQLite, monthly archives, backups and export; Chinese/English, Deep Ocean / Pearl Mist, tray operation and dual-source update checks.
 
 Collection starts paused. Input text, window titles and mouse trajectories are not recorded. Active time uses an idle threshold; IPv4/IPv6 and rankings depend on permissions, sampling and quality, and do not represent full-system traffic or campus billing. Campus monitoring is disabled by default, and unconfirmed portal fields remain unknown. Unsigned update packages require manual installation after verification. [Measurement limits](docs/traffic-rankings.md) · [App Usage](docs/app-usage.md) · [Campus portal](docs/campus-portal.md)
 
 ## Screenshots
 
-Real x64 Release development build of main `b3a2cbf`, using isolated empty data and paused collection; no synthetic statistics or personal history. Pages use 1600×900 DIP; the taskbar image is an actual crop.
+Historical x64 Release screenshots of main `b3a2cbf`, using isolated empty data and paused collection; no synthetic statistics or personal history. Pages use 1600×900 DIP; the taskbar crop shows the removed feature.
 
 | Dashboard | Network |
 | --- | --- |

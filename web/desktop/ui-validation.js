@@ -2,7 +2,8 @@
 async function validateSettingsCategories(){
  if(!state.self_test||page!=='settings')return;
  const initial=settingsActive,before=await rpc('get_status'),buttons=[...document.querySelectorAll('[data-settings-tab]')];
- if(buttons.length!==8)throw Error('Settings categories missing');
+ if(document.querySelector('[data-settings-tab=taskbar],.widget-settings'))throw Error('Retired taskbar UI remains');
+ if(buttons.length!==7)throw Error('Settings categories missing');
  try{for(const button of buttons){
   button.click();await new Promise(resolve=>requestAnimationFrame(resolve));
   const key=button.dataset.settingsTab,visible=[...document.querySelectorAll('[data-settings-group]')].filter(node=>!node.hidden);
@@ -13,7 +14,7 @@ async function validateSettingsCategories(){
    if(document.querySelectorAll('.cloud-settings input[type=password]').length!==2)throw Error('Cloud secrets must use password controls');
    const status=await rpc('cloud_status');if(!status.secure_forms)throw Error('WebView password saving/autofill must be disabled');if(status.config.enabled||status.credentials_saved)throw Error('Cloud must remain off and unconfigured in isolated tests');
   }
-  if(['general','taskbar','campus','cloud'].includes(key))await rpc('selftest_snapshot',{phase:'settings-'+key});
+  if(['general','campus','cloud'].includes(key))await rpc('selftest_snapshot',{phase:'settings-'+key});
  }}finally{document.querySelector('[data-settings-tab="'+initial+'"]').click();}
  const after=await rpc('get_status');if(before.session!==after.session||before.monitoring!==after.monitoring)throw Error('Settings navigation restarted monitoring');
 }
@@ -119,7 +120,7 @@ async function validateNavigationTransitions(){
 }
 async function validateStaticInteractions(){
  const check=(value,message)=>{if(!value)throw new Error('Static UI: '+message);};
- if(page==='settings')check(document.querySelectorAll('[data-settings-group]').length===8,'eight settings groups');
+ if(page==='settings')check(document.querySelectorAll('[data-settings-group]').length===7,'seven settings groups');
  check(!document.getElementById('eyebrow')&&!document.querySelector('aside .privacy'),'removed labels');
  const action=el('button',{disabled:false,onclick:()=>{action.dataset.clicked='true';}});action.click();
  check(!action.disabled&&action.dataset.clicked==='true','enabled button interaction');

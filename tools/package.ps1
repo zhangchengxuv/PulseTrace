@@ -11,7 +11,7 @@ if((Get-Process PulseTrace -ErrorAction SilentlyContinue) | Where-Object {$_.Pat
 if(Test-Path -LiteralPath (Join-Path $release 'data')){throw 'Release directory contains user data; choose a new version or move the release output manually'}
 New-Item -ItemType Directory -Force -Path $stage,(Join-Path $stage 'web'),(Join-Path $stage 'licenses'),(Join-Path $stage 'docs') | Out-Null
 try {
- foreach($name in @('PulseTrace.exe','PulseTraceWidget.exe','PulseTraceMaintenance.exe','WebView2Loader.dll')){Copy-Item -LiteralPath (Join-Path $build $name) -Destination $stage}
+ foreach($name in @('PulseTrace.exe','PulseTraceMaintenance.exe','WebView2Loader.dll')){Copy-Item -LiteralPath (Join-Path $build $name) -Destination $stage}
  $exeVersion=(Get-Item -LiteralPath (Join-Path $stage 'PulseTrace.exe')).VersionInfo.ProductVersion
  if($exeVersion -ne $version.version){throw "EXE metadata mismatch: $exeVersion / $($version.version)"}
  Copy-Item -LiteralPath (Join-Path $root 'web\desktop') -Destination (Join-Path $stage 'web') -Recurse

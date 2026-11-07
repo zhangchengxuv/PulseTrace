@@ -2,7 +2,6 @@
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/desktop/webview_host.hpp"
 #include "pulsetrace/desktop/campus_portal_host.hpp"
-#include "pulsetrace/desktop/taskbar_host.hpp"
 #include "pulsetrace/desktop/caption_bar.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
@@ -26,7 +25,7 @@ struct Response {
     Json json;
 };
 struct DesktopOptions {
-    bool selftest{}, background{}, expect_failure{}, crash_test{}, early_close{}, picker_test{}, widget_test{};
+    bool selftest{}, background{}, expect_failure{}, crash_test{}, early_close{}, picker_test{};
     int cycles{2}, core_seconds{}, test_width{}, test_height{};
     std::filesystem::path data;
     std::string page{"dashboard"};
@@ -85,7 +84,6 @@ class DesktopApplication {
     std::unique_ptr<WebViewHost> web_;
     std::unique_ptr<CampusPortalHost> portal_;
     std::string campus_runtime_status_;
-    std::unique_ptr<TaskbarWidgetHost> widget_;
     std::unique_ptr<UpdateService> updates_;
     std::unique_ptr<CloudBackupService> cloud_;
     CaptionBar caption_;
@@ -101,8 +99,7 @@ class DesktopApplication {
     bool tray_recovery_checked_{};
     std::string diagnostic_, last_tray_state_, test_page_,pending_page_;
     UINT taskbar_message_{};
-    bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{},picker_test_{},widget_test_{};
-    HWND widget_test_handle_{};
+    bool minimize_test_done_{},hidden_check_started_{},hidden_check_done_{},hidden_ui_ok_{},picker_test_{};
     NOTIFYICONDATAW nid_{};
     std::ofstream log_;
 };
@@ -401,13 +398,6 @@ void DesktopApplication::quit() {
 }
 LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
     if(m==maintenance_message()){quit();return 0;}
-    if(m==widget_message()){
-        if(exiting_)return 0;
-        if(w==1||w==6){pending_page_=w==1?"network":"settings";open();if(web_->ready()){web_->post({{"type","navigate"},{"page",pending_page_}});pending_page_.clear();}}
-        else if(w==7)quit();
-        else if(w>=2&&w<=5)command({{"type","set_config"},{"request_id",0u},{"params",{{"taskbar_mode",w==3?"embedded":w==4?"floating":"tray"}}}});
-        return 0;
-    }
     LRESULT caption_result{};
     if(caption_.message(m,w,l,caption_result))return caption_result;
     if(web_&&(m==WM_ACTIVATE||m==WM_SETTINGCHANGE)){
@@ -475,10 +465,9 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         std::unique_ptr<Response> response(reinterpret_cast<Response *>(l));
         if(response->json.value("type",std::string())=="campus_event"&&response->json.contains("data"))campus_runtime_status_=response->json["data"].value("type",std::string());
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("latest")&&response->json["data"].contains("rule"))response->json["data"]["runtime_status"]=campus_runtime_status_;
-        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("language")){set_ui_language(response->json["data"].value("language","system"));if(widget_)widget_->update(core_->status());}
+        if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("language")){set_ui_language(response->json["data"].value("language","system"));}
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config")){
             response->json["data"]["appearance"]=appearance();
-            response->json["data"]["taskbar_widget"]=widget_?widget_->status():Json{{"mode","tray"},{"reason","Disabled in ordinary selftest"}};
         }
         if(portal_&&response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("campus_enabled")){
             const auto context=core_->campus_portal_context();
@@ -514,7 +503,6 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 exit_thread_=std::thread([this]{core_->stop();PostMessageW(window_,WM_APP+52,0,0);});return 0;
             }
         }
-        if(widget_){widget_->stop();if(widget_test_handle_&&IsWindow(widget_test_handle_))throw std::runtime_error("Widget did not exit");diagnostic("Taskbar widget stopped; native helper released");}
         web_->close();
         finalizing_ = true;
         final_tick_ = GetTickCount64();
@@ -545,7 +533,6 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
             return 0;
         if (!tray_added_ && GetTickCount64()-last_tray_attempt_>=5000)
             tray();
-        if(widget_)widget_->update(core_->status());
         set_ui_language(core_->status()["config"].value("language","system"));
         caption_.theme(core_->status()["config"].value("theme","system"));
         if(web_&&caption_.consume_changed()){
@@ -591,10 +578,6 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     return 0;
                 }
                 if (!preview_started_) {
-                    if(widget_test_){const auto value=widget_->status();widget_test_handle_=reinterpret_cast<HWND>(static_cast<UINT_PTR>(value.value("hwnd",0ULL)));
-                        std::ofstream out(data_/"logs"/"widget-validation.json");out<<value.dump(2);
-                        if(value.value("mode","")!="embedded"||value.value("visibility",0)!=1||value.value("paint_count",0)<1||GetParent(widget_test_handle_)!=FindWindowW(L"Shell_TrayWnd",nullptr)||(GetWindowLongPtrW(widget_test_handle_,GWL_STYLE)&WS_CHILD)==0||(GetWindowLongPtrW(widget_test_handle_,GWL_EXSTYLE)&WS_EX_NOACTIVATE)==0)throw std::runtime_error("Visible taskbar embedding not verified: "+value.dump());
-                        diagnostic("Taskbar widget verified: WS_CHILD, GetParent Shell_TrayWnd, no-activate, independent helper");}
                     if(!IsZoomed(window_)){
                         RECT outer{},client{};GetWindowRect(window_,&outer);GetClientRect(window_,&client);
                         POINT origin{0,0};ClientToScreen(window_,&origin);
@@ -652,7 +635,6 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                     SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);self_stage_=0;
                 }else if(now-stage_tick_>5000){diagnostic("SELFTEST FAIL: hidden UI verification timed out");quit();}
             } else if (self_stage_ == 1 && now - stage_tick_ > 1500 && !web_->closing()) {
-                if(widget_test_){const auto widget=widget_->status();widget_test_handle_=reinterpret_cast<HWND>(static_cast<UINT_PTR>(widget.value("hwnd",0ULL)));if(!IsWindow(widget_test_handle_)||!IsWindowVisible(widget_test_handle_)){if(now-stage_tick_<8000)return 0;throw std::runtime_error("Widget did not survive close to tray: "+widget.dump());}}
                 diagnostic("Selftest: core heartbeat while UI closed=" +
                            core_->status().value("heartbeat_ms", Json(0)).dump());
                 open();
@@ -693,7 +675,6 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     instance_ = instance;
     selftest_ = options.selftest;
     picker_test_ = options.picker_test;
-    widget_test_ = options.widget_test;
     cycles_ = options.cycles;
     core_seconds_ = options.core_seconds;
     test_page_ = options.page;
@@ -866,7 +847,6 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
     web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));
     tray();
-    if(!selftest_||widget_test_){widget_=std::make_unique<TaskbarWidgetHost>(window_,exe_);widget_->update(core_->status());}
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);
     if (!options.background || !tray_added_)
         open();
@@ -912,7 +892,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
         if (arg == L"--self-test")
             options.selftest = true;
         else if(arg==L"--self-test-picker") {options.selftest=true;options.picker_test=true;}
-        else if(arg==L"--self-test-widget") {options.selftest=true;options.widget_test=true;}
         else if (arg == L"--background")
             options.background = true;
         else if (arg == L"--data-dir" && i + 1 < argc)

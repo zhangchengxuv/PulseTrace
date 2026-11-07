@@ -408,5 +408,6 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.card.known_mix",L"已知部分构成（含估算），非套餐使用率",L"Known components only; not a plan usage percentage"},
 {"campus.card.free_percent",L"免费额度已用 {percent}%",L"Free allowance used: {percent}%"},
 {"campus.card.total_basis",L"总可用 = 免费剩余 + 估算付费可用",L"Available = free remaining + estimated paid data"},
-{"campus.card.retained",L"当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。",L"Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."}
+{"campus.card.retained",L"当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。",L"Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."},
+{"settings.invalid",L"请检查数据保留天数和保存间隔。",L"Check the retention period and save interval."}
 };}

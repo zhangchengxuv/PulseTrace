@@ -28,6 +28,8 @@ foreach($occupied in @($false,$true)){
   if($old.HasExited){throw 'Legacy external-data instance did not start'}
   $p=Start-Process -FilePath $setup -ArgumentList '/CURRENTUSER','/NOLEGACYDETECT','/LANG=chinesesimp','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="'+$app+'"'),('/GROUP="PulseTrace Validation '+[Guid]::NewGuid().ToString('N')+'"'),('/LOG="'+(Join-Path $fixture 'install.log')+'"') -WindowStyle Hidden -PassThru -Wait
   if($p.ExitCode -ne 0 -or -not $old.WaitForExit(10000)){throw 'Legacy upgrade failed or old writer was not stopped'}
+  foreach($name in @('PulseTraceWidget.exe','web\desktop\widget-view.js')){if(Test-Path -LiteralPath (Join-Path $app $name)){throw "Retired widget survived upgrade: $name"}}
+  $report.RetiredWidgetRemoved=$true
   & (Join-Path $build 'upgrade_fixture.exe') --verify $data
   if($LASTEXITCODE -ne 0){throw 'Destination history/monthly archive mismatch'}
   & (Join-Path $build 'upgrade_fixture.exe') --verify $source
