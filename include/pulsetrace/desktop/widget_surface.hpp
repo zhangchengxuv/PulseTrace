@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <span>
+#include "pulsetrace/desktop/widget_style.hpp"
 namespace pulsetrace {
 // Top-down BGRA, premultiplied sRGB. GDI is used only for a grayscale glyph mask:
 // ClearType's RGB fringes and GDI's undefined alpha never reach the compositor.
@@ -56,10 +57,11 @@ public:
     }
     void draw(const std::wstring &first,const std::wstring &second,bool dark,unsigned background_alpha=0,COLORREF upload=RGB(52,152,219),COLORREF download=RGB(139,196,234)) {
         std::fill(mask_,mask_+width_*height_,0u);
-        const std::wstring *lines[]={&first,&second};bool arrow[2]{};const int gutter=MulDiv(24,dpi_,96),pad=MulDiv(5,dpi_,96);
+        const std::wstring *lines[]={&first,&second};bool arrow[2]{};const int pad=MulDiv(4,dpi_,96),gap=MulDiv(3,dpi_,96);
+        const int gutter=pad+std::max(widget_text_width(mask_dc_,L"\u2191"),widget_text_width(mask_dc_,L"\u2193"))+gap;
         for(int row=0;row<2;++row){RECT r{pad,row*height_/2,width_-pad,(row+1)*height_/2};const auto &line=*lines[row];
             arrow[row]=line.size()>1&&(line[0]==L'\x2193'||line[0]==L'\x2191');
-            if(arrow[row]){RECT icon=r;icon.right=gutter;DrawTextW(mask_dc_,line.c_str(),1,&icon,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);r.left=gutter;DrawTextW(mask_dc_,line.c_str()+2,-1,&r,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS);}
+            if(arrow[row]){RECT icon=r;icon.right=gutter-gap;DrawTextW(mask_dc_,line.c_str(),1,&icon,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);r.left=gutter;const auto text=line.substr(2);const auto advances=widget_advances(mask_dc_,text);TEXTMETRICW tm{};GetTextMetricsW(mask_dc_,&tm);ExtTextOutW(mask_dc_,r.left,(r.top+r.bottom-tm.tmHeight)/2,ETO_CLIPPED,&r,text.c_str(),static_cast<UINT>(text.size()),advances.data());}
             else DrawTextW(mask_dc_,line.c_str(),-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS);
         }
         GdiFlush();transparent=opaque=partial=0;
