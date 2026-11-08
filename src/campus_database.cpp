@@ -1,4 +1,5 @@
 #include "pulsetrace/database.hpp"
+#include "pulsetrace/campus.hpp"
 #include <sqlite3.h>
 #include <stdexcept>
 namespace pulsetrace {
@@ -20,7 +21,7 @@ Json read_optional(sqlite3_stmt *p,int column){
     return sqlite3_column_type(p,column)==SQLITE_FLOAT?Json(sqlite3_column_double(p,column)):Json(sqlite3_column_int64(p,column));
 }
 Json read_snapshot(sqlite3_stmt *p){
-    return {{"observed_ms",sqlite3_column_int64(p,0)},
+    Json result={{"observed_ms",sqlite3_column_int64(p,0)},
             {"portal_origin",reinterpret_cast<const char*>(sqlite3_column_text(p,1))},
             {"portal_url",reinterpret_cast<const char*>(sqlite3_column_text(p,2))},
             {"balance",read_optional(p,3)},{"used_bytes",read_optional(p,4)},
@@ -29,11 +30,13 @@ Json read_snapshot(sqlite3_stmt *p){
             {"cycle_text",reinterpret_cast<const char*>(sqlite3_column_text(p,8))},
             {"quality",reinterpret_cast<const char*>(sqlite3_column_text(p,9))},
             {"confidence",sqlite3_column_double(p,10)},
-            {"details",Json::parse(reinterpret_cast<const char*>(sqlite3_column_text(p,11)))}};
+            {"details",Json::parse(reinterpret_cast<const char*>(sqlite3_column_text(p,11)))},
+            {"measurement",Json::parse(reinterpret_cast<const char*>(sqlite3_column_text(p,12)))}};
+    result["measurement"]=campus_measurement(result);return result;
 }
 }
 void DatabaseManager::save_campus_snapshot(const Json &snapshot){
-    CampusStatement s(db_,"INSERT INTO campus_snapshots VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(observed_ms) DO NOTHING");
+    CampusStatement s(db_,"INSERT INTO campus_snapshots(observed_ms,portal_origin,portal_url,balance,used_bytes,remaining_bytes,quota_bytes,fee,cycle_text,quality,confidence,details_json,measurement_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(observed_ms) DO NOTHING");
     sqlite3_bind_int64(s.p,1,snapshot.at("observed_ms").get<std::int64_t>());
     s.text(2,snapshot.at("portal_origin"));
     s.text(3,snapshot.at("portal_url"));
@@ -46,12 +49,13 @@ void DatabaseManager::save_campus_snapshot(const Json &snapshot){
     s.text(10,snapshot.at("quality"));
     sqlite3_bind_double(s.p,11,snapshot.at("confidence").get<double>());
     s.text(12,snapshot.value("details",Json::object()).dump());
+    s.text(13,snapshot.value("measurement",Json::object()).dump());
     if(s.step()!=SQLITE_DONE)throw std::runtime_error("Campus snapshot insert failed");
 }
 Json DatabaseManager::campus_latest(const std::string &origin) const{
     CampusStatement s(db_,origin.empty()
-        ?"SELECT observed_ms,portal_origin,portal_url,balance,used_bytes,remaining_bytes,quota_bytes,fee,cycle_text,quality,confidence,details_json FROM campus_snapshots ORDER BY observed_ms DESC LIMIT 1"
-        :"SELECT observed_ms,portal_origin,portal_url,balance,used_bytes,remaining_bytes,quota_bytes,fee,cycle_text,quality,confidence,details_json FROM campus_snapshots WHERE portal_origin=? ORDER BY observed_ms DESC LIMIT 1");
+        ?"SELECT observed_ms,portal_origin,portal_url,balance,used_bytes,remaining_bytes,quota_bytes,fee,cycle_text,quality,confidence,details_json,measurement_json FROM campus_snapshots ORDER BY observed_ms DESC LIMIT 1"
+        :"SELECT observed_ms,portal_origin,portal_url,balance,used_bytes,remaining_bytes,quota_bytes,fee,cycle_text,quality,confidence,details_json,measurement_json FROM campus_snapshots WHERE portal_origin=? ORDER BY observed_ms DESC LIMIT 1");
     if(!origin.empty())s.text(1,origin);
     const int rc=s.step();if(rc==SQLITE_DONE)return nullptr;return read_snapshot(s.p);
 }

@@ -24,7 +24,9 @@ namespace {
 using namespace cloud_detail;
 Json clean_config(const Json &cfg){
  static const std::set<std::string> allowed={"theme","language","retention_days","flush_seconds","close_to_tray","capture_on_launch","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","usage_enabled","usage_idle_seconds","usage_icons","usage_retention_days","update_channel","update_source","check_updates_on_start"};
- if(!cfg.is_object())throw std::runtime_error("CLOUD_CONFIG_INVALID");Json result={{"config_version",1}};for(const auto &key:allowed)if(cfg.contains(key))result[key]=cfg[key];return result;
+ if(!cfg.is_object())throw std::runtime_error("CLOUD_CONFIG_INVALID");Json result={{"config_version",1}};for(const auto &key:allowed)if(cfg.contains(key))result[key]=cfg[key];
+ for(const char *key:{"campus_traffic_radix","campus_unit_price","campus_price_unit","campus_price_basis","campus_linear_tariff"})if(cfg.contains(key))result[key]=cfg[key];
+ return result;
 }
 Json manifest_of(std::span<const unsigned char> bytes,size_t &offset){
  if(bytes.size()<4||bytes.size()>max_bytes)throw std::runtime_error("CLOUD_ARCHIVE_FORMAT");size_t size=0;for(unsigned i=0;i<4;++i)size|=static_cast<size_t>(bytes[i])<<(8*i);

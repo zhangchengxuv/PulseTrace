@@ -708,8 +708,8 @@
   "campus.saving": "Saving…",
   "campus.invalid_settings": "Check the portal URL, refresh interval and price.",
   "campus.balance_for_data": "Confirm the account balance is fully available for data",
-  "campus.free_first": "Confirm current-cycle total usage consumes the free allowance first",
-  "campus.billing_hint": "Enter only necessary parameters. GB = 10⁹ B; GiB = 2³⁰ B. Paid fees are never deducted again. Missing data prevents calculation.",
+  "campus.free_first": "Confirm this cycle: usage and allowance cover the same traffic/directions, and usage includes free data (renew monthly)",
+  "campus.billing_hint": "Enter the free allowance and price per GB using the selected campus conversion. Paid fees are never deducted again. Missing data prevents calculation.",
   "campus.syncing": "Synchronizing portal…",
   "campus.auth_required": "Sign-in required; last valid data retained",
   "campus.background_hint": "Sync continues after confirmed sign-in, including when the portal is closed or the app is in the tray. Disable this switch or exit to stop. WebView2 manages the browser session; passwords, cookies and tokens are never written to app settings, SQLite or logs.",
@@ -736,5 +736,14 @@
   "campus.card.retained": "Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference.",
   "settings.invalid": "Check the retention period and save interval.",
   "campus.converted": "Converted: ≈ {value}",
-  "campus.units_hint": "Portal readings keep their source units; calculations use bytes. MB = 10⁶ B, GB = 10⁹ B; MiB = 2²⁰ B, GiB = 2³⁰ B."
+  "campus.units_hint": "School traffic defaults to base 1024, with base 1000 available; school GB/MB are not IEC units.",
+  "campus.radix": "Traffic conversion",
+  "campus.radix_option": "Base {radix}",
+  "campus.radix_note": "School GB/MB use base {radix}; explicit GiB/MiB always use IEC base 1024.",
+  "campus.raw_reading": "Portal reading: {value}",
+  "campus.yuan_per_gb": "CNY/GB",
+  "campus.linear_tariff": "Confirm a single data rate, without minimum charges, tiers or caps",
+  "campus.legacy_price": "Original rate retained: {value} CNY/{unit} (standard byte basis). The input shows its equivalent in school CNY/GB; editing adopts the new convention.",
+  "campus.accounting_unknown": "Confirm the current cycle, matching accounting scope and free-first usage; renew confirmation after expiry.",
+  "campus.free_track": "Track: free allowance consumed + remaining. Estimated purchasing capacity is listed separately."
 }

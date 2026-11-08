@@ -383,8 +383,8 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.saving",L"正在保存…",L"Saving…"},
 {"campus.invalid_settings",L"请检查门户地址、刷新间隔和单价。",L"Check the portal URL, refresh interval and price."},
 {"campus.balance_for_data",L"确认账户余额可全部用于流量消费",L"Confirm the account balance is fully available for data"},
-{"campus.free_first",L"确认本账期总已用流量优先消耗免费额度",L"Confirm current-cycle total usage consumes the free allowance first"},
-{"campus.billing_hint",L"仅填必要原始参数；GB = 10⁹ B，GiB = 2³⁰ B。已扣费用不会再次从余额扣除，缺失数据时无法计算。",L"Enter only necessary parameters. GB = 10⁹ B; GiB = 2³⁰ B. Paid fees are never deducted again. Missing data prevents calculation."},
+{"campus.free_first",L"确认本账期：已用量和免费额度范围一致、含相同上下行，且已用量未扣除免费额度（每月重新确认）",L"Confirm this cycle: usage and allowance cover the same traffic/directions, and usage includes free data (renew monthly)"},
+{"campus.billing_hint",L"按所选校园网换算方式填写免费额度和元/GB 单价。已扣费用不会再次从余额扣除，缺失数据时无法计算。",L"Enter the free allowance and price per GB using the selected campus conversion. Paid fees are never deducted again. Missing data prevents calculation."},
 {"campus.syncing",L"正在同步门户…",L"Synchronizing portal…"},
 {"campus.auth_required",L"登录已失效，请重新登录；保留上次有效数据",L"Sign-in required; last valid data retained"},
 {"campus.background_hint",L"登录确认后自动同步；关闭门户或主窗口到托盘仍继续。停用此开关或退出应用可停止。浏览器会话由 WebView2 管理，密码、Cookie、Token 不写入应用配置、SQLite 或日志。",L"Sync continues after confirmed sign-in, including when the portal is closed or the app is in the tray. Disable this switch or exit to stop. WebView2 manages the browser session; passwords, cookies and tokens are never written to app settings, SQLite or logs."},
@@ -411,5 +411,14 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.card.retained",L"当前同步或认证异常，以上保留上次有效数据；可用量计算仅供参考。",L"Sync or authentication needs attention. Last valid data is retained; availability calculations are for reference."},
 {"settings.invalid",L"请检查数据保留天数和保存间隔。",L"Check the retention period and save interval."},
 {"campus.converted",L"换算后：约 {value}",L"Converted: ≈ {value}"},
-{"campus.units_hint",L"门户读取值保留原单位，计算统一使用字节。MB = 10⁶ B、GB = 10⁹ B；MiB = 2²⁰ B、GiB = 2³⁰ B。",L"Portal readings keep their source units; calculations use bytes. MB = 10⁶ B, GB = 10⁹ B; MiB = 2²⁰ B, GiB = 2³⁰ B."}
+{"campus.units_hint",L"校园网默认 1024 进位，可切换 1000；GB/MB 是门户约定，不是 IEC 单位。",L"School traffic defaults to base 1024, with base 1000 available; school GB/MB are not IEC units."},
+{"campus.radix",L"流量换算方式",L"Traffic conversion"},
+{"campus.radix_option",L"{radix} 进位",L"Base {radix}"},
+{"campus.radix_note",L"校园网 GB/MB 按 {radix} 进位；显式 GiB/MiB 始终按 IEC 1024 换算。",L"School GB/MB use base {radix}; explicit GiB/MiB always use IEC base 1024."},
+{"campus.raw_reading",L"门户原值：{value}",L"Portal reading: {value}"},
+{"campus.yuan_per_gb",L"元/GB",L"CNY/GB"},
+{"campus.linear_tariff",L"确认采用单一流量单价，无最低消费、阶梯或封顶规则",L"Confirm a single data rate, without minimum charges, tiers or caps"},
+{"campus.legacy_price",L"旧单价保留：{value} 元/{unit}（标准字节基准）。输入框已换算为当前校园网元/GB；重新编辑后使用新口径。",L"Original rate retained: {value} CNY/{unit} (standard byte basis). The input shows its equivalent in school CNY/GB; editing adopts the new convention."},
+{"campus.accounting_unknown",L"请确认当前账期、同一计量范围及先用免费额度；过期后需重新确认。",L"Confirm the current cycle, matching accounting scope and free-first usage; renew confirmation after expiry."},
+{"campus.free_track",L"分段仅表示免费额度：免费已用 + 免费剩余；资金可用为估算，单独列出。",L"Track: free allowance consumed + remaining. Estimated purchasing capacity is listed separately."}
 };}

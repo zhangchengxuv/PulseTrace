@@ -7,23 +7,30 @@ const campusFields=[
  ['quota_bytes','bytes'],['fee','currency'],['billing_cycle','text']
 ];
 const campusFieldKind=Object.fromEntries(campusFields);
-function campusBytes(value){return value==null?'—':bytes(Number(value));}
+function campusRadix(){return state.config?.campus_traffic_radix===1000?1000:1024;}
+function campusBytes(value){return value==null?'—':(Number(value)/campusRadix()**3).toLocaleString(PulseI18n.locale,{minimumFractionDigits:2,maximumFractionDigits:2})+' GB';}
 function campusPortalBytes(field,value,source){
- const unit=source==='portal'?campusData?.latest?.details?.web_units?.[field]:null;
- if(value==null||!['B','KB','MB','GB','TB','KiB','MiB','GiB','TiB'].includes(unit))return campusBytes(value);
- return (Number(value)/campusUnitFactor(unit)).toLocaleString(PulseI18n.locale,{useGrouping:false,maximumFractionDigits:6})+' '+unit;
+ return campusBytes(value);
 }
-function campusConversion(value){return tr('campus.converted',{value:campusBytes(value)});}
+function campusConversion(value){const raw=campusReadings().used_bytes;return raw?tr('campus.raw_reading',{value:raw.value+' '+raw.unit}):tr('campus.needs_confirmation');}
+function campusUnitNote(){return tr('campus.radix_note',{radix:campusRadix()});}
 function campusMoney(value){return value==null?'—':'¥'+Number(value).toFixed(2);}
 function campusLatestText(){return campusData?.latest?.observed_ms?new Date(campusData.latest.observed_ms).toLocaleString(PulseI18n.locale):tr('campus.never_synced');}
 function campusQuality(){const runtime={campus_syncing:'campus.syncing',campus_auth_required:'campus.auth_required',campus_rule_stale:'campus.rule_stale',campus_error:'campus.sync_failed',snapshot_failed:'campus.sync_failed',snapshot_saved:'campus.confirmed',campus_candidates:'campus.needs_confirmation'};const s=campusEventStatus||(runtime[campusData?.runtime_status]?tr(runtime[campusData.runtime_status]):campusData?.latest?.quality)||'';if(s&&!['confirmed','auto_recognized','low_confidence','stale','unknown'].includes(s))return s;return s==='confirmed'?tr('campus.confirmed'):s==='auto_recognized'?tr('campus.auto_short'):s==='low_confidence'?tr('campus.needs_confirmation'):s==='stale'?tr('campus.rule_stale'):s==='unknown'?tr('campus.unknown'):tr('campus.never_synced');}
-function campusUnitFactor(unit){return ({B:1,KB:1e3,MB:1e6,GB:1e9,TB:1e12,KiB:1024,MiB:1024**2,GiB:1024**3,TiB:1024**4,CNY:1})[unit]||1;}
+function campusUnitFactor(unit,radix=campusRadix()){return ({B:1,KB:radix,MB:radix**2,GB:radix**3,TB:radix**4,KiB:1024,MiB:1024**2,GiB:1024**3,TiB:1024**4,CNY:1})[unit]||1;}
+function campusPriceFactor(cfg=state.config||{}){return cfg.campus_price_basis==='school'?campusRadix()**3:cfg.campus_price_unit==='GB'?1e9:GiB;}
+function campusReadings(){
+ const latest=campusData?.latest||{},measurement=latest.measurement;if(measurement)return measurement.raw_readings||{};
+ const values=latest.details?.web_values||{},out={};
+ for(const [field,unit]of Object.entries(latest.details?.web_units||{}))if(['B','KB','MB','GB','TB','KiB','MiB','GiB','TiB'].includes(unit)&&Number.isFinite(values[field]??latest[field]))out[field]={value:(values[field]??latest[field])/campusUnitFactor(unit,1000),unit};
+ return out;
+}
 function campusCycle(){
  const mapping=campusFieldState.billing_cycle||campusData?.rule?.fields?.billing_cycle;
  if(mapping?.mode==='manual'&&mapping.kind==='text'&&mapping.value)return String(mapping.value);
  return String(campusData?.latest?.cycle_text||'');
 }
-function campusWebValues(){const d=campusData?.latest?.details?.web_values||{},l=campusData?.latest||{},out={...d};for(const [name]of campusFields)if(out[name]==null&&l[name]!=null)out[name]=l[name];return out;}
+function campusWebValues(){const d=campusData?.latest?.details?.web_values||{},l=campusData?.latest||{},out={...d},raw=campusReadings();for(const [name,kind]of campusFields){if(out[name]==null&&l[name]!=null)out[name]=l[name];if(kind==='bytes')out[name]=raw[name]?Number(raw[name].value)*campusUnitFactor(raw[name].unit):null;}return out;}
 function campusMapping(field){return campusFieldState[field]||campusData?.rule?.fields?.[field]||{mode:'disabled'};}
 function campusManualValue(m,cycle=campusCycle()){
  if(m.value==null||!Number.isFinite(Number(m.value)))return null;
@@ -61,7 +68,11 @@ function campusResolve(confirmed=false){
   try{
    if((mode==='auto'||mode==='selector')&&web[field]!=null){value=campusFieldKind[field]==='text'?String(web[field]):Number(web[field]);source='portal';}
    else if(mode==='manual'){value=campusFieldKind[field]==='text'?String(m.value??''):campusManualValue(m,cycle);source=campusManualExpired(m,cycle)?'cycle_reset':'manual';}
-   else if(mode==='formula'){value=campusFormula(m.formula,name=>resolve(name));source='formula';}
+   else if(mode==='formula'){
+    const builtin=['min(used_bytes,free_quota_bytes)','max(0,used_bytes-free_quota_bytes)'].includes(String(m.formula).replace(/\s/g,''));
+    if(builtin&&!campusAccountingValid(m,cycle))throw new Error(tr('campus.accounting_unknown'));
+    value=campusFormula(m.formula,name=>resolve(name));source='formula';
+   }
   }catch(e){errors.push({field,message:String(e.message||e)});value=null;source='error';}
   visiting.delete(field);
   resolved[field]=campusFieldKind[field]==='text'?(typeof value==='string'&&value?value:null):(Number.isFinite(value)&&value>=0?value:null);
@@ -70,18 +81,40 @@ function campusResolve(confirmed=false){
  for(const [field]of campusFields)resolve(field);
  // Generic plan totals and remaining data are not necessarily free allowances.
  const freeQuota=resolved.free_quota_bytes,freeUsed=resolved.used_free_bytes;
- const calculatedFree=freeQuota!=null&&freeUsed!=null?Math.max(0,freeQuota-freeUsed):null;
- const freeRemaining=resolved.free_remaining_bytes??calculatedFree;
- const freeRemainingSource=resolved.free_remaining_bytes!=null?sources.free_remaining_bytes:calculatedFree!=null?'calculated':'unknown';
- const price=Number(state.config?.campus_unit_price||0),priceBytes=state.config?.campus_price_unit==='GB'?GB:GiB,funded=price>0&&resolved.spendable_balance!=null?resolved.spendable_balance/price*priceBytes:null;
- const total=freeRemaining!=null&&funded!=null?freeRemaining+funded:null;
+ const cycleMatches=!billing||billing.mode!=='manual'||!campusData?.latest?.cycle_text||String(billing.value)===campusData.latest.cycle_text;
+ const billingValid=cycleMatches&&campusBillingCycleValid(cycle);
+ const calculatedFree=billingValid&&freeQuota!=null&&freeUsed!=null?Math.max(0,freeQuota-freeUsed):null;
+ const active=confirmed?saved:campusFieldState;
+ const mapping=field=>active[field]||saved[field];
+ const formula=(field,text)=>mapping(field)?.mode==='formula'&&String(mapping(field).formula).replace(/\s/g,'')===text;
+ const trusted=field=>resolved[field]!=null&&['portal','manual'].includes(sources[field]);
+ const usedConfirmed=trusted('used_free_bytes')||formula('used_free_bytes','min(used_bytes,free_quota_bytes)')&&campusAccountingValid(mapping('used_free_bytes'),cycle)&&trusted('used_bytes')&&trusted('free_quota_bytes');
+ const freeFormula=(formula('free_remaining_bytes','free_quota_bytes-used_free_bytes')||formula('free_remaining_bytes','max(0,free_quota_bytes-used_free_bytes)'))&&billingValid&&trusted('free_quota_bytes')&&usedConfirmed;
+ const freeRemaining=trusted('free_remaining_bytes')||freeFormula?resolved.free_remaining_bytes:usedConfirmed&&trusted('free_quota_bytes')?calculatedFree:null;
+ const freeRemainingSource=freeRemaining==null?'unknown':trusted('free_remaining_bytes')||freeFormula?sources.free_remaining_bytes:'calculated';
+ const spendable=trusted('spendable_balance')||formula('spendable_balance','balance')&&trusted('balance');
+ const price=Number(state.config?.campus_unit_price||0),priceBytes=campusPriceFactor(),funded=state.config?.campus_linear_tariff===true&&Number.isFinite(price)&&price>0&&spendable?resolved.spendable_balance/price*priceBytes:null;
+ const total=billingValid&&freeRemaining!=null&&funded!=null?freeRemaining+funded:null;
  const quota=freeQuota,used=freeUsed;
- const trusted=s=>s==='portal'||s==='manual';
- const quotaSource=resolved.free_quota_bytes!=null?sources.free_quota_bytes:sources.quota_bytes,usedSource=resolved.used_free_bytes!=null?sources.used_free_bytes:sources.used_bytes;
- const progress=trusted(quotaSource)&&trusted(usedSource)&&quota>0&&used!=null?Math.max(0,Math.min(1,used/quota)):null;
+ const coherent=quota>0&&used!=null&&used<=quota&&freeRemaining!=null&&Math.abs(Math.max(0,quota-used)-freeRemaining)<=Math.max(1,quota*1e-9);
+ const progress=billingValid&&trusted('free_quota_bytes')&&usedConfirmed&&coherent?Math.max(0,Math.min(1,used/quota)):null;
  // Paid usage has already excluded the free allowance. Never charge all usage again.
- const estimated=resolved.paid_used_bytes==null||price<=0?null:resolved.paid_used_bytes/priceBytes*price;
- return {resolved,sources,freeRemaining,freeRemainingSource,funded,total,progress,estimated,errors};
+ const paidConfirmed=trusted('paid_used_bytes')||formula('paid_used_bytes','max(0,used_bytes-free_quota_bytes)')&&campusAccountingValid(mapping('paid_used_bytes'),cycle)&&trusted('used_bytes')&&trusted('free_quota_bytes');
+ const estimated=state.config?.campus_linear_tariff!==true||!billingValid||!paidConfirmed||!Number.isFinite(price)||price<=0?null:resolved.paid_used_bytes/priceBytes*price;
+ return {resolved,sources,freeRemaining,freeRemainingSource,funded,total,progress,estimated,errors,billingValid};
+}
+function campusBillingCycleValid(cycle){
+ if(!cycle)return false;const now=new Date(),month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+ const observed=campusData?.latest?.observed_ms;if(!observed)return false;const date=new Date(observed);
+ if(date.getFullYear()!==now.getFullYear()||date.getMonth()!==now.getMonth())return false;
+ if(/^\d{4}-\d{2}$/.test(cycle))return cycle===month;
+ return cycle===campusData?.latest?.cycle_text&&Boolean(campusData?.latest?.observed_ms)&&new Date(campusData.latest.observed_ms).toDateString()===now.toDateString();
+}
+function campusAccountingValid(mapping,cycle){
+ if(!mapping?.accounting_confirmed||!mapping.cycle||mapping.cycle!==cycle)return false;
+ const observed=campusData?.latest?.observed_ms;if(!observed||!mapping.confirmed_month)return false;
+ const month=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+ return mapping.confirmed_month===month(new Date(observed))&&mapping.confirmed_month===month(new Date());
 }
 function campusLivePanel(compact=false){
  const c=campusResolve(),latest=campusData?.latest,cfg=state.config||{};
@@ -97,8 +130,8 @@ function campusLivePanel(compact=false){
    el('span',{},tr('campus.portal_fee')+' '+(c.resolved.fee==null?'—':campusMoney(c.resolved.fee))+' · '+tr('campus.source.'+c.sources.fee)),
    el('span',{},tr('campus.estimated_fee')+' '+(c.estimated==null?'—':campusMoney(c.estimated))),
    el('span',{},tr('campus.paid_used')+' '+campusPortalBytes('paid_used_bytes',c.resolved.paid_used_bytes,c.sources.paid_used_bytes)+' · '+tr('campus.source.'+c.sources.paid_used_bytes))));
-  host.append(el('p',{class:'muted campus-unit-note'},tr('campus.units_hint')));
-  if(c.progress!=null)host.append(el('div',{class:'campus-progress','aria-label':tr('campus.progress')},el('i',{style:`width:${c.progress*100}%`}),el('span',{},(c.progress*100).toFixed(1)+'%')));
+  host.append(el('p',{class:'muted campus-unit-note'},campusUnitNote()));
+  if(c.progress!=null){const bar=el('i');bar.style.width=(c.progress*100)+'%';host.append(el('div',{class:'campus-progress','aria-label':tr('campus.progress')},bar,el('span',{},(c.progress*100).toFixed(2)+'%')));}
   else host.append(el('small',{class:'muted'},tr('campus.progress_unknown')));
   if(c.errors.length)host.append(el('p',{class:'capture-error'},c.errors.map(e=>tr('campus.field.'+e.field)+': '+e.message).join('; ')));
   if(campusData?.rule_error)host.append(el('p',{class:'capture-error'},campusData.rule_error));
@@ -110,30 +143,32 @@ function campusOverviewModel(){
  const raw=field=>c.resolved[field]!=null&&['portal','manual'].includes(c.sources[field]);
  // Accept the two built-in billing choices, not arbitrary legacy formulas.
  const formula=(field,text)=>fields[field]?.mode==='formula'&&String(fields[field].formula).replace(/\s/g,'')===text;
- const usedFree=raw('used_free_bytes')||formula('used_free_bytes','min(used_bytes,free_quota_bytes)')&&raw('used_bytes')&&raw('free_quota_bytes');
- const free=raw('free_remaining_bytes')?c.resolved.free_remaining_bytes:
-  c.resolved.free_remaining_bytes==null&&raw('free_quota_bytes')&&usedFree?c.freeRemaining:null;
+ const free=c.freeRemaining;
  const spendable=raw('spendable_balance')||formula('spendable_balance','balance')&&raw('balance');
  const price=Number(cfg.campus_unit_price),funded=spendable&&Number.isFinite(price)&&price>0&&
   (cfg.campus_price_unit==null||['GB','GiB'].includes(cfg.campus_price_unit))&&Number.isFinite(c.funded)?c.funded:null;
- const total=free!=null&&funded!=null&&Number.isFinite(free+funded)?free+funded:null;
+ const total=c.billingValid&&free!=null&&funded!=null&&Number.isFinite(free+funded)?free+funded:null;
  const values={balance:raw('balance')?c.resolved.balance:null,used:raw('used_bytes')?c.resolved.used_bytes:null,free,funded,total};
  const runtime=campusLastEventType||campusData?.runtime_status;
  let status=!cfg.campus_enabled?'disabled':runtime==='campus_auth_required'?'auth':
   campusData?.error||campusData?.rule_error||['campus_error','snapshot_failed'].includes(runtime)?'error':
-  runtime==='campus_rule_stale'?'stale':Object.values(values).every(v=>v==null)?'empty':
+  runtime==='campus_rule_stale'||campusData?.latest&&(!c.billingValid||campusData.latest.measurement?.status==='needs_confirmation')?'stale':Object.values(values).every(v=>v==null)?'empty':
   Object.values(values).some(v=>v==null)?'partial':'ready';
- const percent=!['disabled','auth','error','stale'].includes(status)&&raw('free_quota_bytes')&&raw('used_free_bytes')&&
-  c.resolved.free_quota_bytes>0&&c.resolved.used_free_bytes<=c.resolved.free_quota_bytes?c.progress:null;
- const segments=['used','free','funded'].filter(key=>values[key]!=null&&values[key]>0).map(key=>({key,value:values[key]}));
+ const percent=!['disabled','auth','error','stale'].includes(status)?c.progress:null;
+ // The track is exclusively the free allowance: consumed + remaining. Paid
+ // purchasing capacity and total observed traffic have different denominators.
+ const quota=c.resolved.free_quota_bytes,consumed=c.resolved.used_free_bytes;
+ const coherent=quota>0&&consumed!=null&&free!=null&&Math.abs(Math.max(0,quota-consumed)-free)<=Math.max(1,quota*1e-9);
+ const segments=percent!=null&&coherent?
+  [{key:'used',value:Math.min(consumed,quota)},{key:'free',value:free}].filter(s=>s.value>0):[];
  const sum=segments.reduce((sum,item)=>sum+item.value,0);
  if(!Number.isFinite(sum))segments.length=0;
- return {values,status,percent,segments,sum,usedSource:c.sources.used_bytes,units:campusData?.latest?.details?.web_units||{},freeSource:raw('free_remaining_bytes')?c.sources.free_remaining_bytes:'calculated',balanceSource:c.sources.balance,
+ return {values,status,percent,segments,sum,freeUsed:consumed,radix:campusRadix(),raw:campusReadings(),usedSource:c.sources.used_bytes,units:campusData?.latest?.details?.web_units||{},freeSource:raw('free_remaining_bytes')?c.sources.free_remaining_bytes:'calculated',balanceSource:c.sources.balance,
   syncing:runtime==='campus_syncing',observed:campusData?.latest?.observed_ms||null,
   source:campusData?.latest?.portal_url||campusData?.portal_url||cfg.campus_portal_url||''};
 }
 function campusOverviewContent(host,m){
- const value=(key,money=false)=>m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):
+ const value=(key,money=false)=>key==='free_used'?(m.freeUsed==null?tr('campus.unavailable'):campusBytes(m.freeUsed)):m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):
   key==='used'?campusPortalBytes('used_bytes',m.values[key],m.usedSource):key==='free'?campusPortalBytes('free_remaining_bytes',m.values[key],m.freeSource):campusBytes(m.values[key]);
  const statusKey={disabled:'campus.card.disabled',auth:'campus.auth_required',error:'campus.sync_failed',stale:'campus.rule_stale',empty:'campus.card.empty',partial:'campus.card.partial',ready:'campus.card.ready'}[m.status];
  const header=el('header',{class:'campus-overview-header'},el('div',{class:'campus-overview-heading'},metricIcon('network'),el('h3',{},tr('campus.title')),
@@ -150,20 +185,20 @@ function campusOverviewContent(host,m){
   el('small',{},m.values[key]==null?'':tr(source)));
  const metrics=el('div',{class:'campus-metrics'},metric('balance','campus.balance','wallet',m.balanceSource==='portal'?'campus.card.portal':'campus.source.manual'),
   metric('free','campus.free_remaining','network','campus.source.'+m.freeSource),metric('total','campus.total_available','protocol','campus.card.estimate'));
- const legendNames={used:'campus.used',free:'campus.free_remaining',funded:'campus.card.funded'};
+ const legendNames={used:'campus.used',free_used:'campus.field.used_free_bytes',free:'campus.free_remaining',funded:'campus.card.funded'};
  const chart=el('section',{class:'campus-usage'},el('div',{class:'campus-usage-heading'},el('h4',{},tr('campus.card.usage')),
-  m.percent==null?null:el('span',{class:'campus-free-percent'},tr('campus.card.free_percent',{percent:(m.percent*100).toFixed(1)}))));
- const track=el('div',{class:'campus-segment-track',role:'img','aria-label':tr('campus.card.known_mix')+'; '+Object.entries(legendNames).map(([key,label])=>tr(label)+': '+value(key)).join('; ')});
+  m.percent==null?null:el('span',{class:'campus-free-percent'},tr('campus.card.free_percent',{percent:(m.percent*100).toFixed(2)}))));
+ const track=el('div',{class:'campus-segment-track',role:'img','aria-label':tr('campus.free_track')+'; '+['free_used','free'].map(key=>tr(legendNames[key])+': '+value(key)).join('; ')});
  for(const item of m.segments){
   const segment=el('i',{class:'campus-segment campus-tone-'+item.key,'aria-hidden':'true'});
   // CSSOM properties work under the desktop CSP; style attributes are blocked.
   segment.style.width=(item.value/m.sum*100)+'%';track.append(segment);
  }
- chart.append(track,el('p',{class:'campus-chart-caption'},tr(['used','free','funded'].some(key=>m.values[key]!=null)?'campus.card.known_mix':'campus.progress_unknown')),
+ chart.append(track,el('p',{class:'campus-chart-caption'},tr(m.segments.length?'campus.free_track':'campus.progress_unknown')),
   el('div',{class:'campus-legend'},...Object.entries(legendNames).map(([key,label])=>el('div',{'data-campus-part':key},
-   el('span',{},el('i',{class:'campus-swatch campus-tone-'+key,'aria-hidden':'true'}),tr(label)),el('div',{},el('strong',{},value(key)),key==='used'&&m.values[key]!=null?el('small',{class:'campus-conversion'},campusConversion(m.values[key])):null)))),
+   el('span',{},key==='used'?null:el('i',{class:'campus-swatch campus-tone-'+(key==='free_used'?'used':key),'aria-hidden':'true'}),tr(label)),el('div',{},el('strong',{},value(key)),key==='used'&&m.values[key]!=null?el('small',{class:'campus-conversion'},campusConversion(m.values[key])):null)))),
   el('div',{class:'campus-available-total'},el('span',{},tr('campus.total_available')),el('strong',{},value('total'))),
-  el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')),el('small',{class:'campus-total-basis'},tr('campus.units_hint')));
+  el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')),el('small',{class:'campus-total-basis'},campusUnitNote()));
  host.append(el('div',{class:'campus-overview-body'},metrics,chart));
  if(['auth','error','stale'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(Object.values(m.values).some(v=>v!=null)?'campus.card.retained':'campus.card.empty_hint')));
  else if(m.status==='empty'||m.status==='partial')host.append(el('p',{class:'campus-overview-notice'},tr(m.status==='empty'?'campus.card.empty_hint':'campus.card.partial_hint')));
@@ -199,21 +234,27 @@ function renderCampusSettings(host){
  const input=(type,value,attrs={})=>el('input',{type,value,...attrs});
  const enabled=input('checkbox','',{checked:Boolean(cfg.campus_enabled)}),url=input('url',cfg.campus_portal_url||'',{placeholder:'https://portal.example.edu.cn',maxlength:2048});
  const refresh=input('number',cfg.campus_refresh_minutes||5,{min:5,max:1440}),price=input('number',cfg.campus_unit_price||0,{min:0,max:1000,step:'any'});
- const priceUnit=el('select',{'aria-label':tr('campus.price_unit')},el('option',{value:'GB'},'GB'),el('option',{value:'GiB'},'GiB'));priceUnit.value=cfg.campus_price_unit||'GiB';
+ const radix=el('select',{'aria-label':tr('campus.radix')},...[1024,1000].map(n=>el('option',{value:String(n)},tr('campus.radix_option',{radix:n}))));radix.value=String(campusRadix());
+ const priceUnit=el('span',{},tr('campus.yuan_per_gb'));
+ price.value=Number(cfg.campus_unit_price||0)*campusRadix()**3/campusPriceFactor(cfg);
+ let priceEdited=false;
+ const linear=input('checkbox','',{checked:cfg.campus_linear_tariff===true});
  const origins=el('textarea',{rows:2,placeholder:'https://cas.example.edu.cn'});origins.value=(cfg.campus_allowed_origins||[]).join('\n');
  const feedback=el('p',{class:'campus-feedback muted',role:'status'},campusEventStatus),rulesHost=el('div',{class:'campus-candidates'}),preview=el('p',{class:'muted campus-preview'});
  const label=(key,...children)=>el('label',{},el('strong',{},tr(key)),...children);
- const configPayload=()=>({campus_enabled:enabled.checked,campus_portal_url:url.value.trim(),campus_allowed_origins:origins.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean),campus_refresh_minutes:Number(refresh.value),campus_unit_price:Number(price.value),campus_price_unit:priceUnit.value});
+ const configPayload=()=>({campus_enabled:enabled.checked,campus_portal_url:url.value.trim(),campus_allowed_origins:origins.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean),campus_refresh_minutes:Number(refresh.value),campus_traffic_radix:Number(radix.value),campus_linear_tariff:linear.checked,...(priceEdited?{campus_unit_price:Number(price.value),campus_price_unit:'GB',campus_price_basis:'school'}:{})});
  let saves=Promise.resolve();
  const persist=task=>{saves=saves.catch(()=>{}).then(async()=>{feedback.textContent=tr('campus.saving');try{await task();const next=await rpc('get_campus_status');if(campusData?.origin!==next.origin){campusFieldState={};campusCandidates={};campusStateOrigin='';}campusData=next;feedback.textContent=tr('campus.saved');PulseCampus.renderLive();}catch(e){feedback.textContent=String(e.message||e);throw e;}});return saves;};
- const saveBasic=()=>{const payload=configPayload();return persist(async()=>{if(!url.checkValidity()||!refresh.checkValidity()||!price.checkValidity())throw Error(tr('campus.invalid_settings'));await rpc('set_config',payload);state=await rpc('get_status');});};
+ const saveBasic=()=>{const payload=configPayload();return persist(async()=>{if(!url.checkValidity()||!refresh.checkValidity()||priceEdited&&!price.checkValidity())throw Error(tr('campus.invalid_settings'));await rpc('set_config',payload);state=await rpc('get_status');});};
  const saveFields=(allowEmpty=false)=>{const fields=structuredClone(campusFieldState);
   // Billing edits must not implicitly confirm new page candidates.
   if(allowEmpty)for(const [field,m]of Object.entries(fields))if(m.mode==='auto'||m.mode==='selector'){
    const saved=campusData?.rule?.fields?.[field];if(saved)fields[field]=structuredClone(saved);else delete fields[field];
   }
   return persist(async()=>{if(!allowEmpty&&!Object.keys(fields).length)throw Error(tr('campus.no_selection'));await rpc('save_campus_mapping',{fields});try{await rpc('campus_rescan');}catch{/* Rule remains saved if the portal is closed. */}});};
- for(const control of [enabled,url,refresh,price,priceUnit,origins])control.onchange=()=>saveBasic().catch(()=>{});
+ for(const control of [enabled,url,refresh,linear,origins])control.onchange=()=>saveBasic().catch(()=>{});
+ price.onchange=()=>{priceEdited=true;return saveBasic().catch(()=>{});};
+ radix.onchange=async()=>{await saveBasic().catch(()=>{});if(!priceEdited)price.value=Number(state.config?.campus_unit_price||0)*campusRadix()**3/campusPriceFactor();};
  const drawRules=()=>{
   rulesHost.replaceChildren();campusSuggest();const recognized=[];
   for(const [field]of campusFields){const current=campusFieldState[field]||campusData?.rule?.fields?.[field]||{mode:'disabled'},items=campusCandidates[field]||[];
@@ -232,18 +273,18 @@ function renderCampusSettings(host){
  const manualParam=(field,kind)=>{const mapping=campusFieldState[field],manual=mapping?.mode==='manual';
   const value=input(kind==='text'?'text':'number',manual?mapping.value:'',{min:0,step:'any',placeholder:tr('campus.automatic'),maxlength:128});
   const unit=kind==='bytes'?el('select',{'aria-label':tr('campus.field.'+field)+' '+tr('campus.unit')},...['GB','GiB'].map(v=>el('option',{value:v},v))):null;
-  if(unit)unit.value=manual&&['GB','GiB'].includes(mapping.unit)?mapping.unit:'GiB';
-  if(unit&&manual&&!['GB','GiB'].includes(mapping.unit))value.value=Number(mapping.value)*campusUnitFactor(mapping.unit)/GiB;
-  const update=()=>{if(!value.checkValidity())return;if(value.value===''){delete campusFieldState[field];}else campusFieldState[field]={mode:'manual',kind,value:kind==='text'?value.value:Number(value.value),unit:unit?.value||'text',reset_on_cycle:false};saveFields(true).catch(()=>{});};
+  if(unit)unit.value=manual&&['GB','GiB'].includes(mapping.unit)?mapping.unit:'GB';
+  if(unit&&manual)value.value=Number(mapping.value)*campusUnitFactor(mapping.unit)/campusUnitFactor(unit.value);
+  const update=()=>{if(!value.checkValidity())return;if(value.value===''){delete campusFieldState[field];}else campusFieldState[field]={mode:'manual',kind,value:kind==='text'?value.value:Number(value.value),unit:unit?.value||'text',traffic_radix:campusRadix(),reset_on_cycle:false};saveFields(true).catch(()=>{});};
   value.onchange=update;if(unit)unit.onchange=update;return label('campus.field.'+field,el('div',{class:'campus-param'},value,unit));
  };
  const balance=el('input',{type:'checkbox',checked:campusFieldState.spendable_balance?.mode==='formula'&&campusFieldState.spendable_balance?.formula==='balance'});
  balance.onchange=()=>{if(balance.checked)campusFieldState.spendable_balance={mode:'formula',kind:'currency',formula:'balance'};else delete campusFieldState.spendable_balance;saveFields(true).catch(()=>{});};
- const freeFirst=el('input',{type:'checkbox',checked:campusFieldState.used_free_bytes?.formula==='min(used_bytes, free_quota_bytes)'});
- freeFirst.onchange=()=>{if(freeFirst.checked){campusFieldState.used_free_bytes={mode:'formula',kind:'bytes',formula:'min(used_bytes, free_quota_bytes)'};campusFieldState.paid_used_bytes={mode:'formula',kind:'bytes',formula:'max(0, used_bytes - free_quota_bytes)'};}else{for(const field of ['used_free_bytes','paid_used_bytes'])if(campusFieldState[field]?.mode==='formula')delete campusFieldState[field];}saveFields(true).catch(()=>{});};
+ const freeFirst=el('input',{type:'checkbox',checked:campusAccountingValid(campusFieldState.used_free_bytes,campusCycle())});
+ freeFirst.onchange=()=>{if(freeFirst.checked){const cycle=campusCycle();if(!cycle){freeFirst.checked=false;feedback.textContent=tr('campus.accounting_unknown');return;}const now=new Date(),confirmation={accounting_confirmed:true,cycle,confirmed_month:now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')};campusFieldState.used_free_bytes={mode:'formula',kind:'bytes',formula:'min(used_bytes, free_quota_bytes)',...confirmation};campusFieldState.paid_used_bytes={mode:'formula',kind:'bytes',formula:'max(0, used_bytes - free_quota_bytes)',...confirmation};}else{for(const field of ['used_free_bytes','paid_used_bytes'])if(campusFieldState[field]?.mode==='formula')delete campusFieldState[field];}saveFields(true).catch(()=>{});};
  const basic=el('section',{class:'campus-section'},el('h4',{},tr('campus.basic')),el('label',{class:'checkbox'},enabled,tr('campus.enable')),el('div',{class:'settings-grid'},label('campus.url',url),label('campus.refresh',refresh)),el('div',{class:'actions'},el('button',{onclick:async()=>{try{await saveBasic();await rpc('open_campus_portal');feedback.textContent=tr('campus.login_hint');}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.open'))));
  const overview=el('section',{class:'campus-section'},el('h4',{},tr('campus.overview')),el('div',{class:'campus-live-target'},campusLivePanel(false)),preview,el('div',{class:'actions'},el('button',{onclick:()=>saveFields().catch(()=>{})},tr('campus.confirm_results'))));
- const billing=el('section',{class:'campus-section'},el('h4',{},tr('campus.billing')),el('div',{class:'settings-grid'},manualParam('free_quota_bytes','bytes'),label('campus.price',el('div',{class:'campus-param'},price,priceUnit)),manualParam('billing_cycle','text')),el('label',{class:'checkbox'},balance,tr('campus.balance_for_data')),el('label',{class:'checkbox'},freeFirst,tr('campus.free_first')),el('p',{class:'muted'},tr('campus.billing_hint')));
+ const billing=el('section',{class:'campus-section'},el('h4',{},tr('campus.billing')),el('div',{class:'settings-grid'},label('campus.radix',radix),manualParam('free_quota_bytes','bytes'),label('campus.price',el('div',{class:'campus-param'},price,priceUnit)),manualParam('billing_cycle','text')),el('label',{class:'checkbox'},linear,tr('campus.linear_tariff')),el('label',{class:'checkbox'},balance,tr('campus.balance_for_data')),el('label',{class:'checkbox'},freeFirst,tr('campus.free_first')),el('p',{class:'muted'},campusUnitNote()),el('p',{class:'muted'},cfg.campus_price_basis==='legacy_bytes'?tr('campus.legacy_price',{value:cfg.campus_unit_price,unit:cfg.campus_price_unit}):tr('campus.billing_hint')));
  const advanced=el('details',{class:'campus-section'},el('summary',{},tr('campus.advanced')),label('campus.allowed',origins,el('small',{},tr('campus.allowed_hint'))),rulesHost,el('p',{class:'muted'},tr('campus.privacy')),el('div',{class:'actions'},el('button',{class:'secondary',onclick:async()=>{try{await rpc('campus_rescan');feedback.textContent=tr('campus.rescanning');}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.rescan')),el('button',{class:'danger',onclick:async()=>{try{await rpc('delete_campus_rule');campusFieldState={};campusCandidates={};campusData=await rpc('get_campus_status');drawRules();PulseCampus.renderLive();}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.delete_rule'))));
  basic.append(el('p',{class:'muted'},tr('campus.background_hint')));host.append(basic,overview,billing,advanced,feedback);
 }

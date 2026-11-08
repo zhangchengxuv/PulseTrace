@@ -20,12 +20,13 @@
     const n=Number(String(value||'').replace(/[,，]/g,''));
     return Number.isFinite(n)?n:null;
   }
-  function parseBytes(value){
+  function parseBytes(value,radix=1024){
     const text=normalize(value),match=text.match(/(?<![\d.,，-])((?:\d{1,3}(?:[,，]\d{3})+|\d+)(?:\.\d+)?)\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)\b/i);
     if(!match||!byteUnit.test(match[2]))return null;
     const displayUnit=Object.keys({B:1,KB:1,MB:1,GB:1,TB:1,KiB:1,MiB:1,GiB:1,TiB:1}).find(u=>u.toLowerCase()===match[2].toLowerCase());
-    const factors={B:1,KB:1e3,MB:1e6,GB:1e9,TB:1e12,KiB:1024,MiB:1024**2,GiB:1024**3,TiB:1024**4};
-    return {value:numeric(match[1])*factors[displayUnit],unit:'B',display_unit:displayUnit};
+    const base=radix===1000?1000:1024;
+    const factors={B:1,KB:base,MB:base**2,GB:base**3,TB:base**4,KiB:1024,MiB:1024**2,GiB:1024**3,TiB:1024**4};
+    return {value:numeric(match[1])*factors[displayUnit],unit:'B',display_unit:displayUnit,raw_value:numeric(match[1])};
   }
   function parseMoney(value){
     const text=normalize(value);
@@ -37,8 +38,8 @@
     const text=normalize(value);
     return /\d{4}[-/.年]\d{1,2}|(?:月|monthly|cycle|周期|账期)/i.test(text)?{value:text,unit:'text'}:null;
   }
-  function parseKind(kind,value){
-    if(kind==='bytes')return parseBytes(value);
+  function parseKind(kind,value,radix=1024){
+    if(kind==='bytes')return parseBytes(value,radix);
     if(kind==='currency')return parseMoney(value);
     if(kind==='text')return parseCycle(value);
     return null;
@@ -61,7 +62,7 @@
   function parsedField(field,text){
     const kind=kindFor(field),parsed=parseKind(kind,text);
     if(!parsed)return null;
-    return {field,kind,value:parsed.value,unit:parsed.unit,...(parsed.display_unit?{display_unit:parsed.display_unit}:{})};
+    return {field,kind,value:parsed.value,unit:parsed.unit,...(parsed.display_unit?{display_unit:parsed.display_unit,raw_value:parsed.raw_value}:{})};
   }
   function candidate(field,text,element,selector,base){
     const parsed=parsedField(field,text);if(!parsed)return null;
@@ -129,6 +130,7 @@
     const login=[...document.querySelectorAll('input[type="password"]')].some(visible);
     if(login)return {candidates:{},rule_valid:false,missing:Object.keys(rule?.fields||{}),values:{},snapshot:null,portal_url:location.origin+location.pathname,auth_required:true};
     const raw=[];addCandidates(document,raw);
+    if(rule?.traffic_radix===1000)for(const item of raw)if(item.raw_value!=null)item.value=parseBytes(item.raw,1000)?.value??item.value;
     const fields={};
     for(const [field,items]of Object.entries(raw.reduce((groups,item)=>{(groups[item.field]??=[]).push(item);return groups;},{}))){
       items.sort((a,b)=>b.confidence-a.confidence);
@@ -138,17 +140,17 @@
     for(const [field,items]of Object.entries(fields))fields[field].ambiguous=items.some(item=>item.value!==items[0].value&&items[0].confidence-item.confidence<.12);
     const mappings=Object.fromEntries(Object.entries(rule?.fields||{}).filter(([,mapping])=>
       mapping&&(mapping.mode==='auto'||mapping.mode==='selector'||(!mapping.mode&&mapping.selector))));
-    const values={},source_units={},missing=[],mapped=[];
+    const values={},source_units={},raw_readings={},missing=[],mapped=[];
     for(const [field,mapping]of Object.entries(mappings)){
       let element=null;try{element=document.querySelector(mapping.selector);}catch{missing.push(field);continue;}
       if(!element||!visible(element)){missing.push(field);continue;}
-      const parsed=parseKind(mapping.kind,normalize(element.textContent));if(!parsed){missing.push(field);continue;}
+      const parsed=parseKind(mapping.kind,normalize(element.textContent),rule?.traffic_radix);if(!parsed){missing.push(field);continue;}
       values[field]=parsed.value;mapped.push(field);
-      if(parsed.display_unit)source_units[field]=parsed.display_unit;
+      if(parsed.display_unit){source_units[field]=parsed.display_unit;raw_readings[field]={value:parsed.raw_value,unit:parsed.display_unit};}
     }
     const enough=!missing.length&&mapped.length>=1;
     return {candidates:fields,rule_valid:enough,missing,values,
-      snapshot:enough?{...values,source_units,cycle_text:String(values.billing_cycle||''),mapped_fields:mapped,quality:'confirmed',confidence:Math.min(1,mapped.length/6)}:null,
+      snapshot:enough?{...values,source_units,raw_readings,traffic_radix:rule?.traffic_radix===1000?1000:1024,cycle_text:String(values.billing_cycle||''),mapped_fields:mapped,quality:'confirmed',confidence:Math.min(1,mapped.length/6)}:null,
       portal_url:location.origin+location.pathname,observed_at:Date.now()};
   }
   function installPicker(document,field,send){

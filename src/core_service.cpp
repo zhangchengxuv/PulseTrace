@@ -36,6 +36,9 @@ void validate_config(const Json &c) {
     if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
     for(const char *key:{"close_to_tray","capture_on_launch","check_updates_on_start"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean setting");
     if(!c.at("campus_enabled").is_boolean())throw std::invalid_argument("Expected boolean campus setting");
+    if(!c.at("campus_traffic_radix").is_number_integer()||(c.at("campus_traffic_radix")!=1000&&c.at("campus_traffic_radix")!=1024))throw std::invalid_argument("Invalid campus traffic radix");
+    if(!c.at("campus_linear_tariff").is_boolean())throw std::invalid_argument("Invalid campus tariff confirmation");
+    if(c.at("campus_price_basis")!="school"&&c.at("campus_price_basis")!="legacy_bytes")throw std::invalid_argument("Invalid campus price basis");
     normalize_campus_portal_url(c.at("campus_portal_url").get<std::string>());
     if(!c.at("campus_allowed_origins").is_array()||c.at("campus_allowed_origins").size()>8)throw std::invalid_argument("Invalid campus allowed origins");
     for(const auto &origin:c.at("campus_allowed_origins")){
@@ -73,6 +76,8 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
                {"taskbar_font","Segoe UI Variable Text"},{"taskbar_font_size",10},{"taskbar_unit","auto"},{"taskbar_precision",1},{"taskbar_upload_color","#3498db"},{"taskbar_download_color","#8bc4ea"},{"taskbar_offset_x",0},{"taskbar_offset_y",0},{"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
                {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
     config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;config_["campus_price_unit"]="GiB";
+    config_["campus_traffic_radix"]=1024;config_["campus_price_basis"]="school";config_["campus_linear_tariff"]=false;
+    config_["campus_price_unit"]="GB";
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {
@@ -81,6 +86,11 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
         if(!c.is_object())throw std::invalid_argument("Configuration must be an object");
         if(c.contains("config_version")&&(!c["config_version"].is_number_integer()||c["config_version"]>1||c["config_version"]<0))throw std::invalid_argument("Configuration from a newer version; original preserved");
         migrate=c.value("config_version",0)==0;c["config_version"]=1;
+        if(!c.contains("campus_price_basis")){
+            c["campus_price_basis"]="legacy_bytes";
+            if(!c.contains("campus_price_unit"))c["campus_price_unit"]="GiB";
+            migrate=true;
+        }
         for(auto it=config_.begin();it!=config_.end();++it)if(!c.contains(it.key()))c[it.key()]=it.value();
         config_=std::move(c);
     }
@@ -300,10 +310,12 @@ Json CoreService::campus_portal_context() const {
     for(const auto &value:config_.value("campus_allowed_origins",Json::array())){
         try{const auto origin=campus_origin(value.get<std::string>());if(std::find(origins.begin(),origins.end(),origin)==origins.end())origins.push_back(origin);}catch(...){}
     }
+    auto rule=campus_rule_for(campus_rules_,campus_origin(url));
+    if(!rule.is_null())rule["traffic_radix"]=config_.value("campus_traffic_radix",1024);
     return {{"enabled",config_.value("campus_enabled",false)},
             {"portal_url",url},{"origin",campus_origin(url)},{"allowed_origins",origins},
             {"refresh_minutes",config_.value("campus_refresh_minutes",5)},
-            {"rule",campus_rule_for(campus_rules_,campus_origin(url))}};
+            {"rule",rule}};
 }
 void CoreService::request(Json request, std::function<void(Json)> reply) {
     validate_request(request);
@@ -449,6 +461,19 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
                        {"remaining_bytes",p.value("remaining_bytes",Json(nullptr))},{"quota_bytes",p.value("quota_bytes",Json(nullptr))},
                        {"fee",p.value("fee",Json(nullptr))},{"cycle_text",cycle},{"quality",quality},{"confidence",confidence},
                        {"details",{{"mapped_fields",mapped},{"adapter","generic_dom"},{"web_values",web_values},{"web_units",web_units}}}};
+        if(p.contains("raw_readings")){
+            const auto &raw=p.at("raw_readings");const int radix=p.at("traffic_radix").get<int>();
+            if(!raw.is_object()||raw.size()>7||(radix!=1000&&radix!=1024))throw std::invalid_argument("Invalid campus raw measurements");
+            for(const auto &[field,reading]:raw.items()){
+                if(!web_units.contains(field)||!reading.is_object()||!reading.contains("value")||!reading["value"].is_number()||!reading.contains("unit")||reading["unit"]!=web_units[field])throw std::invalid_argument("Invalid campus raw measurement");
+                const double value=reading["value"].get<double>(),normalized=value*campus_unit_factor(reading["unit"].get<std::string>(),radix);
+                if(!std::isfinite(value)||value<0||!std::isfinite(normalized))throw std::invalid_argument("Invalid campus raw value");
+                snapshot["details"]["web_values"][field]=normalized;
+                if(snapshot.contains(field))snapshot[field]=normalized;
+            }
+            Json readings=Json::object();for(const auto &[field,reading]:raw.items())readings[field]={{"value",reading["value"]},{"unit",reading["unit"]}};
+            snapshot["measurement"]={{"raw_readings",readings},{"capture_radix",radix},{"status","captured"},{"basis","portal_convention"}};
+        }else snapshot["measurement"]=campus_measurement(snapshot);
         database().save_campus_snapshot(snapshot);
         try{
             Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}

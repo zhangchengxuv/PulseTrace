@@ -14,4 +14,6 @@ void save_campus_rules(const std::filesystem::path &data,const Json &rules);
 Json campus_rule_for(const Json &rules,const std::string &origin);
 void validate_campus_mapping(const Json &mapping);
 void normalize_campus_mapping(Json &mapping);
+double campus_unit_factor(const std::string &unit,int radix);
+Json campus_measurement(const Json &snapshot);
 }

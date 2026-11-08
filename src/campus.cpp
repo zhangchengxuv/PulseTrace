@@ -7,6 +7,26 @@
 #include <stdexcept>
 #include <windows.h>
 namespace pulsetrace {
+double campus_unit_factor(const std::string &unit,int radix){
+    if(radix!=1000&&radix!=1024)throw std::invalid_argument("Invalid campus traffic radix");
+    const std::array<std::string,5> school={"B","KB","MB","GB","TB"};
+    const std::array<std::string,5> iec={"B","KiB","MiB","GiB","TiB"};
+    for(size_t i=0;i<school.size();++i){if(unit==school[i])return std::pow(radix,i);if(unit==iec[i])return std::pow(1024,i);}
+    throw std::invalid_argument("Invalid campus source unit");
+}
+Json campus_measurement(const Json &snapshot){
+    if(snapshot.contains("measurement")&&!snapshot["measurement"].empty())return snapshot["measurement"];
+    // v7 stored standard decimal-normalized values, but only recent v7 builds
+    // retained the original unit. Recover those observations without rewriting them.
+    Json raw=Json::object();const auto details=snapshot.value("details",Json::object());
+    const auto units=details.value("web_units",Json::object()),values=details.value("web_values",Json::object());
+    for(const auto &[field,unit]:units.items()){
+        if(!unit.is_string())continue;const auto value=values.value(field,snapshot.value(field,Json(nullptr)));
+        if(!value.is_number())continue;
+        try{raw[field]={{"value",value.get<double>()/campus_unit_factor(unit.get<std::string>(),1000)},{"unit",unit}};}catch(...){}
+    }
+    return {{"raw_readings",raw},{"capture_radix",1000},{"status",raw.empty()?"needs_confirmation":"recovered_source_units"},{"basis","portal_convention"}};
+}
 namespace {
 std::string lower(std::string value){
     std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
@@ -75,6 +95,8 @@ void validate_campus_mapping(const Json &fields){
     for(auto it=fields.begin();it!=fields.end();++it){
         if(!allowed.contains(it.key())||!it->is_object())throw std::invalid_argument("Unknown campus field mapping");
         const auto &m=*it;
+        if(m.contains("accounting_confirmed")&&!m["accounting_confirmed"].is_boolean())throw std::invalid_argument("Invalid campus accounting confirmation");
+        for(const char *key:{"cycle","confirmed_month"})if(m.contains(key)&&(!m[key].is_string()||m[key].get<std::string>().size()>128))throw std::invalid_argument("Invalid campus accounting period");
         const auto mode=m.value("mode","auto");
         if(mode!="auto"&&mode!="selector"&&mode!="manual"&&mode!="formula"&&mode!="disabled")
             throw std::invalid_argument("Invalid campus mapping mode");

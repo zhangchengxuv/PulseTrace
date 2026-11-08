@@ -1,8 +1,9 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
-const context=vm.createContext({console,structuredClone,state:{config:{campus_unit_price:.5}},PulseI18n:{locale:'en-US'},tr:(key,vars={})=>key.replace(/\{(\w+)\}/g,(_,k)=>vars[k]??'')});
+class TestDate extends Date{constructor(...a){super(...(a.length?a:['2026-11-08T10:00:00']));}static now(){return new TestDate().getTime();}}
+const context=vm.createContext({console,Date:TestDate,structuredClone,state:{config:{campus_unit_price:.5,campus_linear_tariff:true,campus_price_basis:"school"}},PulseI18n:{locale:'en-US'},tr:(key,vars={})=>key.replace(/\{(\w+)\}/g,(_,k)=>vars[k]??'')});
 vm.runInContext(fs.readFileSync('web/desktop/campus-view.js','utf8'),context);
 const GiB=1024**3;
-vm.runInContext(`campusData={latest:{cycle_text:'2026-11',details:{web_values:{used_bytes:${10*GiB},free_quota_bytes:${99*GiB}}}},
+vm.runInContext(`campusData={latest:{observed_ms:Date.now(),measurement:{raw_readings:{used_bytes:{value:10,unit:'GiB'},free_quota_bytes:{value:99,unit:'GiB'}}},cycle_text:'2026-11',details:{web_values:{used_bytes:${10*GiB},free_quota_bytes:${99*GiB}}}},
  rule:{fields:{
   free_quota_bytes:{mode:'manual',value:10,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'},
   used_free_bytes:{mode:'manual',value:4,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'},
@@ -17,7 +18,7 @@ assert.equal(r.resolved.paid_used_bytes,6*GiB);
 assert.equal(r.funded,4*GiB);
 assert.equal(r.total,10*GiB);
 assert.equal(r.progress,.4);
-assert.equal(r.estimated,3,'only paid traffic contributes to a local fee estimate');
+assert.equal(r.estimated,null,'unconfirmed legacy billing formulas cannot create fee estimates');
 assert.equal(r.sources.free_remaining_bytes,'formula');
 assert.equal(r.resolved.free_quota_bytes,10*GiB,'manual values are not overwritten by portal refresh');
 vm.runInContext(`state.config.campus_unit_price=0;`,context);
@@ -33,9 +34,9 @@ vm.runInContext(`campusData.rule.fields.free_remaining_bytes.formula='free_remai
 vm.runInContext(`campusFieldState={};campusData={latest:{details:{web_values:{quota_bytes:100,used_bytes:20,remaining_bytes:80}}},rule:{fields:{quota_bytes:{mode:'auto'},used_bytes:{mode:'auto'},remaining_bytes:{mode:'auto'}}}};`,context);
 r=vm.runInContext('campusResolve()',context);assert.equal(r.freeRemaining,null,'generic remaining and plan quota do not mean free data');assert.equal(r.estimated,null,'total usage must not be billed as paid usage');
 vm.runInContext(`campusData.rule.fields.free_quota_bytes={mode:'manual',value:10,unit:'GB',kind:'bytes',reset_on_cycle:false};campusData.rule.fields.used_free_bytes={mode:'manual',value:2,unit:'GiB',kind:'bytes',reset_on_cycle:true,cycle:'2026-11'};`,context);
-r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.free_quota_bytes,1e10);assert.equal(r.resolved.used_free_bytes,null,'unknown billing period cannot validate cycle-specific usage');
-vm.runInContext(`state.config.campus_price_unit='GB';campusData.rule.fields.spendable_balance={mode:'manual',value:2,unit:'CNY',kind:'currency'};campusData.rule.fields.paid_used_bytes={mode:'manual',value:3,unit:'GB',kind:'bytes'};`,context);
-r=vm.runInContext('campusResolve()',context);assert.equal(r.funded,4e9,'GB price must not use a GiB divisor');assert.equal(r.estimated,1.5);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.resolved.free_quota_bytes,10*GiB);assert.equal(r.resolved.used_free_bytes,null,'unknown billing period cannot validate cycle-specific usage');
+vm.runInContext(`state.config.campus_price_unit='GB';state.config.campus_price_basis='legacy_bytes';campusData.rule.fields.spendable_balance={mode:'manual',value:2,unit:'CNY',kind:'currency'};campusData.rule.fields.paid_used_bytes={mode:'manual',value:3e9/GiB,unit:'GiB',kind:'bytes'};`,context);
+r=vm.runInContext('campusResolve()',context);assert.equal(r.funded,4e9,'GB price must not use a GiB divisor');assert.equal(r.estimated,null,'unknown billing periods cannot create fee estimates');
 vm.runInContext(`campusFieldState={};campusData={rule:null};campusCandidates={balance:[{value:10,raw:'10',selector:'#balance',unit:'CNY',confidence:.9}]};campusSuggest();`,context);
 assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','recognized values prefill for explicit confirmation');
 vm.runInContext(`campusCandidates.balance[0].selector='#changed';campusSuggest();`,context);
