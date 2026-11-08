@@ -11,7 +11,7 @@ int checks{};
 void check(bool value,const char *message){++checks;if(!value)throw std::runtime_error(message);}
 Json rpc(CoreService &core,const char *type,Json params=Json::object()){
     auto promise=std::make_shared<std::promise<Json>>();auto future=promise->get_future();
-    core.request({{"type",type},{"request_id",1},{"params",params}},[promise](Json value){promise->set_value(std::move(value));});
+    core.request(parse_message(Json{{"type",type},{"request_id",1},{"params",params}}.dump()),[promise](Json value){promise->set_value(std::move(value));});
     if(future.wait_for(std::chrono::seconds(10))!=std::future_status::ready)throw std::runtime_error("Campus RPC timeout");
     auto response=future.get();if(!response.value("ok",false))throw std::runtime_error(response["error"]["message"]);return response["data"];
 }
@@ -74,6 +74,43 @@ void measurements(const std::filesystem::path &root){
     const auto persisted=root/"school-config";std::filesystem::create_directories(persisted);
     {std::ofstream out(persisted/"config.json");out<<R"({"config_version":1,"campus_traffic_radix":1000,"campus_price_basis":"school","campus_price_unit":"GB","campus_unit_price":0.7,"campus_linear_tariff":true})";}
     {CoreService c(persisted);const auto cfg=c.status()["config"];check(cfg["campus_traffic_radix"]==1000&&cfg["campus_unit_price"]==0.7&&cfg["campus_linear_tariff"]==true,"school conversion and tariff survive application restart");}
+}
+void mapping_roundtrip(const std::filesystem::path &root){
+    const Json fields={
+        {"balance",{{"mode","auto"},{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",0.95}}},
+        {"used_bytes",{{"mode","selector"},{"selector","#v4"},{"kind","bytes"},{"unit","MB"},{"confidence",0.95},{"scope","ipv4"}}},
+        {"free_quota_bytes",{{"mode","manual"},{"kind","bytes"},{"value",120},{"unit","GB"},{"traffic_radix",1024},{"reset_on_cycle",false}}},
+        {"used_free_bytes",{{"mode","formula"},{"kind","bytes"},{"formula","min(used_bytes, free_quota_bytes)"},{"accounting_confirmed",true},{"cycle","2026-11-01/monthly"},{"confirmed_month","2026-11"}}},
+        {"paid_used_bytes",{{"mode","formula"},{"kind","bytes"},{"formula","max(0, used_bytes - free_quota_bytes)"},{"accounting_confirmed",true},{"cycle","2026-11-01/monthly"},{"confirmed_month","2026-11"}}},
+        {"spendable_balance",{{"mode","formula"},{"kind","currency"},{"formula","balance"}}},
+        {"billing_cycle",{{"mode","manual"},{"kind","text"},{"unit","text"},{"period","monthly"},{"start_date","2026-11-01"},{"value","2026-11-01/monthly"}}}
+    };
+    const auto path=root/"mapping-roundtrip";
+    {
+        CoreService service(path);service.start();
+        rpc(service,"set_config",{{"campus_enabled",true},{"campus_portal_url","https://campus.example/usage"}});
+        check(rpc(service,"save_campus_mapping",{{"fields",fields}})["rule"]["fields"]==fields,"actual bridge accepts all UI billing metadata");
+        for(const auto &change:Json::array({
+            {{"field","billing_cycle"},{"key","start_date"},{"value","2026-02-29"}},
+            {{"field","billing_cycle"},{"key","period"},{"value","weekly"}},
+            {{"field","used_bytes"},{"key","scope"},{"value","all"}},
+            {{"field","used_free_bytes"},{"key","accounting_confirmed"},{"value","true"}},
+            {{"field","used_free_bytes"},{"key","confirmed_month"},{"value",1}},
+            {{"field","free_quota_bytes"},{"key","traffic_radix"},{"value",1001}},
+            {{"field","balance"},{"key","password"},{"value","rejected"}}
+        })){
+            auto invalid=fields;invalid[change["field"].get<std::string>()][change["key"].get<std::string>()]=change["value"];
+            bool rejected=false;try{rpc(service,"save_campus_mapping",{{"fields",invalid}});}catch(...){rejected=true;}
+            check(rejected,"bridge rejects invalid metadata and unknown keys");
+            check(rpc(service,"get_campus_status")["rule"]["fields"]==fields,"failed save preserves confirmed rules");
+        }
+        service.stop();
+    }
+    {
+        CoreService service(path);service.start();
+        check(rpc(service,"get_campus_status")["rule"]["fields"]==fields,"bridge billing confirmations and anchored cycle survive restart");
+        service.stop();
+    }
 }
 void core(const std::filesystem::path &root){
     parse_message(R"({"type":"open_campus_portal","request_id":1,"params":{}})");
@@ -146,6 +183,6 @@ void core(const std::filesystem::path &root){
 }
 int main(){try{
     const auto root=std::filesystem::absolute("data/tests/campus-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));
-    std::filesystem::create_directories(root);storage(root);migration(root);measurements(root);core(root);
+    std::filesystem::create_directories(root);storage(root);migration(root);measurements(root);mapping_roundtrip(root);core(root);
     std::cout<<checks<<" campus portal storage, migration and bridge checks passed\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

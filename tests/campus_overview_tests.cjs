@@ -31,7 +31,7 @@ run('state.config.campus_unit_price=0');assert.equal(model().values.funded,null)
 run('delete campusData.latest.details.web_values.balance');assert.equal(model().values.funded,null);reset();
 run('campusData.latest.details.web_values.balance=0');assert.equal(model().values.balance,0);assert.equal(model().values.funded,0);assert.equal(model().values.total,model().values.free);reset();
 run('delete campusData.rule.fields.used_free_bytes.accounting_confirmed');assert.equal(model().values.free,null);assert.equal(model().percent,null);reset();
-run('campusData.latest.cycle_text="2026-10"');assert.equal(model().values.total,null);assert.equal(model().percent,null);reset();
+run('campusData.latest.cycle_text="2026-10"');assert.equal(model().values.total,null);assert.equal(model().percent,null);assert.equal(model().status,'billing');assert.ok(run('campusNetworkPanel()').textContent.includes('campus.accounting_unknown'));reset();
 run('campusData.latest.observed_ms=new Date("2026-10-01").getTime()');assert.equal(model().values.total,null);assert.equal(model().values.free,null);reset();
 run('campusData.rule.fields.free_quota_bytes.value=10');m=model();assert.equal(m.values.free,0);assert.equal(m.percent,1);assert.equal(m.sum,10*G);reset();
 run('campusData.rule.fields.spendable_balance.formula="balance * 2"');assert.equal(model().values.funded,null);reset();
@@ -42,7 +42,8 @@ run('campusData.latest.measurement.raw_readings.used_bytes.value=1024;campusData
 run('campusLastEventType="campus_error"');m=model();assert.equal(m.status,'error');assert.equal(m.percent,null);assert.equal(m.values.balance,27.45);assert.ok(run('campusNetworkPanel()').textContent.includes('campus.card.retained'));reset();
 run('campusLastEventType="campus_auth_required"');assert.equal(model().status,'auth');reset();
 run('state.config.campus_enabled=false');assert.equal(run('campusNetworkPanel()').dataset.status,'disabled');run('state.config.campus_enabled=true');
-run('campusData.latest.measurement={raw_readings:{},status:"needs_confirmation"}');assert.equal(model().values.used,null);assert.equal(model().segments.length,0);reset();
+run('campusData.latest.measurement={raw_readings:{},status:"needs_confirmation"}');assert.equal(model().values.used,null);assert.equal(model().segments.length,0);assert.equal(model().status,'unconfirmed');reset();
+run('campusLastEventType="campus_rule_stale"');assert.equal(model().status,'stale','only a real selector/navigation failure reports page structure changes');reset();
 run('delete campusData.latest.measurement;campusData.latest.details.web_values.used_bytes=30399.45e6;campusData.latest.details.web_units={used_bytes:"MB"}');assert.equal((model().values.used/G).toFixed(2),'29.69','recover decimal-normalized legacy observation once');
 run('state.config.campus_price_basis="legacy_bytes";state.config.campus_price_unit="GiB";state.config.campus_traffic_radix=1000');assert.equal(model().values.funded,54.9*G,'legacy yuan/GiB keeps original economic byte basis');
 run('state.config.campus_price_unit="GB"');assert.equal(model().values.funded,54.9e9);

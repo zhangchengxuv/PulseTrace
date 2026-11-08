@@ -55,11 +55,13 @@ async function validateCampusOverview(){
   campusFieldState={};campusEventStatus='';campusLastEventType='';
   const fields=Object.fromEntries(['balance','used_bytes','free_quota_bytes','used_free_bytes','free_remaining_bytes'].map(field=>[field,{mode:'auto',kind:field==='balance'?'currency':'bytes',selector:'#'+field}]));
   fields.spendable_balance={mode:'formula',kind:'currency',formula:'balance'};
-  for(const scenario of ['disabled','empty','partial','full','auth','error']){
+  for(const scenario of ['disabled','empty','partial','full','auth','error','billing','unconfirmed','stale']){
    state.config={...saved.config,campus_enabled:scenario!=='disabled',campus_unit_price:scenario==='partial'?0:.5,campus_price_unit:'GB',campus_price_basis:'school',campus_linear_tariff:true,campus_traffic_radix:1024};
    campusData={origin:'https://campus.example',portal_url:'https://campus.example/usage',rule:{fields},latest:scenario==='empty'?null:{observed_ms:Date.now(),cycle_text:new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'),measurement:{raw_readings:Object.fromEntries(Object.entries({used_bytes:20,free_quota_bytes:100,used_free_bytes:20,free_remaining_bytes:80}).map(([k,value])=>[k,{value,unit:'GiB'}]))},details:{web_values:scenario==='partial'?{balance:10}:{balance:10,used_bytes:20*GiB,free_quota_bytes:100*GiB,used_free_bytes:20*GiB,free_remaining_bytes:80*GiB}}}};
    if(scenario==='full')campusData.latest.details.web_units={used_bytes:'MB',free_remaining_bytes:'GiB'};
-   campusLastEventType=scenario==='auth'?'campus_auth_required':scenario==='error'?'campus_error':'';
+   if(scenario==='billing')campusData.latest.cycle_text='';
+   if(scenario==='unconfirmed')campusData.latest.measurement={raw_readings:{},status:'needs_confirmation'};
+   campusLastEventType=scenario==='auth'?'campus_auth_required':scenario==='error'?'campus_error':scenario==='stale'?'campus_rule_stale':'';
    PulseCampus.renderLive();await tick();
    if(document.querySelector('.campus-overview')!==host||content.firstChild!==first)throw Error('Campus refresh replaced the page or outer card');
    const expected=scenario==='full'?'ready':scenario;
@@ -74,14 +76,15 @@ async function validateCampusOverview(){
     for(const segment of track.children)if(segment.getBoundingClientRect().width<1)throw Error('Campus segment width blocked by CSP');
    }
    if(scenario==='partial'&&host.querySelector('.campus-tone-funded.campus-segment'))throw Error('Unknown paid data has a segment');
-   if(['auth','error'].includes(scenario)&&host.querySelector('.campus-free-percent'))throw Error('Stale data displays a live usage percentage');
+   if(['auth','error','billing','unconfirmed','stale'].includes(scenario)&&host.querySelector('.campus-free-percent'))throw Error('Unconfirmed or stale data displays a live usage percentage');
+   if(scenario==='billing'&&(!host.textContent.includes(tr('campus.accounting_unknown'))||host.textContent.includes(tr('campus.rule_stale'))))throw Error('Billing configuration was mistaken for a page structure failure');
    for(const node of host.querySelectorAll('*'))if(node.clientWidth&&node.scrollWidth>node.clientWidth+2)throw Error('Campus overview overflow: '+node.className);
    if(['empty','partial','full'].includes(scenario)){
     host.scrollIntoView({block:'center',behavior:'instant'});await tick();
     await rpc('selftest_snapshot',{phase:'campus-'+scenario});
    }
   }
-  window.pulseCampusOverviewReport={page,states:6,outerCardPreserved:true};
+  window.pulseCampusOverviewReport={page,states:9,outerCardPreserved:true};
  }finally{
   campusData=saved.data;campusFieldState=saved.fields;campusEventStatus=saved.status;campusLastEventType=saved.event;state.config=saved.config;
   PulseCampus.renderLive();window.scrollTo({top:saved.scroll,behavior:'instant'});
@@ -97,6 +100,20 @@ async function validateCampusPickerBridge(){
  }
  let rejected=false;try{await rpc('campus_pick_field',{field:'password'});}catch(failure){rejected=failure.code==='INVALID_MESSAGE';}
  if(!rejected)throw Error('Invalid picker field did not receive an immediate correlated rejection');
+ if(!state.config?.campus_portal_url){
+  // Exercise the actual WebView2 parser with the metadata emitted by Settings.
+  // An unconfigured isolated profile must reach the core's URL check, without
+  // writing a rule, opening a portal or changing the configuration.
+  const fields={
+   used_bytes:{mode:'selector',selector:'#v4',kind:'bytes',unit:'MB',confidence:.95,scope:'ipv4'},
+   free_quota_bytes:{mode:'manual',kind:'bytes',unit:'GB',value:120,traffic_radix:1024},
+   billing_cycle:{mode:'manual',kind:'text',unit:'text',period:'monthly',start_date:'2026-11-01',value:'2026-11-01/monthly'},
+   used_free_bytes:{mode:'formula',kind:'bytes',formula:'min(used_bytes, free_quota_bytes)',accounting_confirmed:true,cycle:'2026-11-01/monthly',confirmed_month:'2026-11'}
+  };
+  let reachedCore=false;
+  try{await rpc('save_campus_mapping',{fields});}catch(failure){reachedCore=failure.message==='Configure and save a campus portal URL first';}
+  if(!reachedCore)throw Error('Campus billing metadata did not pass the real native bridge');
+ }
  window.pulseCampusPickerBridgeReport={fields:campusFields.length,invalidFieldRejected:true};
 }
 async function validateNavigationTransitions(){

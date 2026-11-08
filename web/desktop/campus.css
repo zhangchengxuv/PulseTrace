@@ -17,7 +17,7 @@ html[data-theme=light] .campus-overview{--campus-used:#2879af;--campus-free:#087
 .campus-overview-heading>svg{color:var(--accent)}
 .campus-overview h3{font-size:15px;margin:0;line-height:1.5}
 .campus-sync-state{font-size:11px;color:var(--success);padding:3px 8px;border-radius:var(--radius-badge);background:color-mix(in srgb,var(--success) 9%,transparent);overflow-wrap:anywhere}
-.campus-overview[data-status=error] .campus-sync-state,.campus-overview[data-status=auth] .campus-sync-state,.campus-overview[data-status=stale] .campus-sync-state{color:var(--warning);background:color-mix(in srgb,var(--warning) 9%,transparent)}
+.campus-overview[data-status=error] .campus-sync-state,.campus-overview[data-status=auth] .campus-sync-state,.campus-overview[data-status=stale] .campus-sync-state,.campus-overview[data-status=billing] .campus-sync-state,.campus-overview[data-status=unconfirmed] .campus-sync-state{color:var(--warning);background:color-mix(in srgb,var(--warning) 9%,transparent)}
 .campus-overview[data-status=empty] .campus-sync-state,.campus-overview[data-status=disabled] .campus-sync-state{color:var(--muted);background:var(--track)}
 .campus-sync-time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .campus-overview-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,1fr);gap:24px;align-items:stretch}

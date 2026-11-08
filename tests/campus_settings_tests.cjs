@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 class Node{
- constructor(tag,attrs={},children=[]){this.tag=tag;Object.assign(this,attrs);this.dataset={field:attrs['data-field']};this.children=children.flat().filter(v=>v!=null);this.classList={add(){}};this.value=attrs.value??'';}
+ constructor(tag,attrs={},children=[]){this.tag=tag;Object.assign(this,attrs);this.dataset={field:attrs['data-field']};this.style={};this.children=children.flat().filter(v=>v!=null);this.classList={add(){}};this.value=attrs.value??'';}
  append(...items){this.children.push(...items);}
  replaceChildren(...items){this.children=items;}
  checkValidity(){return true;}
@@ -8,11 +8,11 @@ class Node{
  set textContent(v){this.children=[v];}
  all(){return [this,...this.children.filter(v=>v instanceof Node).flatMap(v=>v.all())];}
 }
-let calls=[],rejectConfig=false,rejectPicker=false;
+let calls=[],rejectConfig=false,rejectPicker=false,rejectMapping=false;
 const fixture={origin:'https://campus.example',portal_url:'https://campus.example/usage',rule:null};
 const context=vm.createContext({structuredClone,console,state:{config:{campus_enabled:true,campus_portal_url:fixture.portal_url}},PulseI18n:{locale:'en-US'},page:'settings',tr:k=>k,bytes:String,
  el:(tag,attrs,...children)=>new Node(tag,attrs,children),document:{querySelector:selector=>host.all().find(n=>n.class===selector.slice(1)),querySelectorAll:selector=>host.all().filter(n=>n.class===selector.slice(1))},
- rpc:async(type,params)=>{calls.push({type,params});if(type==='set_config'&&rejectConfig)throw Error('controlled save failure');if(type==='set_config')Object.assign(context.state.config,params);if(type==='campus_pick_field'&&rejectPicker)throw Error('controlled picker failure');if(type==='save_campus_mapping')fixture.rule={fields:structuredClone(params.fields)};if(type==='get_campus_status')return structuredClone(fixture);if(type==='get_status')return structuredClone(context.state);return {};}});
+ rpc:async(type,params)=>{calls.push({type,params});if(type==='set_config'&&rejectConfig)throw Error('controlled save failure');if(type==='set_config')Object.assign(context.state.config,params);if(type==='campus_pick_field'&&rejectPicker)throw Error('controlled picker failure');if(type==='save_campus_mapping'&&rejectMapping)throw Error('controlled mapping failure');if(type==='save_campus_mapping')fixture.rule={fields:structuredClone(params.fields)};if(type==='get_campus_status')return structuredClone(fixture);if(type==='get_status')return structuredClone(context.state);return {};}});
 vm.runInContext(fs.readFileSync('web/desktop/campus-view.js','utf8'),context);
 vm.runInContext(`campusData=${JSON.stringify(fixture)};campusCandidates={balance:[{value:10,raw:'¥10',selector:'#balance',kind:'currency',unit:'CNY',confidence:.95}]};`,context);
 const host=new Node('div');context.host=host;vm.runInContext('renderCampusSettings(host)',context);
@@ -70,5 +70,31 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(vm.runInContext('campusResolve().resolved.used_free_bytes',context),null,'changing period expires manually entered free usage');
  const node=host.all().find(n=>n.class==='campus-computed-target');
  vm.runInContext('PulseCampus.renderLive()',context);const stable=node.children[0];vm.runInContext('PulseCampus.renderLive()',context);assert.equal(node.children[0],stable,'unchanged live calculations retain DOM nodes');
+ // Reproduce a failed native mapping save: valid draft, incomplete saved rule.
+ fixture.latest={observed_ms:Date.now(),cycle_text:'',measurement:{raw_readings:{used_bytes:{value:30720,unit:'MB'}}},details:{web_values:{balance:18}}};
+ fixture.rule={fields:{balance:{mode:'auto'},used_bytes:{mode:'selector'},spendable_balance:{mode:'formula',kind:'currency',formula:'balance'}}};
+ context.fixture=structuredClone(fixture);
+ vm.runInContext(`campusData=structuredClone(fixture);campusFieldState=structuredClone(fixture.rule.fields);state.config.campus_traffic_radix=1024;state.config.campus_price_basis='school';state.config.campus_unit_price=.6;
+ const today=new Date();campusFieldState.billing_cycle={mode:'manual',kind:'text',unit:'text',period:'monthly',start_date:today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-01'};
+ const cycle=campusCycle();campusFieldState.billing_cycle.value=cycle;
+ campusFieldState.free_quota_bytes={mode:'manual',kind:'bytes',value:120,unit:'GB',traffic_radix:1024};
+ campusFieldState.used_free_bytes={mode:'formula',kind:'bytes',formula:'min(used_bytes, free_quota_bytes)',accounting_confirmed:true,cycle};
+ campusFieldState.paid_used_bytes={mode:'formula',kind:'bytes',formula:'max(0, used_bytes - free_quota_bytes)',accounting_confirmed:true,cycle};`,context);
+ host.replaceChildren();vm.runInContext('renderCampusSettings(host)',context);
+ vm.runInContext('PulseCampus.renderLive()',context);
+ assert.equal(vm.runInContext('campusResolve().freeRemaining/1024**3',context),90,'draft itself is calculable');
+ assert.equal(vm.runInContext('campusOverviewModel().status',context),'billing','missing billing rules are not a page structure failure');
+ assert.equal(host.all().find(n=>n.class==='campus-computed-target').textContent.includes('90.00 GB'),false,'unsaved draft must not masquerade as a saved calculation');
+ rejectMapping=true;await button('campus.confirm_results').onclick();
+ assert.ok(host.all().some(n=>n.textContent==='controlled mapping failure'));
+ assert.equal(vm.runInContext('campusResolve(true).freeRemaining',context),null);
+ rejectMapping=false;await button('campus.confirm_results').onclick();
+ assert.equal(vm.runInContext('campusResolve(true).freeRemaining/1024**3',context),90);
+ assert.equal(vm.runInContext('campusOverviewModel().values.total/1024**3',context),120);
+ assert.ok(host.all().find(n=>n.class==='campus-computed-target').textContent.includes('90.00 GB'));
+ assert.ok(host.all().find(n=>n.class==='campus-progress'),'saved rules restore settings progress too');
+ vm.runInContext('campusFieldState={};campusStateOrigin="";',context);await vm.runInContext('PulseCampus.refresh()',context);
+ host.replaceChildren();vm.runInContext('renderCampusSettings(host)',context);
+ assert.equal(vm.runInContext('campusResolve(true).progress',context),.25,'reopening uses the persisted period and confirmations');
  console.log('Campus settings: confirmation, billing isolation, radix persistence, legacy price editing, tariff scope and failed-save handling passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

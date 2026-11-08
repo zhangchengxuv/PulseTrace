@@ -96,6 +96,7 @@ void validate_campus_mapping(const Json &fields){
     for(auto it=fields.begin();it!=fields.end();++it){
         if(!allowed.contains(it.key())||!it->is_object())throw std::invalid_argument("Unknown campus field mapping");
         const auto &m=*it;
+        if(m.contains("traffic_radix")&&(!m["traffic_radix"].is_number_integer()||(m["traffic_radix"]!=1000&&m["traffic_radix"]!=1024)))throw std::invalid_argument("Invalid campus traffic radix");
         if(m.contains("accounting_confirmed")&&!m["accounting_confirmed"].is_boolean())throw std::invalid_argument("Invalid campus accounting confirmation");
         for(const char *key:{"cycle","confirmed_month"})if(m.contains(key)&&(!m[key].is_string()||m[key].get<std::string>().size()>128))throw std::invalid_argument("Invalid campus accounting period");
         const auto mode=m.value("mode","auto");

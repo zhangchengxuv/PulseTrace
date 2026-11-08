@@ -165,9 +165,10 @@ function campusOverviewModel(){
  const runtime=campusLastEventType||campusData?.runtime_status;
  let status=!cfg.campus_enabled?'disabled':runtime==='campus_auth_required'?'auth':
   campusData?.error||campusData?.rule_error||['campus_error','snapshot_failed'].includes(runtime)?'error':
-  runtime==='campus_rule_stale'||campusData?.latest&&(!c.billingValid||campusData.latest.measurement?.status==='needs_confirmation')?'stale':Object.values(values).every(v=>v==null)?'empty':
+  runtime==='campus_rule_stale'?'stale':campusData?.latest?.measurement?.status==='needs_confirmation'?'unconfirmed':
+  campusData?.latest&&!c.billingValid?'billing':Object.values(values).every(v=>v==null)?'empty':
   Object.values(values).some(v=>v==null)?'partial':'ready';
- const percent=!['disabled','auth','error','stale'].includes(status)?c.progress:null;
+ const percent=!['disabled','auth','error','stale','unconfirmed','billing'].includes(status)?c.progress:null;
  // The track is exclusively the free allowance: consumed + remaining. Paid
  // purchasing capacity and total observed traffic have different denominators.
  const quota=c.resolved.free_quota_bytes,consumed=c.resolved.used_free_bytes;
@@ -183,7 +184,7 @@ function campusOverviewModel(){
 function campusOverviewContent(host,m){
  const value=(key,money=false)=>key==='free_used'?(m.freeUsed==null?tr('campus.unavailable'):campusBytes(m.freeUsed)):m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):
   key==='used'?campusPortalBytes('used_bytes',m.values[key],m.usedSource):key==='free'?campusPortalBytes('free_remaining_bytes',m.values[key],m.freeSource):campusBytes(m.values[key]);
- const statusKey={disabled:'campus.card.disabled',auth:'campus.auth_required',error:'campus.sync_failed',stale:'campus.rule_stale',empty:'campus.card.empty',partial:'campus.card.partial',ready:'campus.card.ready'}[m.status];
+ const statusKey={disabled:'campus.card.disabled',auth:'campus.auth_required',error:'campus.sync_failed',stale:'campus.rule_stale',unconfirmed:'campus.needs_confirmation',billing:'campus.accounting_unknown',empty:'campus.card.empty',partial:'campus.card.partial',ready:'campus.card.ready'}[m.status];
  const header=el('header',{class:'campus-overview-header'},el('div',{class:'campus-overview-heading'},metricIcon('network'),el('h3',{},tr('campus.title')),
   el('span',{class:'campus-sync-state',role:'status'},tr(m.syncing&&m.status!=='disabled'?'campus.syncing':statusKey))),
   el('span',{class:'campus-sync-time'},m.observed&&m.status!=='disabled'?tr('campus.card.synced',{time:new Date(m.observed).toLocaleString(PulseI18n.locale)}):tr('campus.never_synced')));
@@ -214,7 +215,7 @@ function campusOverviewContent(host,m){
   el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')),el('small',{class:'campus-total-basis'},campusUnitNote()));
  host.append(el('div',{class:'campus-overview-body'},metrics,chart));
  if(['auth','error','stale'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(Object.values(m.values).some(v=>v!=null)?'campus.card.retained':'campus.card.empty_hint')));
- else if(m.status==='empty'||m.status==='partial')host.append(el('p',{class:'campus-overview-notice'},tr(m.status==='empty'?'campus.card.empty_hint':'campus.card.partial_hint')));
+ else if(['empty','partial','billing','unconfirmed'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(m.status==='empty'?'campus.card.empty_hint':'campus.card.partial_hint')));
  host.append(el('footer',{class:'campus-overview-source'},tr('campus.data_source')+' · '+(m.source||'—')));
 }
 function campusUpdateOverview(host,m){
@@ -241,7 +242,9 @@ function campusCandidateSelect(field,current){
 }
 function campusPickerFeedback(){document.querySelectorAll('.campus-pick-feedback').forEach(node=>node.textContent=node.dataset.field===campusPickerField?campusPickerMessage:'');}
 function campusComputedPanel(){
- const c=campusResolve(),host=el('div',{class:'campus-live'}),current=!['disabled','auth','error','stale'].includes(campusOverviewModel().status);
+ // Draft controls may survive a failed save. Never present their calculations
+ // as persisted results while Dashboard/Network still use the confirmed rule.
+ const c=campusResolve(true),host=el('div',{class:'campus-live'}),current=!['disabled','auth','error','stale','unconfirmed','billing'].includes(campusOverviewModel().status);
  for(const [key,value,money]of [['campus.free_remaining',c.freeRemaining],['campus.funded_bytes',c.funded],['campus.total_available',c.total],['campus.estimated_fee',c.estimated,true]])
   host.append(el('div',{},el('small',{},tr(key)),el('strong',{},value==null?tr('campus.unavailable'):money?campusMoney(value):campusBytes(value)),el('small',{},value==null?tr('campus.rules_required'):tr('campus.calculated'))));
  const section=el('div',{},host);
@@ -368,7 +371,7 @@ function renderCampusSettings(host){
 const PulseCampus={
  async refresh(){try{const next=await rpc('get_campus_status');if(campusData?.origin!==next.origin){campusFieldState={};campusCandidates={};campusStateOrigin='';campusLastEventType='';}campusData=next;if(next.runtime_status){campusEventStatus='';campusLastEventType=next.runtime_status;}}catch(e){campusData={...(campusData||{}),error:String(e.message||e)};}this.renderLive();return campusData;},
  renderSettings:renderCampusSettings,dashboardCard:campusDashboardCard,networkPanel:campusNetworkPanel,livePanel:campusLivePanel,
- renderLive(){document.querySelectorAll('.campus-web-data').forEach(node=>node.redraw?.());for(const selector of ['.campus-live-target','.campus-computed-target'])document.querySelectorAll(selector).forEach(node=>{const key=JSON.stringify([campusResolve(),campusQuality(),campusLatestText(),PulseI18n.locale,campusRadix()]);if(node._campusKey!==key){node.replaceChildren(selector==='.campus-computed-target'?campusComputedPanel():campusLivePanel(false));node._campusKey=key;}});const hosts=document.querySelectorAll('.campus-overview');if(hosts.length){const m=campusOverviewModel();hosts.forEach(node=>campusUpdateOverview(node,m));}},
+ renderLive(){document.querySelectorAll('.campus-web-data').forEach(node=>node.redraw?.());for(const selector of ['.campus-live-target','.campus-computed-target'])document.querySelectorAll(selector).forEach(node=>{const computed=selector==='.campus-computed-target',key=JSON.stringify([campusResolve(computed),campusOverviewModel().status,campusQuality(),campusLatestText(),PulseI18n.locale,campusRadix()]);if(node._campusKey!==key){node.replaceChildren(computed?campusComputedPanel():campusLivePanel(false));node._campusKey=key;}});const hosts=document.querySelectorAll('.campus-overview');if(hosts.length){const m=campusOverviewModel();hosts.forEach(node=>campusUpdateOverview(node,m));}},
  ingest(event){
   if(!event||!event.type||event.portal_origin&&event.portal_origin!==campusData?.origin)return;campusEventStatus='';
   if(['campus_picker_pending','campus_picker_ready','campus_picker_failed','campus_picker_cancelled'].includes(event.type)){

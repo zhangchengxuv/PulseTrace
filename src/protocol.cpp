@@ -65,7 +65,8 @@ void validate_request(const Json &r) {
     } else if(type=="save_campus_mapping"){
         allowed={"fields"};if(!p.contains("fields")||!p["fields"].is_object()||p["fields"].size()>11)throw std::invalid_argument("Invalid campus fields");
         const std::set<std::string> fields(campus_field_names.begin(),campus_field_names.end());
-        const std::set<std::string> keys={"mode","selector","kind","unit","confidence","value","formula","cycle","reset_on_cycle"};
+        const std::set<std::string> keys={"mode","selector","kind","unit","confidence","value","formula","cycle","reset_on_cycle",
+            "accounting_confirmed","confirmed_month","traffic_radix","scope","period","start_date"};
         for(auto it=p["fields"].begin();it!=p["fields"].end();++it){
             if(!fields.contains(it.key())||!it->is_object()||it->size()>keys.size())throw std::invalid_argument("Invalid campus mapping");
             for(auto value=it->begin();value!=it->end();++value){
@@ -81,6 +82,7 @@ void validate_request(const Json &r) {
                 if(value.key()=="reset_on_cycle"&&!value->is_boolean())throw std::invalid_argument("Invalid campus cycle flag");
             }
         }
+        auto mapping=p["fields"];normalize_campus_mapping(mapping);validate_campus_mapping(mapping);
     } else if (type == "selftest_failure") {
         allowed={"message"};if(!p.contains("message")||!p["message"].is_string()||p["message"].get<std::string>().size()>512)throw std::invalid_argument("Invalid selftest failure");
     } else if (type == "selftest_snapshot") {
