@@ -9,6 +9,16 @@ async function validateSettingsCategories(){
   const key=button.dataset.settingsTab,visible=[...document.querySelectorAll('[data-settings-group]')].filter(node=>!node.hidden);
   if(visible.length!==1||visible[0].dataset.settingsGroup!==key)throw Error('Settings category visibility mismatch');
   if(visible[0].scrollWidth>visible[0].clientWidth+2)throw Error('Settings category overflow: '+key);
+  if(key==='campus'){
+   const campus=visible[0].querySelector('.campus-settings'),advanced=campus.querySelector('details.campus-section');
+   if(campus.querySelectorAll(':scope>section.campus-section').length!==3||advanced.open)throw Error('Campus settings groups or initial disclosure mismatch');
+   if(!campusData?.rule&&campus.querySelectorAll('.campus-candidate-row').length!==2)throw Error('Absent webpage fields generated redundant mapping controls');
+   if(campus.querySelector('.campus-computed-target input,.campus-computed-target select'))throw Error('Computed results must be read only');
+   const rows=[...campus.querySelectorAll('.campus-web-row')],computed=campus.querySelector('.campus-computed-target');
+   PulseCampus.renderLive();const before=computed.firstChild;PulseCampus.renderLive();
+   if(rows.length!==2||computed.firstChild!==before||rows.some(row=>!row.isConnected))throw Error('Campus live update rebuilt unchanged controls');
+   for(const node of campus.querySelectorAll('*'))if(node.clientWidth&&node.scrollWidth>node.clientWidth+2)throw Error('Campus settings control overflow: '+node.className);
+  }
   if(key==='cloud'){
    if(document.querySelector('.cloud-settings input[type=url]').value!=='https://dav.jianguoyun.com/dav/')throw Error('Default WebDAV server missing');
    if(document.querySelectorAll('.cloud-settings input[type=password]').length!==2)throw Error('Cloud secrets must use password controls');

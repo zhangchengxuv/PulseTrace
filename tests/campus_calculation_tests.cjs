@@ -46,3 +46,27 @@ assert.equal(vm.runInContext('campusQuality()',context),'campus.auth_required','
 vm.runInContext(`PulseCampus.ingest({type:'campus_candidate',portal_origin:'https://other.example',field:'balance',candidate:{selector:'#unrelated',kind:'currency',unit:'CNY',confidence:1}});`,context);
 assert.equal(vm.runInContext('campusFieldState.balance.selector',context),'#balance','events from a previous portal cannot replace the current selection');
 console.log('Campus calculations: manual, formula, GB/GiB, missing data, cycle reset, free/paid separation and zero-price checks passed');
+
+// Structured periods preserve legacy rules while expiring derived/manual usage.
+vm.runInContext(`campusFieldState={};state.config={campus_traffic_radix:1024,campus_unit_price:.6,campus_price_basis:'school',campus_linear_tariff:true};
+campusData={origin:'https://campus.example',latest:{observed_ms:Date.now(),balance:27.45,measurement:{raw_readings:{used_bytes:{value:30804.52,unit:'MB'}}}},rule:{fields:{
+ balance:{mode:'auto'},used_bytes:{mode:'auto',scope:'ipv4'},free_quota_bytes:{mode:'manual',kind:'bytes',value:120,unit:'GB'},
+ billing_cycle:{mode:'manual',kind:'text',unit:'text',value:'2026-10-15/monthly',period:'monthly',start_date:'2026-10-15'},
+ spendable_balance:{mode:'formula',kind:'currency',formula:'balance'}
+}}};`,context);
+r=vm.runInContext('campusResolve(true)',context);assert.equal(r.freeRemaining,null,'IPv4 label alone cannot establish free consumption');
+vm.runInContext(`campusData.rule.fields.used_free_bytes={mode:'formula',kind:'bytes',formula:'min(used_bytes,free_quota_bytes)',accounting_confirmed:true,cycle:'2026-10-15/monthly'};campusData.rule.fields.paid_used_bytes={mode:'formula',kind:'bytes',formula:'max(0,used_bytes-free_quota_bytes)',accounting_confirmed:true,cycle:'2026-10-15/monthly'};`,context);
+r=vm.runInContext('campusResolve(true)',context);assert.equal((r.resolved.used_bytes/GiB).toFixed(2),'30.08');assert.equal((r.freeRemaining/GiB).toFixed(2),'89.92');assert.equal((r.progress*100).toFixed(2),'25.07');assert.ok(Math.abs(r.funded/GiB-45.75)<1e-10);assert.equal(r.estimated,0);
+assert.equal(JSON.stringify(r),vm.runInContext('JSON.stringify(campusResolve())',context),'saved and live settings use identical calculations');
+vm.runInContext(`campusData=JSON.parse(JSON.stringify(campusData));state.config.campus_traffic_radix=1000;`,context);
+r=vm.runInContext('campusResolve(true)',context);assert.equal((r.resolved.used_bytes/1e9).toFixed(2),'30.80');assert.equal((r.freeRemaining/1e9).toFixed(2),'89.20');
+vm.runInContext(`campusData.latest.observed_ms=new Date('2026-10-14').getTime();`,context);r=vm.runInContext('campusResolve(true)',context);assert.equal(r.freeRemaining,null);assert.equal(r.progress,null);assert.equal(r.total,null);
+vm.runInContext(`campusData.latest.observed_ms=Date.now();campusData.rule.fields.billing_cycle.start_date='2026-10-01';`,context);assert.equal(vm.runInContext('campusResolve(true).freeRemaining',context),null,'new period requires fresh confirmation');
+for(const [start,date,kind,key]of [
+ ['2026-01-31','2026-02-28','monthly','2026-02-28/monthly'],['2026-01-31','2026-03-01','monthly','2026-02-28/monthly'],
+ ['2024-02-29','2026-02-28','yearly','2026-02-28/yearly'],['2024-02-29','2026-02-27','yearly','2025-02-28/yearly'],
+ ['2026-02-30','2026-11-08','monthly',''],['2026-12-01','2026-11-08','monthly','']]){
+ assert.equal(vm.runInContext('campusPeriod('+JSON.stringify({period:kind,start_date:start})+',new Date('+JSON.stringify(date+'T12:00:00')+'))',context),key);
+}
+vm.runInContext(`campusData.latest.balance=null;`,context);assert.equal(vm.runInContext('campusResolve().funded',context),null);
+console.log('Anchored monthly/yearly periods, month-end clamping, confirmation, radix refresh and restart roundtrip passed');

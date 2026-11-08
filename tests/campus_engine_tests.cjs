@@ -79,7 +79,7 @@ assert.ok(spatial.candidates.balance[0].confidence<.8,'spatial suggestions requi
 assert.equal(spatial.candidates.used_bytes[0].value,3*1024**3);
 spatialValue.hidden=true;assert.equal(E.scan(spatialDoc,null).candidates.balance,undefined,'hidden and adjacent-row values are not paired');
 spatialValue.hidden=false;spatialValue.rect.left=600;assert.equal(E.scan(spatialDoc,null).candidates.balance,undefined,'distant columns are not paired');
-const vague=document([new Element('section','流量(V4)： 2 GB',{id:'vague'})]);
+const vague=document([new Element('section','流量： 2 GB',{id:'vague'})]);
 assert.equal(E.scan(vague,null).candidates.used_bytes,undefined,'an unspecified traffic counter is not assumed to be used data');
 let picked=null;context.document=tableDoc;E.installPicker(tableDoc,'balance',event=>picked=event);const target=tableDoc.querySelector('#balance');tableDoc.listeners.click({preventDefault(){},stopPropagation(){},target});assert.equal(picked.field,'balance');assert.ok(picked.candidate&&picked.candidate.manual);
 E.installPicker(tableDoc,'balance',()=>{});E.cancelPicker(tableDoc);assert.equal(tableDoc.listeners.click,undefined,'closing the portal cancels click interception');
@@ -95,3 +95,11 @@ const switched=E.scan(decimalDoc,{traffic_radix:1000,fields:{used_bytes:{mode:'s
 assert.equal(switched.snapshot.used_bytes,12345670000);
 assert.equal(switched.snapshot.raw_readings.used_bytes.value,12345.67);
 assert.equal(switched.snapshot.traffic_radix,1000);
+
+const v4Doc=document([row('账户余额','27.45 元','v4-balance'),row('流量(V4)','30804.52 MB','v4-used'),row('流量(V6)','5 GB','v6-used')]);
+context.document=v4Doc;const v4=E.scan(v4Doc,null);
+assert.deepEqual(Object.keys(v4.candidates).sort(),['balance','used_bytes']);
+assert.equal(v4.candidates.used_bytes[0].scope,'ipv4');assert.equal(v4.candidates.used_bytes[0].raw_value,30804.52);
+assert.ok(v4.candidates.used_bytes.every(x=>x.value===30804.52*1024**2),'IPv6 label is not silently mapped as IPv4');
+const replay=E.scan(v4Doc,{fields:Object.fromEntries(Object.entries(v4.candidates).map(([f,items])=>[f,{...items[0],mode:'auto'}]))});
+assert.equal(replay.snapshot.used_bytes,30804.52*1024**2);assert.equal(replay.snapshot.cycle_text,'','V4 does not infer billing period');

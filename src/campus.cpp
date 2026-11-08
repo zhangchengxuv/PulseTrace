@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <fstream>
 #include <set>
 #include <stdexcept>
@@ -98,6 +99,19 @@ void validate_campus_mapping(const Json &fields){
         if(m.contains("accounting_confirmed")&&!m["accounting_confirmed"].is_boolean())throw std::invalid_argument("Invalid campus accounting confirmation");
         for(const char *key:{"cycle","confirmed_month"})if(m.contains(key)&&(!m[key].is_string()||m[key].get<std::string>().size()>128))throw std::invalid_argument("Invalid campus accounting period");
         const auto mode=m.value("mode","auto");
+        if(m.contains("scope")&&(it.key()!="used_bytes"||m["scope"]!="ipv4"))throw std::invalid_argument("Invalid campus traffic scope");
+        if(m.contains("period")||m.contains("start_date")){
+            if(it.key()!="billing_cycle"||mode!="manual"||m.value("kind","")!="text"||
+               !m.contains("period")||(m["period"]!="monthly"&&m["period"]!="yearly")||
+               !m.contains("start_date")||!m["start_date"].is_string())throw std::invalid_argument("Invalid campus billing period");
+            const auto date=m["start_date"].get<std::string>();
+            if(date.size()!=10||date[4]!='-'||date[7]!='-'||
+               !std::all_of(date.begin(),date.end(),[](char c){return (c>='0'&&c<='9')||c=='-';})||
+               date.substr(0,4).find('-')!=std::string::npos||date.substr(5,2).find('-')!=std::string::npos||date.substr(8,2).find('-')!=std::string::npos)
+                throw std::invalid_argument("Invalid campus billing start date");
+            const std::chrono::year_month_day day{std::chrono::year{std::stoi(date.substr(0,4))},std::chrono::month{static_cast<unsigned>(std::stoi(date.substr(5,2)))},std::chrono::day{static_cast<unsigned>(std::stoi(date.substr(8,2)))}};
+            if(!day.ok()||int(day.year())<100)throw std::invalid_argument("Invalid campus billing start date");
+        }
         if(mode!="auto"&&mode!="selector"&&mode!="manual"&&mode!="formula"&&mode!="disabled")
             throw std::invalid_argument("Invalid campus mapping mode");
         if(mode=="auto"||mode=="selector"){

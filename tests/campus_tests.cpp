@@ -26,6 +26,17 @@ void storage(const std::filesystem::path &root){
     check(campus_origin("HTTPS://CAMPUS.EXAMPLE/usage")=="https://campus.example","scheme and origin normalization");
     Json legacy={{"balance",{{"selector","#balance"},{"kind","currency"},{"unit","CNY"},{"confidence",1}}}};normalize_campus_mapping(legacy);
     check(legacy["balance"]["mode"]=="auto","legacy selector rules migrate to automatic mode");
+    Json period={{"billing_cycle",{{"mode","manual"},{"kind","text"},{"unit","text"},{"value","2026-10-15/monthly"},{"period","monthly"},{"start_date","2026-10-15"}}},
+                 {"used_bytes",{{"mode","selector"},{"selector","#v4"},{"kind","bytes"},{"unit","B"},{"confidence",0.95},{"scope","ipv4"}}}};
+    validate_campus_mapping(period);
+    save_campus_rules(root,{{"format",1},{"portals",Json::array({{{"origin","https://campus.example"},{"fields",period}}})}});
+    check(load_campus_rules(root)["portals"][0]["fields"]==period,"anchored billing period and IPv4 label survive rules reload");
+    for(const char *date:{"2026-02-29","2026-13-01","2026-1-01","2026-01-00","2026-0--01"}){
+        auto bad=period;bad["billing_cycle"]["start_date"]=date;bool rejected=false;try{validate_campus_mapping(bad);}catch(...){rejected=true;}check(rejected,"invalid billing calendar date rejected");
+    }
+    auto leap=period;leap["billing_cycle"]["start_date"]="2024-02-29";leap["billing_cycle"]["period"]="yearly";validate_campus_mapping(leap);
+    auto bad=period;bad["billing_cycle"]["period"]="weekly";bool rejected=false;try{validate_campus_mapping(bad);}catch(...){rejected=true;}check(rejected,"unsupported period rejected");
+    bad=period;bad["used_bytes"]["scope"]="all";rejected=false;try{validate_campus_mapping(bad);}catch(...){rejected=true;}check(rejected,"unverified traffic scope rejected");
     DatabaseManager db(root/"storage.db");
     Json snapshot={{"observed_ms",100},{"portal_origin","https://campus.example"},{"portal_url","https://campus.example/usage"},
                    {"balance",12.5},{"used_bytes",1024},{"remaining_bytes",2048},{"quota_bytes",3072},{"fee",1.25},

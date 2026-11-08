@@ -11,8 +11,8 @@ class Node{
 let calls=[],rejectConfig=false,rejectPicker=false;
 const fixture={origin:'https://campus.example',portal_url:'https://campus.example/usage',rule:null};
 const context=vm.createContext({structuredClone,console,state:{config:{campus_enabled:true,campus_portal_url:fixture.portal_url}},PulseI18n:{locale:'en-US'},page:'settings',tr:k=>k,bytes:String,
- el:(tag,attrs,...children)=>new Node(tag,attrs,children),document:{querySelectorAll:selector=>selector==='.campus-pick-feedback'?host.all().filter(n=>n.class==='campus-pick-feedback'):[]},
- rpc:async(type,params)=>{calls.push({type,params});if(type==='set_config'&&rejectConfig)throw Error('controlled save failure');if(type==='set_config')Object.assign(context.state.config,params);if(type==='campus_pick_field'&&rejectPicker)throw Error('controlled picker failure');if(type==='get_campus_status')return structuredClone(fixture);if(type==='get_status')return structuredClone(context.state);return {};}});
+ el:(tag,attrs,...children)=>new Node(tag,attrs,children),document:{querySelector:selector=>host.all().find(n=>n.class===selector.slice(1)),querySelectorAll:selector=>host.all().filter(n=>n.class===selector.slice(1))},
+ rpc:async(type,params)=>{calls.push({type,params});if(type==='set_config'&&rejectConfig)throw Error('controlled save failure');if(type==='set_config')Object.assign(context.state.config,params);if(type==='campus_pick_field'&&rejectPicker)throw Error('controlled picker failure');if(type==='save_campus_mapping')fixture.rule={fields:structuredClone(params.fields)};if(type==='get_campus_status')return structuredClone(fixture);if(type==='get_status')return structuredClone(context.state);return {};}});
 vm.runInContext(fs.readFileSync('web/desktop/campus-view.js','utf8'),context);
 vm.runInContext(`campusData=${JSON.stringify(fixture)};campusCandidates={balance:[{value:10,raw:'¥10',selector:'#balance',kind:'currency',unit:'CNY',confidence:.95}]};`,context);
 const host=new Node('div');context.host=host;vm.runInContext('renderCampusSettings(host)',context);
@@ -20,6 +20,11 @@ const label=key=>host.all().find(n=>n.tag==='label'&&n.children[0]?.textContent=
 const button=key=>host.all().find(n=>n.tag==='button'&&n.textContent===key);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
+ assert.deepEqual(host.all().filter(n=>n.class==='campus-candidate-row').map(n=>n.children[0].textContent),['campus.field.balance','campus.field.used_bytes'],'only primary page fields shown by default');
+ assert.deepEqual(host.children.filter(n=>n.tag==='section').map(n=>n.children[0].textContent),['campus.web_data','campus.manual_config','campus.auto_calculate']);
+ assert.equal(host.all().find(n=>n.tag==='details'&&n.children[0].textContent==='campus.advanced').open,undefined,'advanced recognition starts collapsed');
+ const extension=host.all().find(n=>n['aria-label']==='campus.extend_field');
+ extension.value='used_free_bytes';extension.onchange();
  const quota=label('campus.field.free_quota_bytes').all().find(n=>n.tag==='input');quota.value='10';quota.onchange();await tick();await tick();
  let saved=calls.find(c=>c.type==='save_campus_mapping').params.fields;
  assert.equal(saved.free_quota_bytes.value,10);assert.equal(saved.balance,undefined,'billing edits never confirm unreviewed page candidates');
@@ -38,7 +43,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  vm.runInContext(`PulseCampus.ingest({type:'campus_picker_ready',field:'used_free_bytes'});`,context);
  assert.equal(status.textContent,'campus.pick_hint','only a native ready event announces selection readiness');
  rejectPicker=true;await pick.onclick();assert.equal(status.textContent,'controlled picker failure','picker failures remain visible beside the button');assert.equal(pick.disabled,false);
- rejectPicker=false;const clicked=[];
+ rejectPicker=false;for(const field of ['free_quota_bytes','free_remaining_bytes','spendable_balance','paid_used_bytes','remaining_bytes','quota_bytes','fee','billing_cycle']){extension.value=field;extension.onchange();}const clicked=[];
  for(const candidateRow of host.all().filter(n=>n.class==='campus-candidate-row')){
   calls=[];await candidateRow.all().find(n=>n.tag==='button').onclick();
   assert.equal(calls[0]?.type,'campus_pick_field');clicked.push(calls[0].params.field);
@@ -55,8 +60,15 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  const checkbox=key=>host.all().find(n=>n.tag==='label'&&n.textContent.includes(key)).all().find(n=>n.type==='checkbox');
  calls=[];const linear=checkbox('campus.linear_tariff');linear.checked=true;await linear.onchange();assert.equal(calls.find(c=>c.type==='set_config').params.campus_linear_tariff,true);
  const freeFirst=checkbox('campus.free_first');calls=[];freeFirst.checked=true;freeFirst.onchange();await tick();assert.equal(freeFirst.checked,false);assert.equal(calls.some(c=>c.type==='save_campus_mapping'),false,'billing scope cannot be confirmed without a cycle');
- vm.runInContext(`campusFieldState.billing_cycle={mode:'manual',kind:'text',value:'2026-11'};`,context);
+ vm.runInContext(`campusData.latest={observed_ms:Date.now(),cycle_text:'2026-11'};campusFieldState.billing_cycle={mode:'manual',kind:'text',value:'2026-11'};`,context);
  calls=[];freeFirst.checked=true;freeFirst.onchange();await tick();await tick();
  saved=calls.find(c=>c.type==='save_campus_mapping').params.fields;assert.equal(saved.used_free_bytes.accounting_confirmed,true);assert.equal(saved.used_free_bytes.cycle,'2026-11');assert.equal(saved.used_free_bytes.confirmed_month,new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
+ const manualUsed=label('campus.field.used_free_bytes').all().find(n=>n.tag==='input');calls=[];manualUsed.value='7';await manualUsed.onchange();
+ saved=calls.find(c=>c.type==='save_campus_mapping').params.fields;assert.equal(saved.used_free_bytes.value,7);assert.equal(saved.used_free_bytes.reset_on_cycle,true);assert.equal(saved.paid_used_bytes,undefined,'manual free usage disables generated paid usage');
+ const period=label('campus.period').all().find(n=>n.tag==='select'),start=label('campus.period_start').all().find(n=>n.tag==='input');calls=[];period.value='monthly';start.value='2026-10-15';await period.onchange();
+ saved=calls.find(c=>c.type==='save_campus_mapping').params.fields;assert.equal(saved.billing_cycle.period,'monthly');assert.equal(saved.billing_cycle.start_date,'2026-10-15');
+ assert.equal(vm.runInContext('campusResolve().resolved.used_free_bytes',context),null,'changing period expires manually entered free usage');
+ const node=host.all().find(n=>n.class==='campus-computed-target');
+ vm.runInContext('PulseCampus.renderLive()',context);const stable=node.children[0];vm.runInContext('PulseCampus.renderLive()',context);assert.equal(node.children[0],stable,'unchanged live calculations retain DOM nodes');
  console.log('Campus settings: confirmation, billing isolation, radix persistence, legacy price editing, tariff scope and failed-save handling passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

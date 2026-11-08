@@ -7,7 +7,7 @@
     used_free_bytes:/免费已用|已用免费流量|免费流量已使用|free\s+(?:used|usage)/i,
     spendable_balance:/可消费余额|流量余额|可用于流量(?:消费)?的余额|spendable\s+balance|balance\s+for\s+(?:data|usage)/i,
     paid_used_bytes:/付费流量|超额流量|超出免费|paid\s+(?:data|usage)|chargeable\s+(?:data|usage)/i,
-    used_bytes:/已用流量|已使用流量|已用数据|used\s+(?:data|traffic|usage)|data\s+used|(?:^|\s)usage(?:\s|$)/i,
+    used_bytes:/流量\s*[(（]\s*(?:V4|IPv4)\s*[)）]|已用流量|已使用流量|已用数据|used\s+(?:data|traffic|usage)|data\s+used|(?:^|\s)usage(?:\s|$)/i,
     remaining_bytes:/剩余流量|可用流量|剩余数据|remaining\s+(?:data|traffic)|data\s+remaining/i,
     quota_bytes:/套餐总量|套餐额度|总流量|流量额度|quota|allowance|data\s+plan/i,
     fee:/费用|消费金额|扣费|charge|cost|fee/i,
@@ -64,11 +64,11 @@
     if(!parsed)return null;
     return {field,kind,value:parsed.value,unit:parsed.unit,...(parsed.display_unit?{display_unit:parsed.display_unit,raw_value:parsed.raw_value}:{})};
   }
-  function candidate(field,text,element,selector,base){
+  function candidate(field,text,element,selector,base,label=''){
     const parsed=parsedField(field,text);if(!parsed)return null;
     const hint=normalize((element?.id||'')+' '+(element?.className||'')+' '+(element?.getAttribute?.('aria-label')||''));
     const table=/^(TR|TD|TH|DD|DT)$/.test(element?.tagName||'')||/table|row|item|metric/i.test(hint);
-    return {...parsed,selector:selector||stableSelector(element),raw:text.slice(0,180),confidence:Math.min(.99,base+(table?.12:0)+(patterns[field].test(hint)?.08:0))};
+    return {...parsed,...(field==='used_bytes'&&/流量\s*[(（]\s*(?:V4|IPv4)\s*[)）]/i.test(label||text)?{scope:'ipv4'}:{}),selector:selector||stableSelector(element),raw:text.slice(0,180),confidence:Math.min(.99,base+(table?.12:0)+(patterns[field].test(hint)?.08:0))};
   }
   function addCandidates(document,candidates){
     const specific=(field,text)=>{
@@ -89,7 +89,7 @@
         if(!specific(field,rowText))continue;
         if(!pattern.test(rowText)&&!pattern.test(normalize((element.id||'')+' '+(element.className||'')+' '+(element.getAttribute?.('aria-label')||''))))continue;
         const target=text.length<=180?element:row;
-        const c=candidate(field,normalize(target.textContent).slice(0,220),target,stableSelector(target),.56);
+        const c=candidate(field,normalize(target.textContent).slice(0,220),target,stableSelector(target),.56,rowText);
         if(c)candidates.push(c);
       }
     }
@@ -98,7 +98,7 @@
       const elements=[...row.querySelectorAll('th,td')],cells=elements.map(cell=>normalize(cell.textContent));if(cells.length<2)continue;
       for(const [field,pattern]of Object.entries(patterns))if(pattern.test(cells[0])||pattern.test(cells[1])){
         if(!specific(field,cells.slice(0,2).join(' ')))continue;
-        const c=candidate(field,cells[1],elements[1],stableSelector(elements[1]),.82);if(c)candidates.push(c);
+        const c=candidate(field,cells[1],elements[1],stableSelector(elements[1]),.82,cells[0]);if(c)candidates.push(c);
       }
     }
     // Legacy portals often position label and value in separate columns. Match
@@ -123,7 +123,7 @@
           (kind!=='currency'||/^(?:[¥￥]\s*)?\d[\d,，]*(?:\.\d+)?\s*(?:元|CNY|RMB)?$/i.test(item.text))&&
           parseKind(kind,item.text);
       }).sort((a,b)=>a.rect.left-b.rect.left);
-      if(nearby.length){const item=nearby[0],c=candidate(field,item.text,item.element,stableSelector(item.element),.56);if(c)candidates.push(c);}
+      if(nearby.length){const item=nearby[0],c=candidate(field,item.text,item.element,stableSelector(item.element),.56,label.text);if(c)candidates.push(c);}
     }
   }
   function scan(document,rule){
