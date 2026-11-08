@@ -53,14 +53,14 @@ main `b3a2cbf` 的历史 x64 Release 构建截图；独立空数据目录、暂�
 
 ## 下载安装
 
-[GitHub v0.7.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.1) · [Gitee v0.7.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.1)
+[GitHub v0.7.2](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.2) · [Gitee v0.7.2](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.2)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-版本 **v0.7.1** 修复 IPv4/IPv6 自动选卡与采集恢复，移除任务栏网速及设置，保留托盘后台、校园网和加密 WebDAV。升级保留数据和配置；验证范围见[发布说明](docs/releases/v0.7.1.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+版本 **v0.7.2** 修复校园网 1024/1000 单位换算、免费额度及资费计算，保留原始读数、历史与旧单价基准；Dashboard/Network 显示一致。升级保留数据和配置；验证范围见[发布说明](docs/releases/v0.7.2.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 

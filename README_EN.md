@@ -53,14 +53,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.7.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.1) · [Gitee v0.7.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.1)
+[GitHub v0.7.2](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.2) · [Gitee v0.7.2](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.2)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Version **v0.7.1** fixes IPv4/IPv6 adapter selection and capture recovery; removes taskbar speed and its settings while preserving tray monitoring, campus cards and encrypted WebDAV. Existing data and configuration remain compatible. See [release notes](docs/releases/v0.7.1.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Version **v0.7.2** fixes campus base-1024/1000 conversion, free allowances and billing calculations, preserving raw readings, history and legacy price bases. Dashboard/Network now share consistent values. Existing data and configuration remain compatible. See [release notes](docs/releases/v0.7.2.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
