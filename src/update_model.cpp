@@ -3,6 +3,10 @@
 #include <cctype>
 #include <sstream>
 #include <stdexcept>
+#include <windows.h>
+#include <shlwapi.h>
+#include <xmllite.h>
+#include <memory>
 namespace pulsetrace {
 namespace {
 std::vector<std::string> split(const std::string &s, char delimiter){std::vector<std::string> r;std::size_t a=0;do{auto b=s.find(delimiter,a);r.push_back(s.substr(a,b-a));if(b==s.npos)break;a=b+1;}while(true);return r;}
@@ -38,6 +42,36 @@ SemVersion SemVersion::parse(std::string text){
 }
 int SemVersion::compare(const SemVersion &o)const{for(int i=0;i<3;i++){int c=number_compare(numbers[i],o.numbers[i]);if(c)return c;}if(pre.empty()||o.pre.empty())return pre.empty()==o.pre.empty()?0:pre.empty()?1:-1;for(std::size_t i=0;i<std::min(pre.size(),o.pre.size());i++){if(pre[i]==o.pre[i])continue;bool a=numeric(pre[i]),b=numeric(o.pre[i]);if(a&&b)return number_compare(pre[i],o.pre[i]);if(a!=b)return a?-1:1;return pre[i]<o.pre[i]?-1:1;}return pre.size()==o.pre.size()?0:pre.size()<o.pre.size()?-1:1;}
 std::optional<UpdateAsset> github_release(const Json &r,const std::string &channel){return release(r,channel,[](const Json &v){return v.at("assets");},"github");}
+std::string github_feed_version(const std::string &xml,const std::string &channel){
+ if((channel!="stable"&&channel!="preview")||xml.empty()||xml.size()>2*1024*1024)throw std::runtime_error("Invalid release feed");
+ const auto release=[](auto *p){if(p)p->Release();};
+ std::unique_ptr<IStream,decltype(release)> stream(SHCreateMemStream(reinterpret_cast<const BYTE*>(xml.data()),static_cast<UINT>(xml.size())),release);
+ IXmlReader *raw=nullptr;
+ if(!stream||FAILED(CreateXmlReader(__uuidof(IXmlReader),reinterpret_cast<void**>(&raw),nullptr)))throw std::runtime_error("Release feed reader unavailable");
+ std::unique_ptr<IXmlReader,decltype(release)> reader(raw,release);
+ if(FAILED(reader->SetProperty(XmlReaderProperty_DtdProcessing,DtdProcessing_Prohibit))||FAILED(reader->SetProperty(XmlReaderProperty_MaxElementDepth,64))||FAILED(reader->SetInput(stream.get())))throw std::runtime_error("Invalid release feed");
+ const auto value=[&]{const wchar_t *s=nullptr;UINT n=0;if(FAILED(reader->GetValue(&s,&n)))throw std::runtime_error("Invalid release feed value");return std::wstring(s,n);};
+ std::string latest;bool feed=false,in_entry=false;XmlNodeType type;HRESULT status;
+ while((status=reader->Read(&type))==S_OK){
+  const wchar_t *name=nullptr,*ns=nullptr;UINT depth=0;reader->GetDepth(&depth);
+  if(type!=XmlNodeType_Element&&type!=XmlNodeType_EndElement)continue;
+  if(FAILED(reader->GetLocalName(&name,nullptr))||FAILED(reader->GetNamespaceUri(&ns,nullptr)))throw std::runtime_error("Invalid release feed node");
+  const bool atom=std::wstring_view(ns)==L"http://www.w3.org/2005/Atom";
+  if(depth==0){if(!atom||std::wstring_view(name)!=L"feed")throw std::runtime_error("Invalid release feed root");feed=true;}
+  if(atom&&depth==1&&std::wstring_view(name)==L"entry")in_entry=type==XmlNodeType_Element;
+  if(type!=XmlNodeType_Element||!atom||!in_entry||depth!=2||std::wstring_view(name)!=L"link")continue;
+  std::wstring href,rel;
+  if(reader->MoveToAttributeByName(L"href",nullptr)==S_OK){href=value();reader->MoveToElement();}
+  if(reader->MoveToAttributeByName(L"rel",nullptr)==S_OK){rel=value();reader->MoveToElement();}
+  const std::wstring prefix=L"https://github.com/zhangchengxuv/PulseTrace/releases/tag/v";
+  if(rel!=L"alternate"||!href.starts_with(prefix))continue;
+  const auto suffix=href.substr(prefix.size());if(std::any_of(suffix.begin(),suffix.end(),[](wchar_t c){return c>127;}))continue;
+  const std::string version(suffix.begin(),suffix.end());
+  try{const auto v=SemVersion::parse(version);if(channel=="stable"&&!v.pre.empty())continue;if(latest.empty()||v.compare(SemVersion::parse(latest))>0)latest=version;}catch(const std::invalid_argument &){continue;}
+ }
+ if(status!=S_FALSE||!feed||latest.empty())throw std::runtime_error("No verified version in release feed");
+ return latest;
+}
 std::optional<UpdateAsset> gitee_release(const Json &r,const std::string &channel,const std::function<Json(std::int64_t)> &attachments){return release(r,channel,[&](const Json &v){const auto id=v.at("id").get<std::int64_t>();if(id<=0)throw std::runtime_error("Invalid Gitee release ID");return attachments(id);},"gitee");}
 std::string parse_checksum(const std::string &text,const std::string &filename){if(text.size()>4096)throw std::runtime_error("Checksum file too large");std::istringstream input(text);std::string hash,name,extra;input>>hash>>name;if(name.starts_with('*'))name.erase(0,1);if(hash.size()!=64||hash.find_first_not_of("0123456789abcdefABCDEF")!=hash.npos||name!=filename||input>>extra)throw std::runtime_error("Invalid SHA-256 manifest");std::transform(hash.begin(),hash.end(),hash.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});return hash;}
 std::vector<UpdateAsset> choose_updates(std::vector<UpdateAsset> assets,const std::string &current){
@@ -51,7 +85,7 @@ bool trusted_update_url(const std::string &url,bool redirect){
  auto end=url.find('/',8);const auto host=url.substr(8,end-8);if(host.find_first_of("@:#%")!=host.npos||end==url.npos)return false;
  const auto path=url.substr(end);
  if(host=="api.github.com")return path.starts_with("/repos/zhangchengxuv/PulseTrace/releases");
- if(host=="github.com")return path.starts_with("/zhangchengxuv/PulseTrace/releases/");
+ if(host=="github.com")return path=="/zhangchengxuv/PulseTrace/releases.atom"||path.starts_with("/zhangchengxuv/PulseTrace/releases/");
  if(host=="gitee.com")return path.starts_with("/api/v5/repos/zhangchenxuv/pulse-trace/releases")||path.starts_with("/zhangchenxuv/pulse-trace/releases/");
  // A redirect is accepted only after an HTTPS request to the fixed repository origin.
  return redirect&&(host=="release-assets.githubusercontent.com"||host=="objects.githubusercontent.com"||host=="gitee-release-file.oss-cn-beijing.aliyuncs.com");

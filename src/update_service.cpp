@@ -7,6 +7,7 @@
 #include <wincrypt.h>
 #include <bcrypt.h>
 #include <array>
+#include <algorithm>
 #include <fstream>
 #include <future>
 #include <iomanip>
@@ -36,7 +37,11 @@ void receive(std::string url,std::uint64_t limit,const std::atomic<bool> &cancel
   if(!WinHttpSendRequest(request.p,headers,static_cast<DWORD>(-1),WINHTTP_NO_REQUEST_DATA,0,0,0)||!WinHttpReceiveResponse(request.p,nullptr))throw std::runtime_error("Network/proxy/TLS error "+std::to_string(GetLastError()));
   DWORD status=0,length=sizeof(status);WinHttpQueryHeaders(request.p,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&length,WINHTTP_NO_HEADER_INDEX);
   if(status==301||status==302||status==303||status==307||status==308){DWORD bytes=0;WinHttpQueryHeaders(request.p,WINHTTP_QUERY_LOCATION,WINHTTP_HEADER_NAME_BY_INDEX,nullptr,&bytes,WINHTTP_NO_HEADER_INDEX);if(!bytes||bytes>16384)throw std::runtime_error("Invalid update redirect");std::wstring location(bytes/sizeof(wchar_t),0);if(!WinHttpQueryHeaders(request.p,WINHTTP_QUERY_LOCATION,WINHTTP_HEADER_NAME_BY_INDEX,location.data(),&bytes,WINHTTP_NO_HEADER_INDEX))throw std::runtime_error("Missing redirect");location.resize(wcslen(location.c_str()));url=utf8(location);continue;}
-  if(status!=200)throw std::runtime_error("Release server HTTP "+std::to_string(status));
+  if(status!=200){
+   wchar_t remaining[32]{};DWORD bytes=sizeof(remaining);
+   const bool limited=status==429||(status==403&&WinHttpQueryHeaders(request.p,WINHTTP_QUERY_CUSTOM,L"X-RateLimit-Remaining",remaining,&bytes,WINHTTP_NO_HEADER_INDEX)&&std::wstring_view(remaining)==L"0");
+   throw std::runtime_error(limited?"UPDATE_RATE_LIMITED: Release API quota exhausted; retry later or use the release page":"Release server HTTP "+std::to_string(status));
+  }
   std::array<char,65536> buffer{};std::uint64_t total=0;DWORD read=0;
   do{if(cancel)throw std::runtime_error("Update cancelled");if(GetTickCount64()>deadline)throw std::runtime_error("Update request timed out");if(!WinHttpReadData(request.p,buffer.data(),static_cast<DWORD>(buffer.size()),&read))throw std::runtime_error("Download interrupted "+std::to_string(GetLastError()));total+=read;if(total>limit)throw std::runtime_error("Response exceeds expected size");if(read)sink(buffer.data(),read);}while(read);return;
  }
@@ -76,19 +81,41 @@ void UpdateService::start(std::function<void()> work){
 }
 void UpdateService::check(std::string channel,std::string source){
  if((channel!="stable"&&channel!="preview")||(source!="auto"&&source!="github"&&source!="gitee"))throw std::invalid_argument("Invalid update source/channel");
- start([this,channel,source]{patch({{"phase","checking"},{"latest",""},{"downloaded",false},{"can_install",false},{"providers",Json::array()}});
+ start([this,channel,source]{patch({{"phase","checking"},{"latest",""},{"notes",""},{"size",0},{"received",0},{"partial_sources",false},{"metadata_only",false},{"release_page",source=="gitee"?"https://gitee.com/zhangchenxuv/pulse-trace/releases":"https://github.com/zhangchengxuv/PulseTrace/releases"},{"downloaded",false},{"can_install",false},{"providers",Json::array()}});
   {std::lock_guard lock(mutex_);candidates_.clear();installer_.clear();}
   struct Result{std::optional<UpdateAsset> asset;Json report;};
   auto query=[&](const std::string &provider){const auto begin=GetTickCount64();Result result;result.report={{"source",provider}};try{
    if(provider=="github")result.asset=github_release(Json::parse(fetch("https://api.github.com/repos/zhangchengxuv/PulseTrace/releases?per_page=100",cancelled_)),channel);
    else result.asset=gitee_release(Json::parse(fetch("https://gitee.com/api/v5/repos/zhangchenxuv/pulse-trace/releases?per_page=100",cancelled_)),channel,[&](std::int64_t id){return Json::parse(fetch("https://gitee.com/api/v5/repos/zhangchenxuv/pulse-trace/releases/"+std::to_string(id)+"/attach_files?per_page=100",cancelled_));});
+   result.report["version"]=result.asset?result.asset->version:"";
+   if(result.asset&&SemVersion::parse(result.asset->version).compare(SemVersion::parse(app_version))<=0)result.asset.reset();
    if(result.asset)result.asset->sha256=parse_checksum(fetch(result.asset->checksum_url,cancelled_,4096),result.asset->name);
-   result.report["ok"]=true;result.report["version"]=result.asset?result.asset->version:"";
-  }catch(const std::exception &e){result.asset.reset();result.report["ok"]=false;result.report["error"]=e.what();}const auto latency=GetTickCount64()-begin;result.report["elapsed_ms"]=latency;if(result.asset)result.asset->latency_ms=latency;return result;};
+   result.report["ok"]=true;
+  }catch(const std::exception &e){
+   result.asset.reset();result.report["ok"]=false;result.report["error"]=e.what();
+   const std::string message=e.what();result.report["error_code"]=message.starts_with("UPDATE_RATE_LIMITED:")?"rate_limited":message.find("HTTP 403")!=message.npos?"access_denied":message.find("Network")!=message.npos?"network":"source";
+   if(provider=="github"&&result.report["error_code"]=="rate_limited"&&!cancelled_){
+    try{result.report["version"]=github_feed_version(fetch("https://github.com/zhangchengxuv/PulseTrace/releases.atom",cancelled_),channel);result.report["metadata_only"]=true;result.report["ok"]=true;}
+    catch(const std::exception &fallback){result.report["fallback_error"]=fallback.what();}
+   }
+  }const auto latency=GetTickCount64()-begin;result.report["elapsed_ms"]=latency;if(result.asset)result.asset->latency_ms=latency;return result;};
   std::vector<std::future<Result>> requests;if(source!="gitee")requests.push_back(std::async(std::launch::async,query,"github"));if(source!="github")requests.push_back(std::async(std::launch::async,query,"gitee"));
   Json providers=Json::array();std::vector<UpdateAsset> assets;unsigned success=0;for(auto &f:requests){auto r=f.get();if(r.asset)assets.push_back(*r.asset);if(r.report.value("ok",false))success++;providers.push_back(r.report);}patch({{"providers",providers}});if(cancelled_)throw std::runtime_error("Update cancelled");if(!success)throw std::runtime_error("All selected release sources failed; see source diagnostics");
   auto selected=choose_updates(std::move(assets),app_version);const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();patch({{"last_check_ms",now},{"partial_sources",success<requests.size()}});
   std::filesystem::create_directories(data_/"updates");{std::ofstream out(data_/"updates"/"last-check.json");out<<Json{{"last_check_ms",now}};}
+  {
+   const bool authoritative=std::any_of(providers.begin(),providers.end(),[](const auto &p){return p.value("ok",false)&&!p.value("metadata_only",false);});
+   for(const auto &p:providers)if(p.value("metadata_only",false)){
+    const auto version=p.at("version").get<std::string>();
+    // Atom omits GitHub's prerelease flag and installer metadata. Never authorize
+    // download/install or claim a stable-channel result from this reduced feed.
+    const auto known=selected.empty()?std::string(app_version):selected.front().version;
+    const bool newer=SemVersion::parse(version).compare(SemVersion::parse(known))>0;
+    if(!newer&&(authoritative||!selected.empty()))continue;
+    const bool manual=channel=="stable"||newer;
+    patch({{"phase",manual?"manual_check":"up_to_date"},{"metadata_only",true},{"latest",version},{"release_page","https://github.com/zhangchengxuv/PulseTrace/releases/tag/v"+version}});return;
+   }
+  }
   if(selected.empty()){patch({{"phase","up_to_date"}});return;}
   const auto a=selected.front();{std::lock_guard lock(mutex_);candidates_=std::move(selected);}patch({{"phase","available"},{"latest",a.version},{"notes",a.notes},{"size",a.size},{"sha256",a.sha256},{"source",a.source}});
  });
@@ -106,5 +133,5 @@ void UpdateService::download(){
  });
 }
 std::filesystem::path UpdateService::verified_installer()const{std::filesystem::path file;std::string digest;{std::lock_guard lock(mutex_);if(!state_.value("can_install",false)||state_.value("busy",false)||candidates_.empty())throw std::runtime_error("Publisher identity is not verified; manual installation required");file=installer_;digest=candidates_.front().sha256;}if(sha256_file(file)!=digest||!trusted_installer(file,PULSETRACE_PUBLISHER_SHA256))throw std::runtime_error("Installer changed or publisher verification failed");return file;}
-std::string UpdateService::release_page()const{std::lock_guard lock(mutex_);return candidates_.empty()?"https://github.com/zhangchengxuv/PulseTrace/releases":candidates_.front().page;}
+std::string UpdateService::release_page()const{std::lock_guard lock(mutex_);return candidates_.empty()?state_.value("release_page",std::string("https://github.com/zhangchengxuv/PulseTrace/releases")):candidates_.front().page;}
 }

@@ -1,4 +1,5 @@
 #include "pulsetrace/update.hpp"
+#include "pulsetrace/version.hpp"
 #include <windows.h>
 #include <fstream>
 #include <iostream>
@@ -18,6 +19,14 @@ int main(){try{
  Json gt=Json::array({{{"id",81},{"tag_name","v9.0.0"},{"assets",Json::array({"unrelated-string-not-github-schema"})}}});Json ga=Json::array({attachment(name,"gitee",binary.size()),attachment(name+".sha256","gitee",100)});
  check(github_release(gh,"stable")->version=="9.0.0","GitHub native schema parsed");bool attached=false;check(gitee_release(gt,"stable",[&](auto id){attached=id==81;return ga;})->source=="gitee"&&attached,"Gitee uses separate attachment endpoint");
  auto preview=gh;preview[0]["tag_name"]="v10.0.0-rc1";preview[0]["prerelease"]=false;check(!github_release(preview,"stable"),"stable excludes mislabeled prerelease");
+ const auto feed=[](const std::string &v){return "<feed xmlns=\"http://www.w3.org/2005/Atom\"><entry><link rel=\"alternate\" href=\"https://github.com/zhangchengxuv/PulseTrace/releases/tag/v"+v+"\"/></entry></feed>";};
+ check(github_feed_version(feed("9.0.0"),"preview")=="9.0.0","public feed version parsed");
+ check(github_feed_version(feed("9.0.0-rc1"),"preview")=="9.0.0-rc1","preview feed permits prerelease");
+ rejects([&]{github_feed_version(feed("9.0.0-rc1"),"stable");},"stable feed excludes semantic prerelease");
+ rejects([&]{github_feed_version("<feed>","preview");},"malformed feed fails closed");
+ auto evil=feed("9.0.0");evil.replace(evil.find("github.com"),10,"evil.test");rejects([&]{github_feed_version(evil,"preview");},"feed requires exact repository URL");
+ rejects([&]{github_feed_version("<!DOCTYPE feed [<!ENTITY x SYSTEM 'file:///C:/secret'>]>"+feed("9.0.0"),"preview");},"feed DTD prohibited");
+ check(trusted_update_url("https://github.com/zhangchengxuv/PulseTrace/releases.atom")&&!trusted_update_url("https://github.com/zhangchengxuv/PulseTrace/releases.atom.evil"),"only exact public feed is trusted");
  UpdateAsset a=*github_release(gh,"stable");a.sha256=digest;auto b=a;b.source="gitee";check(choose_updates({a,b},"8.0.0").size()==2,"same artifact dual-source fallback");check(choose_updates({a},"9.0.0").empty()&&choose_updates({a},"10.0.0").empty(),"no reinstall/downgrade");b.sha256=std::string(64,'0');rejects([&]{choose_updates({a,b},"8.0.0");},"source disagreement blocked");
  a.latency_ms=50;b=a;b.source="gitee";b.latency_ms=1;check(choose_updates({a,b},"8.0.0")[0].source=="gitee","same validated version prefers responsive source");b.version="8.5.0";check(choose_updates({a,b},"8.0.0")[0].version=="9.0.0","faster old mirror cannot displace newer release");
  int scenario=0;auto transport=[&](const std::string &url,std::uint64_t,const std::atomic<bool> &cancel,const auto &sink){std::string body;if(scenario==1)throw std::runtime_error("Network timeout");if(scenario==2)throw std::runtime_error("Release server HTTP 403");if(scenario==3){while(!cancel)Sleep(5);throw std::runtime_error("cancelled");}if(scenario==6&&url.find("github.com")!=url.npos)throw std::runtime_error("GitHub unavailable");if(scenario==7&&url.find("gitee.com")!=url.npos)throw std::runtime_error("Gitee unavailable");if(url.find(".sha256")!=url.npos)body=checksum;else if(url.ends_with(".exe")){if(scenario==4)throw std::runtime_error("Download interrupted");body=binary;if(scenario==5)body[1000]='x';if(scenario==8&&url.find("github.com")!=url.npos)throw std::runtime_error("Selected source interrupted");}else if(url.find("attach_files")!=url.npos)body=ga.dump();else body=url.find("gitee.com")!=url.npos?gt.dump():gh.dump();sink(body.data(),body.size());};
@@ -27,5 +36,19 @@ int main(){try{
  for(int mode:{6,7}){scenario=mode;updater.check("stable","auto");wait(updater);check(updater.status()["phase"]=="available"&&updater.status()["partial_sources"]==true,"one available source still discovers update");}
  scenario=0;updater.check("stable","auto");wait(updater);scenario=8;updater.download();wait(updater);check(updater.status()["phase"]=="manual_install","download fallback uses matching version/hash only");
  scenario=3;updater.check("stable","github");rejects([&]{updater.check("stable","gitee");},"concurrent operation refused");updater.cancel();wait(updater);check(updater.status()["phase"]=="cancelled","user cancellation preserved");
+ int quotaMode=0,checksumRequests=0;
+ auto limited=[&](const std::string &url,std::uint64_t,const std::atomic<bool>&,const auto &sink){
+  std::string body;
+  if(url.find("api.github.com")!=url.npos){if(quotaMode!=4)throw std::runtime_error("UPDATE_RATE_LIMITED: quota exhausted");auto current=gh;current[0]["tag_name"]="v"+std::string(app_version);current[0]["assets"]=Json::array({attachment("PulseTrace-Setup-v"+std::string(app_version)+"-x64.exe","github",binary.size()),attachment("PulseTrace-Setup-v"+std::string(app_version)+"-x64.exe.sha256","github",100)});body=current.dump();}
+  else if(url.ends_with("releases.atom")){body=quotaMode==2?"<feed>":feed(quotaMode==1?"9.0.0":std::string(app_version));}
+  else if(url.find(".sha256")!=url.npos){checksumRequests++;throw std::runtime_error("checksum unavailable");}
+  else throw std::runtime_error("Network unavailable");
+  sink(body.data(),body.size());
+ };
+ UpdateService fallback(root/"limited",limited);fallback.check("preview","github");wait(fallback);check(fallback.status()["phase"]=="up_to_date"&&fallback.status()["metadata_only"]==true,"rate limit uses public feed for current preview version");
+ quotaMode=1;fallback.check("preview","auto");wait(fallback);check(fallback.status()["phase"]=="manual_check"&&fallback.status()["can_install"]==false&&fallback.release_page().ends_with("/v9.0.0"),"feed-only newer version requires manual release page");rejects([&]{fallback.download();},"feed cannot authorize installer download");
+ quotaMode=0;fallback.check("stable","github");wait(fallback);check(fallback.status()["phase"]=="manual_check","feed cannot confirm stable prerelease flag");
+ quotaMode=2;fallback.check("preview","github");wait(fallback);check(fallback.status()["phase"]=="error"&&fallback.status()["providers"][0]["error_code"]=="rate_limited","feed failure preserves rate limit diagnosis");
+ quotaMode=4;fallback.check("preview","github");wait(fallback);check(fallback.status()["phase"]=="up_to_date"&&checksumRequests==0,"installed version does not fetch checksum");check(fallback.status()["metadata_only"]==false&&fallback.status()["partial_sources"]==false&&fallback.status()["size"]==0,"new checks clear stale result state");
  std::cout<<checks<<" updater checks passed\n";return 0;
  }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

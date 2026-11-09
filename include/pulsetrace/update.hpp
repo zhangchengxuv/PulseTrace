@@ -16,6 +16,8 @@ struct SemVersion {
 };
 struct UpdateAsset { std::string source, version, name, url, checksum_url, sha256, notes, page; std::uint64_t size{}, latency_ms{}; };
 std::optional<UpdateAsset> github_release(const Json &releases, const std::string &channel);
+// Public Atom fallback only establishes a version; it never authorizes a download.
+std::string github_feed_version(const std::string &xml, const std::string &channel);
 std::optional<UpdateAsset> gitee_release(const Json &releases, const std::string &channel,
                                        const std::function<Json(std::int64_t)> &attachments);
 std::string parse_checksum(const std::string &text, const std::string &filename);

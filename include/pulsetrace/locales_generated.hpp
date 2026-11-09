@@ -440,5 +440,11 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"campus.pending_reading",L"等待网页识别",L"Waiting for recognition"},
 {"campus.radix_short",L"{radix} 进位",L"Base {radix}"},
 {"cloud.encrypted_short",L"已启用加密备份",L"Backup encryption enabled"},
-{"campus.accounting_pending",L"计费待确认",L"Confirm billing"}
+{"campus.accounting_pending",L"计费待确认",L"Confirm billing"},
+{"update.error.rate",L"更新接口请求额度已用完，请稍后重试，或切换自动来源、打开发布页面。",L"The update API quota is exhausted. Retry later, use automatic sources, or open the release page."},
+{"update.error.denied",L"更新来源拒绝访问（HTTP 403），可切换自动来源或打开发布页面。",L"The update source denied access (HTTP 403). Use automatic sources or open the release page."},
+{"update.error.generic",L"更新检查未完成，可切换来源；具体原因见来源状态。",L"The update check did not complete. Try another source; see source status for details."},
+{"update.manual_check",L"已读取版本，请到发布页面确认",L"Version found; confirm on the release page"},
+{"update.feed_hint",L"接口限流，已改用公开版本订阅。安装包信息未验证；如需更新，请打开发布页面。",L"API rate limited; using the public version feed. Installer metadata is unverified. Open the release page to update."},
+{"update.try_auto",L"使用自动来源重试",L"Retry with automatic sources"}
 };}

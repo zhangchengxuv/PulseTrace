@@ -765,5 +765,11 @@
   "ui.details": "Details",
   "campus.radix_short": "Base {radix}",
   "cloud.encrypted_short": "Backup encryption enabled",
-  "campus.accounting_pending": "Confirm billing"
+  "campus.accounting_pending": "Confirm billing",
+  "update.error.rate": "The update API quota is exhausted. Retry later, use automatic sources, or open the release page.",
+  "update.error.denied": "The update source denied access (HTTP 403). Use automatic sources or open the release page.",
+  "update.error.generic": "The update check did not complete. Try another source; see source status for details.",
+  "update.manual_check": "Version found; confirm on the release page",
+  "update.feed_hint": "API rate limited; using the public version feed. Installer metadata is unverified. Open the release page to update.",
+  "update.try_auto": "Retry with automatic sources"
 }
