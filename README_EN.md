@@ -20,13 +20,13 @@ Collection starts paused. Input text, window titles and mouse trajectories are n
 
 ## Screenshots
 
-Historical x64 Release screenshots of main `b3a2cbf`, using isolated empty data and paused collection; no synthetic statistics or personal history. Pages use 1600×900 DIP; the taskbar crop shows the removed feature.
+Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. UI copy changes in the current source await the next Release.
 
 | Dashboard | Network |
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Network](docs/screenshots/network.png) |
-| **ANSI 104 keyboard heatmap** | **Taskbar widget (paused)** |
-| ![Keyboard heatmap](docs/screenshots/keyboard.png) | ![Taskbar widget](docs/screenshots/taskbar.png) |
+| **ANSI 104 keyboard heatmap** | **Campus portal · Demo** |
+| ![Keyboard heatmap](docs/screenshots/keyboard.png) | ![Campus portal Demo](docs/screenshots/campus-demo.png) |
 
 <details>
 <summary>Mouse and App Usage</summary>
@@ -34,6 +34,13 @@ Historical x64 Release screenshots of main `b3a2cbf`, using isolated empty data 
 | Mouse | App Usage |
 | --- | --- |
 | ![Mouse](docs/screenshots/mouse.png) | ![App Usage](docs/screenshots/usage.png) |
+
+</details>
+
+<details>
+<summary>Historical taskbar widget (removed in v0.7.1)</summary>
+
+![Historical taskbar widget, paused](docs/screenshots/taskbar.png)
 
 </details>
 

@@ -12,7 +12,7 @@ async function refreshUsage(){
 }
 function usageChart(title,values,daily=false){
  const series=PulseViz.aggregate(usageBins(values,daily),96,daily?1440:60);
- const canvas=el('canvas',{'aria-label':title,role:'img'}),host=panel(title,el('p',{class:'muted'},usageText('chart_unit')));
+ const canvas=el('canvas',{'aria-label':title,role:'img'}),host=panel(title);host.querySelector('h3').title=usageText('chart_unit');host.querySelector('h3').tabIndex=0;
  if(!series.length){host.append(el('div',{class:'chart-empty'},usageText('empty')));return host;}host.append(canvas);
  const draw=()=>{const width=canvas.clientWidth;if(!width)return;const height=180,dpr=devicePixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const css=getComputedStyle(document.documentElement),max=Math.max(...series.map(r=>r[1]))||1,left=42,right=width-12,span=(right-left)/series.length;
   ctx.font='11px Segoe UI';ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText((max/60000).toFixed(1)+' m',0,16);ctx.strokeStyle=css.getPropertyValue('--chart-grid');ctx.beginPath();ctx.moveTo(left,150);ctx.lineTo(right,150);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--data-time');for(let i=0;i<series.length;i++)ctx.fillRect(left+i*span+2,150-series[i][1]/max*120,Math.max(1,span-4),series[i][1]/max*120);
@@ -21,7 +21,7 @@ function usageChart(title,values,daily=false){
 }
 function appUsage(c){
  const v=usageView,all=groupUsage(v.result.rows),todayRows=v.recent.filter(r=>r.minute>=today()),daily=groupUsage(todayRows),active=daily.reduce((n,r)=>n+r.active_ms,0),foreground=daily.reduce((n,r)=>n+r.foreground_ms,0),top=daily.sort((a,b)=>b.active_ms-a.active_ms||b.foreground_ms-a.foreground_ms)[0];
- c.append(el('div',{class:'cards'},card(usageText('today_active'),usageDuration(active)),card(usageText('today_foreground'),usageDuration(foreground)),card(usageText('most_used'),top?.name|| (top?usageText('unknown'):'—'))),notice(usageText('basis')));
+ c.append(el('div',{class:'cards'},card(usageText('today_active'),usageDuration(active)),card(usageText('today_foreground'),usageDuration(foreground)),card(usageText('most_used'),top?.name|| (top?usageText('unknown'):'—'))),help(tr('ui.details'),el('p',{},usageText('basis'))));
  if(v.result.status?.error)c.append(notice(usageText('unavailable')));if(v.result.status?.gaps)c.append(notice(usageText('gaps')+': '+fmt(v.result.status.gaps)));
  const limit=el('select',{'aria-label':usageText('limit')},el('option',{value:10},'Top 10'),el('option',{value:0},usageText('all')));limit.value=String(v.limit);
  const sort=el('select',{'aria-label':usageText('sort')},el('option',{value:'active_ms'},usageText('active')),el('option',{value:'foreground_ms'},usageText('foreground')));sort.value=v.sort;

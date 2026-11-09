@@ -70,6 +70,14 @@ async function validateCampusOverview(){
    if(scenario==='disabled'&&metrics.length||scenario!=='disabled'&&metrics.length!==3)throw Error('Campus metric layout mismatch');
    if(scenario==='full'){
     if(host.querySelector('[data-campus-part="used"] strong').textContent!=='20.00 GB'||!host.querySelector('.campus-conversion'))throw Error('Portal units or conversion label missing');
+    let details=host.querySelector('.campus-overview-details');
+    if(!details||details.open||details.querySelector('.campus-conversion').checkVisibility())throw Error('Campus details must start collapsed');
+    if(!details.textContent.includes(tr('campus.card.total_basis'))||host.querySelector('.campus-usage').textContent.includes(tr('campus.card.total_basis')))throw Error('Campus calculation basis must remain in details');
+    details.open=true;campusData.latest.observed_ms++;PulseCampus.renderLive();await tick();
+    details=host.querySelector('.campus-overview-details');
+    if(!details.open||!details.querySelector('.campus-conversion').checkVisibility())throw Error('Campus detail expansion lost on refresh');
+    details.open=false;
+    if(host.querySelector('.campus-segment-track').title!==tr('campus.free_track'))throw Error('Campus progress tooltip missing');
     const model=campusOverviewModel();if(model.values.total!==100*GiB||model.values.funded!==20*GiB||host.querySelectorAll('.campus-segment').length!==2)throw Error('Campus components or total mismatch');
     if(!host.textContent.includes(tr('campus.card.funded')))throw Error('Campus estimate label missing');
     const track=host.querySelector('.campus-segment-track');

@@ -182,21 +182,22 @@ function campusOverviewModel(){
   source:campusData?.latest?.portal_url||campusData?.portal_url||cfg.campus_portal_url||''};
 }
 function campusOverviewContent(host,m){
+ const detailsOpen=host.querySelector?.('.campus-overview-details')?.open||false;
  const value=(key,money=false)=>key==='free_used'?(m.freeUsed==null?tr('campus.unavailable'):campusBytes(m.freeUsed)):m.values[key]==null?tr('campus.unavailable'):money?campusMoney(m.values[key]):
   key==='used'?campusPortalBytes('used_bytes',m.values[key],m.usedSource):key==='free'?campusPortalBytes('free_remaining_bytes',m.values[key],m.freeSource):campusBytes(m.values[key]);
  const statusKey={disabled:'campus.card.disabled',auth:'campus.auth_required',error:'campus.sync_failed',stale:'campus.rule_stale',unconfirmed:'campus.needs_confirmation',billing:'campus.accounting_unknown',empty:'campus.card.empty',partial:'campus.card.partial',ready:'campus.card.ready'}[m.status];
  const header=el('header',{class:'campus-overview-header'},el('div',{class:'campus-overview-heading'},metricIcon('network'),el('h3',{},tr('campus.title')),
-  el('span',{class:'campus-sync-state',role:'status'},tr(m.syncing&&m.status!=='disabled'?'campus.syncing':statusKey))),
+  el('span',{class:'campus-sync-state',role:'status',title:tr(statusKey)},tr(m.syncing&&m.status!=='disabled'?'campus.syncing':m.status==='billing'?'campus.accounting_pending':statusKey))),
   el('span',{class:'campus-sync-time'},m.observed&&m.status!=='disabled'?tr('campus.card.synced',{time:new Date(m.observed).toLocaleString(PulseI18n.locale)}):tr('campus.never_synced')));
  host.dataset.status=m.status;host.replaceChildren(header);
  if(m.status==='disabled'){
   host.append(el('div',{class:'campus-disabled'},el('p',{},tr('campus.card.disabled_hint')),
    el('button',{class:'secondary',onclick:()=>navigate('settings')},tr('campus.card.configure'))));return;
  }
- const metric=(key,title,kind,source)=>el('div',{class:'campus-metric campus-metric-'+key},
+ const metric=(key,title,kind,source)=>el('div',{class:'campus-metric campus-metric-'+key,title:tr(source)},
   el('div',{class:'campus-metric-label'},metricIcon(kind),el('span',{},tr(title))),
   el('strong',{'data-campus-value':key,class:m.values[key]==null?'campus-value-missing':''},value(key,key==='balance')),
-  el('small',{},m.values[key]==null?'':tr(source)));
+  key==='total'&&m.values[key]!=null?el('small',{},tr('campus.card.estimate')):null);
  const metrics=el('div',{class:'campus-metrics'},metric('balance','campus.balance','wallet',m.balanceSource==='portal'?'campus.card.portal':'campus.source.manual'),
   metric('free','campus.free_remaining','network','campus.source.'+m.freeSource),metric('total','campus.total_available','protocol','campus.card.estimate'));
  const legendNames={used:'campus.used',free_used:'campus.field.used_free_bytes',free:'campus.free_remaining',funded:'campus.card.funded'};
@@ -208,15 +209,19 @@ function campusOverviewContent(host,m){
   // CSSOM properties work under the desktop CSP; style attributes are blocked.
   segment.style.width=(item.value/m.sum*100)+'%';track.append(segment);
  }
- chart.append(track,el('p',{class:'campus-chart-caption'},tr(m.segments.length?'campus.free_track':'campus.progress_unknown')),
+ track.title=tr('campus.free_track');track.tabIndex=0;
+ chart.append(track,...(m.segments.length?[]:[el('p',{class:'campus-chart-caption'},tr('campus.progress_unknown'))]),
   el('div',{class:'campus-legend'},...Object.entries(legendNames).map(([key,label])=>el('div',{'data-campus-part':key},
-   el('span',{},key==='used'?null:el('i',{class:'campus-swatch campus-tone-'+(key==='free_used'?'used':key),'aria-hidden':'true'}),tr(label)),el('div',{},el('strong',{},value(key)),key==='used'&&m.values[key]!=null?el('small',{class:'campus-conversion'},campusConversion(m.values[key])):null)))),
-  el('div',{class:'campus-available-total'},el('span',{},tr('campus.total_available')),el('strong',{},value('total'))),
-  el('small',{class:'campus-total-basis'},tr('campus.card.total_basis')),el('small',{class:'campus-total-basis'},campusUnitNote()));
+   el('span',{},key==='used'?null:el('i',{class:'campus-swatch campus-tone-'+(key==='free_used'?'used':key),'aria-hidden':'true'}),tr(label)),el('strong',{},value(key))))),
+  el('div',{class:'campus-available-total',title:tr('campus.card.estimate')},el('span',{},tr('campus.total_available')),el('strong',{},value('total'))));
  host.append(el('div',{class:'campus-overview-body'},metrics,chart));
  if(['auth','error','stale'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(Object.values(m.values).some(v=>v!=null)?'campus.card.retained':'campus.card.empty_hint')));
  else if(['empty','partial','billing','unconfirmed'].includes(m.status))host.append(el('p',{class:'campus-overview-notice'},tr(m.status==='empty'?'campus.card.empty_hint':'campus.card.partial_hint')));
- host.append(el('footer',{class:'campus-overview-source'},tr('campus.data_source')+' · '+(m.source||'—')));
+ const details=el('details',{class:'campus-overview-details'},el('summary',{},tr('ui.details')+' · '+tr('campus.radix_short',{radix:m.radix})),
+  el('p',{class:'campus-conversion'},campusConversion(m.values.used)),el('p',{},campusUnitNote()),
+  el('p',{},tr('campus.free_track')),el('p',{},tr('campus.card.total_basis')),el('p',{},tr(statusKey)),
+  el('footer',{class:'campus-overview-source'},tr('campus.data_source')+' · '+(m.source||'—')));
+ details.open=detailsOpen;host.append(details);
 }
 function campusUpdateOverview(host,m){
  const key=JSON.stringify([m,PulseI18n.locale]);if(host._campusKey===key)return;
@@ -246,7 +251,7 @@ function campusComputedPanel(){
  // as persisted results while Dashboard/Network still use the confirmed rule.
  const c=campusResolve(true),host=el('div',{class:'campus-live'}),current=!['disabled','auth','error','stale','unconfirmed','billing'].includes(campusOverviewModel().status);
  for(const [key,value,money]of [['campus.free_remaining',c.freeRemaining],['campus.funded_bytes',c.funded],['campus.total_available',c.total],['campus.estimated_fee',c.estimated,true]])
-  host.append(el('div',{},el('small',{},tr(key)),el('strong',{},value==null?tr('campus.unavailable'):money?campusMoney(value):campusBytes(value)),el('small',{},value==null?tr('campus.rules_required'):tr('campus.calculated'))));
+  host.append(el('div',{title:tr(value==null?'campus.rules_required':'campus.calculated')},el('small',{},tr(key)),el('strong',{},value==null?tr('campus.unavailable'):money?campusMoney(value):campusBytes(value)),key==='campus.free_remaining'||value==null?null:el('small',{},tr('campus.card.estimate'))));
  const section=el('div',{},host);
  if(current&&c.progress!=null){const bar=el('i');bar.style.width=(c.progress*100)+'%';section.append(el('div',{class:'campus-progress','aria-label':tr('campus.progress')},bar,el('span',{},(c.progress*100).toFixed(2)+'%')));}
  else section.append(el('p',{class:'muted'},tr('campus.progress_unknown')));
@@ -359,7 +364,7 @@ function renderCampusSettings(host){
   const confirmedAt=new Date(),confirmation={accounting_confirmed:true,cycle,confirmed_month:confirmedAt.getFullYear()+'-'+String(confirmedAt.getMonth()+1).padStart(2,'0')};campusFieldState.used_free_bytes={mode:'formula',kind:'bytes',formula:'min(used_bytes, free_quota_bytes)',...confirmation};campusFieldState.paid_used_bytes={mode:'formula',kind:'bytes',formula:'max(0, used_bytes - free_quota_bytes)',...confirmation};
  }else{for(const field of ['used_free_bytes','paid_used_bytes'])if(campusFieldState[field]?.accounting_confirmed)delete campusFieldState[field];}return saveFields(true).then(()=>{manualControls.forEach(update=>update());}).catch(()=>{});};
  const basic=el('section',{class:'campus-section'},el('h4',{},tr('campus.web_data')),el('label',{class:'checkbox'},enabled,tr('campus.enable')),el('div',{class:'settings-grid'},label('campus.url',url),label('campus.refresh',refresh)),el('div',{class:'actions'},el('button',{onclick:async()=>{try{await saveBasic();await rpc('open_campus_portal');feedback.textContent=tr('campus.login_hint');}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.open'))),webHost,preview,el('div',{class:'actions'},el('button',{onclick:()=>saveFields().catch(()=>{})},tr('campus.confirm_results'))));
- const billing=el('section',{class:'campus-section'},el('h4',{},tr('campus.manual_config')),el('div',{class:'settings-grid'},manualParam('free_quota_bytes'),label('campus.price',el('div',{class:'campus-param'},price,priceUnit)),label('campus.period',period),label('campus.period_start',start),label('campus.radix',radix)),el('label',{class:'checkbox'},freeFirst,tr('campus.free_first')),el('label',{class:'checkbox'},linear,tr('campus.linear_tariff')),el('label',{class:'checkbox'},balance,tr('campus.balance_for_data')),el('details',{},el('summary',{},tr('campus.manual_free_used')),el('p',{class:'muted'},tr('campus.manual_free_hint')),manualParam('used_free_bytes')),el('p',{class:'muted'},campusUnitNote()),el('p',{class:'muted'},cfg.campus_price_basis==='legacy_bytes'?tr('campus.legacy_price',{value:cfg.campus_unit_price,unit:cfg.campus_price_unit}):tr('campus.billing_hint')));
+ const billing=el('section',{class:'campus-section'},el('h4',{},tr('campus.manual_config')),el('div',{class:'settings-grid'},manualParam('free_quota_bytes'),label('campus.price',el('div',{class:'campus-param'},price,priceUnit)),label('campus.period',period),label('campus.period_start',start),label('campus.radix',radix)),el('label',{class:'checkbox'},freeFirst,tr('campus.free_first')),el('label',{class:'checkbox'},linear,tr('campus.linear_tariff')),el('label',{class:'checkbox'},balance,tr('campus.balance_for_data')),el('details',{},el('summary',{},tr('campus.manual_free_used')),el('p',{class:'muted'},tr('campus.manual_free_hint')),manualParam('used_free_bytes')),help(tr('ui.details'),el('p',{},campusUnitNote()),el('p',{},tr('campus.billing_hint'))),...(cfg.campus_price_basis==='legacy_bytes'?[el('p',{class:'muted'},tr('campus.legacy_price',{value:cfg.campus_unit_price,unit:cfg.campus_price_unit}))]:[]));
  if(billingMapping.mode==='manual'&&!billingMapping.period)billing.append(legacyLabel);
  const computed=el('section',{class:'campus-section'},el('h4',{},tr('campus.auto_calculate')),el('div',{class:'campus-computed-target'},campusComputedPanel()));
  const extension=el('select',{'aria-label':tr('campus.extend_field')},el('option',{value:''},tr('campus.extend_field')),...campusFields.filter(([field])=>!campusPrimaryFields.includes(field)).map(([field])=>el('option',{value:field},tr('campus.field.'+field))));

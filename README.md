@@ -20,13 +20,13 @@
 
 ## 软件截图
 
-main `b3a2cbf` 的历史 x64 Release 构建截图；独立空数据目录、暂停状态，无模拟统计或个人历史。页面为 1600×900 DIP，任务栏为已移除功能的历史局部。
+真实 **v0.7.4 x64 Release** 界面，使用独立空数据目录并暂停采集。页面统一为 1600×900 DIP（125% DPI 下 2000×1125 像素）。校园网 **Demo** 使用内存合成读数，不含个人账号或统计。本轮源码文案精简尚待下一版 Release。
 
 | 总览 | 网络 |
 | --- | --- |
 | ![总览](docs/screenshots/dashboard.png) | ![网络](docs/screenshots/network.png) |
-| **ANSI 104 键盘热力图** | **任务栏组件（暂停）** |
-| ![键盘热力图](docs/screenshots/keyboard.png) | ![任务栏组件](docs/screenshots/taskbar.png) |
+| **ANSI 104 键盘热力图** | **校园网门户 · Demo** |
+| ![键盘热力图](docs/screenshots/keyboard.png) | ![校园网 Demo](docs/screenshots/campus-demo.png) |
 
 <details>
 <summary>鼠标与应用使用统计</summary>
@@ -34,6 +34,13 @@ main `b3a2cbf` 的历史 x64 Release 构建截图；独立空数据目录、暂�
 | 鼠标 | 应用使用 |
 | --- | --- |
 | ![鼠标](docs/screenshots/mouse.png) | ![应用使用](docs/screenshots/usage.png) |
+
+</details>
+
+<details>
+<summary>历史任务栏组件（v0.7.1 已移除）</summary>
+
+![历史任务栏组件，暂停状态](docs/screenshots/taskbar.png)
 
 </details>
 

@@ -27,7 +27,7 @@ function renderCloudSettings(group){
  const saveButton=el('button',{type:'submit'},tr('cloud.save'));form.onsubmit=async e=>{e.preventDefault();try{await save();}catch(failure){feedback.textContent=cloudError(failure.code||'');}};
  form.append(el('div',{class:'actions settings-form-actions'},saveButton),feedback);
  const restoreHint=el('p',{class:'muted'}),restorePanel=el('div',{class:'cloud-restore'},el('p',{class:'muted'},tr('cloud.restore_hint')),files,el('div',{class:'actions'},prepare),restoreHint,confirmText,el('div',{class:'actions'},restore,cancelRestore));
- root.append(panel(tr('cloud.title'),el('p',{class:'muted'},tr('cloud.intro')),form,el('p',{class:'cloud-encryption'},tr('cloud.encrypted')),el('p',{class:'muted'},tr('cloud.password_hint')),el('div',{class:'actions'},test,backup,list,cancel),result),disclosure('settings.cloud.restore',tr('cloud.restore'),null,restorePanel),disclosure('settings.cloud.history',tr('cloud.records'),null,records));
+ root.append(panel(tr('cloud.title'),form,el('p',{class:'cloud-encryption',title:tr('cloud.encrypted'),tabindex:0},tr('cloud.encrypted_short')),help(tr('ui.details'),el('p',{},tr('cloud.intro'))),el('p',{class:'muted'},tr('cloud.password_hint')),el('div',{class:'actions'},test,backup,list,cancel),result),disclosure('settings.cloud.restore',tr('cloud.restore'),null,restorePanel),disclosure('settings.cloud.history',tr('cloud.records'),null,records));
  group.append(root);group.onSettingsShown=()=>poll();
  async function poll(){
   clearTimeout(cloudPoll);if(!root.isConnected||page!=='settings'||document.hidden||!nativeVisible||root.closest('[hidden]'))return;

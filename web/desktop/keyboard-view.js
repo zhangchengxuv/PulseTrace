@@ -27,8 +27,8 @@ function renderKeyboard(c){
  // Gradient is uniform in normalized t; count tick marks invert sqrt(t).
  ramp.style.background='linear-gradient(to right,'+samples.map(PulseViz.css).join(',')+')';
  const zero=el('i',{class:'zero-swatch'});zero.style.backgroundColor=PulseViz.css(PulseViz.color(heatmapName,0,maximum));
- legend.title=formatTime(range.from)+tr("ui.8727f227e2c6")+formatTime(range.to);
- legend.append(el('div',{class:'heat-scale'},el('span',{},tr("ui.cbcc08419d9e")),el('span',{},tr("ui.306b3910c5a7")+(hasCoverage?fmt(maximum*(arctic?.25:.5))+tr("ui.f81526efce19"):'—')),el('span',{},tr("ui.352fb34f4ae1")+(hasCoverage?fmt(maximum)+tr("ui.f81526efce19"):'—'))),ramp,el('p',{class:'muted'},(arctic?tr("ui.821848ed2dda"):tr("ui.4202f660a3c8"))+tr("ui.236b68e2a080")),el('div',{class:'heat-states'},el('span',{},el('i',{class:'missing-swatch'}),tr("ui.58a9ae1b8c01")),el('span',{},zero,tr("ui.0ce726400a2f"))));
+ legend.tabIndex=0;legend.title=(arctic?tr("ui.821848ed2dda"):tr("ui.4202f660a3c8"))+tr("ui.236b68e2a080")+" · "+formatTime(range.from)+tr("ui.8727f227e2c6")+formatTime(range.to);
+ legend.append(el('div',{class:'heat-scale'},el('span',{},tr("ui.cbcc08419d9e")),el('span',{},tr("ui.306b3910c5a7")+(hasCoverage?fmt(maximum*(arctic?.25:.5))+tr("ui.f81526efce19"):'—')),el('span',{},tr("ui.352fb34f4ae1")+(hasCoverage?fmt(maximum)+tr("ui.f81526efce19"):'—'))),ramp,el('div',{class:'heat-states'},el('span',{},el('i',{class:'missing-swatch'}),tr("ui.58a9ae1b8c01")),el('span',{},zero,tr("ui.0ce726400a2f"))));
 
  const keyboard=panel(tr("ui.48b68cef28ad"),el('div',{class:'heat-toolbar'},chooser),viewport,legend,detail);
  c.append(keyboard);if(selectedPhysicalKey!==null&&layout.some(k=>k.id===selectedPhysicalKey))drawDetail(selectedPhysicalKey);else detail.append(el('span',{class:'muted'},tr("ui.53cdabcd167c")));

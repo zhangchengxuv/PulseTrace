@@ -22,7 +22,7 @@ function rememberRates(){const n=state.network||{},stamp=Number(state.heartbeat_
 function kpi(kind,title,value,side=null,foot=null){return el('article',{class:'kpi kpi-'+kind},el('div',{class:'kpi-head'},metricIcon(kind),el('span',{},title)),el('div',{class:'kpi-body'},el('div',{class:'kpi-number'},value),side),foot?el('div',{class:'kpi-foot'},foot):null);}
 function inputActivityChart(){
  const points=PulseDashboard.inputs(rows,range.bucket),host=panel(tr("ui.c92d238b742f")),legend=el('div',{class:'chart-legend'},el('span',{},el('i',{class:'key-mark'}),tr("ui.864200bbb241")),el('span',{},el('i',{class:'mouse-mark'}),tr("ui.f93ba1b7e928")));
- host.classList.add('input-chart');host.prepend(el('div',{class:'chart-heading'},host.querySelector('h3'),legend));host.append(el('p',{class:'muted chart-unit'},tr("ui.2982ffca721a")));
+ host.classList.add('input-chart');host.prepend(el('div',{class:'chart-heading'},host.querySelector('h3'),legend));host.querySelector('.chart-heading').title=tr("ui.2982ffca721a");host.querySelector('.chart-heading').tabIndex=0;
  if(!points.length){host.append(el('div',{class:'chart-empty'},state.monitoring?tr("ui.497c85690c4c"):tr("ui.f2b38c7b9fae")));return host;}
  const canvas=el('canvas',{'aria-label':tr("ui.e6f3f6627688")});host.append(canvas);
  watchCanvas(canvas,180,(ctx,w,h,style)=>{const first=points[0].minute,last=points.at(-1).minute,step=points[0].step,left=38,right=w-14,top=14,bottom=h-34,span=Math.max(step,last-first+step),max=Math.max(1,...points.flatMap(p=>[p.keyboard||0,p.mouse||0]));
@@ -48,7 +48,7 @@ function renderDashboard(c){
  const comparison=change==null?tr("ui.702023aefc26"):el('span',{class:change>=0?'positive':'negative',title:tr("ui.2c1ada410244")},tr("ui.07f310dd48d2")+(change>=0?'+':'')+(change*100).toFixed(1)+'%');
  c.append(el('div',{class:'kpi-grid'},
   kpi('keyboard',tr("ui.dd544c02ab73"),fmt(d.total(rows,'keyboard')),keyboardSpark,comparison),kpi('mouse',tr("ui.361881b8b343"),fmt(clicks),mouseSide,tr("ui.702023aefc26")),kpi('wheel',tr("ui.5faa29113975"),fmt(wheel),wheelSide,tr("ui.8461f0798e3d")),
-  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),tr("ui.5c4d2a0e0434")),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,tr("ui.cba5020e0dad")),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality+tr("ui.5103fa12b45d"))),PulseCampus.dashboardCard()));
+  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),tr("ui.5c4d2a0e0434")),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,tr("ui.cba5020e0dad")),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality)),PulseCampus.dashboardCard()));
  if(state.network_error)c.append(el('div',{class:'capture-error',role:'alert'},tr("ui.7b2a6e670e15")+state.network_error));
  c.append(el('div',{class:'dashboard-charts'},inputActivityChart(),protocolTrend(tr("ui.50aa5251963c"))));
  const selected=(n.interfaces||[]).find(x=>x.id===n.selected),summary=el('div',{class:'daily-summary'},...[

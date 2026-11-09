@@ -5,6 +5,7 @@ class Node{
  replaceChildren(...items){this.children=items;this.replacements++;}
  get textContent(){return this.children.map(v=>typeof v==='object'?v.textContent:v).join('');}
  all(){return [this,...this.children.filter(v=>v instanceof Node).flatMap(v=>v.all())];}
+ querySelector(selector){return this.all().find(node=>node.class?.split(' ').includes(selector.slice(1)))||null;}
 }
 let hosts=[];const G=1024**3;
 class TestDate extends Date{constructor(...a){super(...(a.length?a:['2026-11-08T10:00:00']));}static now(){return new TestDate().getTime();}}
@@ -24,7 +25,13 @@ assert.equal(m.values.funded,54.9*G);assert.ok(Math.abs(m.values.total/G-(120-30
 assert.deepEqual(Array.from(m.segments,s=>s.key),['used','free']);assert.equal(m.sum,120*G,'denominator is free quota, not remaining capacity');
 const dashboard=run('campusDashboardCard()'),network=run('campusNetworkPanel()');assert.equal(dashboard.textContent,network.textContent);assert.ok(dashboard.textContent.includes('29.69 GB'));assert.ok(dashboard.textContent.includes('30399.45 MB'));
 hosts=[dashboard];const replacements=dashboard.replacements;run('PulseCampus.renderLive()');assert.equal(dashboard.replacements,replacements);
+const details=dashboard.querySelector('.campus-overview-details');assert.equal(details.open,false,'details start collapsed');
+assert.ok(details.textContent.includes('30399.45 MB'),'raw portal reading remains available in details');
+assert.ok(details.textContent.includes('campus.card.total_basis'),'formula remains available in details');
+assert.ok(!dashboard.querySelector('.campus-usage').textContent.includes('campus.card.total_basis'),'formula is absent from the primary chart');
+details.open=true;
 run('state.config.campus_traffic_radix=1000');m=model();assert.equal(m.values.used/1e9,30.39945);assert.ok(Math.abs(m.values.free/1e9-89.60055)<1e-10);run('PulseCampus.renderLive()');assert.ok(dashboard.textContent.includes('30.40 GB'));assert.equal(run('campusData.latest.measurement.raw_readings.used_bytes.value'),30399.45);
+assert.equal(dashboard.querySelector('.campus-overview-details').open,true,'changed values preserve detail expansion');
 run('state.config.campus_traffic_radix=1024');
 run('state.config.campus_linear_tariff=false');assert.equal(model().values.funded,null);assert.equal(model().values.total,null);run('state.config.campus_linear_tariff=true');
 run('state.config.campus_unit_price=0');assert.equal(model().values.funded,null);run('state.config.campus_unit_price=.5');
