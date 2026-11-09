@@ -53,14 +53,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.7.3](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.3) · [Gitee v0.7.3](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.3)
+[GitHub v0.7.4](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.4) · [Gitee v0.7.4](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.4)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Version **v0.7.3** simplifies campus settings into webpage data, manual configuration and read-only calculations. Default recognition covers balance and used data, including IPv4 labels; billing supports monthly/yearly periods with a start date. Base-1024/1000 conversion, legacy mappings, history and price bases are preserved. Existing data and configuration remain compatible. See [release notes](docs/releases/v0.7.3.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Version **v0.7.4** fixes rejected campus billing settings and inconsistent calculations between draft settings and saved overview rules. Billing confirmation and webpage structure failures now have distinct status messages. Existing data and configuration are preserved; confirm any previously unsaved billing settings again after upgrading. See [release notes](docs/releases/v0.7.4.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
