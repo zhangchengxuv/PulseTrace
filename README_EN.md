@@ -20,7 +20,7 @@ Collection starts paused. Input text, window titles and mouse trajectories are n
 
 ## Screenshots
 
-Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. v0.7.5 includes simplified copy and an updated mouse diagram; these captures remain from v0.7.4.
+Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. v0.7.6 includes simplified copy and an updated mouse diagram; these captures remain from v0.7.4.
 
 | Dashboard | Network |
 | --- | --- |
@@ -60,14 +60,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.7.5](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.5) · [Gitee v0.7.5](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.5)
+[GitHub v0.7.6](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.6) · [Gitee v0.7.6](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.6)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Version **v0.7.5** refines the mouse diagram and simplifies UI copy, preserving statistics, data and configuration. This release only runs the Release build and artifact checks; see [release notes](docs/releases/v0.7.5.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Version **v0.7.6** fixes update API rate limits and error messages, preserving statistics, data and configuration. See [release notes](docs/releases/v0.7.6.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
