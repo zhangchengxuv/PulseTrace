@@ -20,7 +20,7 @@
 
 ## 软件截图
 
-真实 **v0.7.4 x64 Release** 界面，使用独立空数据目录并暂停采集。页面统一为 1600×900 DIP（125% DPI 下 2000×1125 像素）。校园网 **Demo** 使用内存合成读数，不含个人账号或统计。本轮源码文案精简尚待下一版 Release。
+真实 **v0.7.4 x64 Release** 界面，使用独立空数据目录并暂停采集。页面统一为 1600×900 DIP（125% DPI 下 2000×1125 像素）。校园网 **Demo** 使用内存合成读数，不含个人账号或统计。v0.7.5 已包含文案精简与鼠标图形更新；此处保留 v0.7.4 截图。
 
 | 总览 | 网络 |
 | --- | --- |
@@ -60,14 +60,14 @@
 
 ## 下载安装
 
-[GitHub v0.7.4](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.4) · [Gitee v0.7.4](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.4)
+[GitHub v0.7.5](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.5) · [Gitee v0.7.5](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.5)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-版本 **v0.7.4** 修复校园网计费参数无法保存、设置草稿与概览计算不一致的问题，区分账期待确认与网页结构失效。升级保留数据和配置；请重新确认此前未保存的计费设置。验证范围见[发布说明](docs/releases/v0.7.4.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+版本 **v0.7.5** 优化鼠标示意图并精简全局文案，保留统计、数据和配置。本版仅执行 Release 构建及产物检查，验证范围见[发布说明](docs/releases/v0.7.5.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
