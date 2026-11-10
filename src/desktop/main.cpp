@@ -919,7 +919,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
     }
     LocalFree(argv);
     if (options.page != "dashboard" && options.page != "keyboard" && options.page != "mouse" &&
-        options.page != "network" && options.page != "history" && options.page != "settings" && options.page != "usage") {
+        options.page != "network" && options.page != "history" && options.page != "settings" && options.page != "usage" && options.page != "music") {
         CoUninitialize();
         return 2;
     }

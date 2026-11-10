@@ -16,6 +16,8 @@ std::string path_utf8(const std::filesystem::path &path) {
     const auto text=path.u8string();return {text.begin(),text.end()};
 }
 void validate_config(const Json &c) {
+    for(const char *key:{"music_enabled","music_qq","music_netease"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean music setting");
+    if(!c.at("music_threshold_seconds").is_number_integer()||c.at("music_threshold_seconds")<1||c.at("music_threshold_seconds")>3600)throw std::invalid_argument("Invalid music threshold");
     for(const char *key:{"usage_enabled","usage_icons"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean usage setting");
     for(const auto &[key,lo,hi]:{std::tuple{"usage_idle_seconds",15,3600},std::tuple{"usage_retention_days",1,365}})if(!c.at(key).is_number_integer()||c.at(key)<lo||c.at(key)>hi)throw std::invalid_argument("Invalid usage setting");
     if(!c.at("usage_exclusions").is_array()||c.at("usage_exclusions").size()>128)throw std::invalid_argument("Invalid usage exclusions");
@@ -75,6 +77,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
                {"config_version",1},{"update_channel","stable"},{"update_source","auto"},{"check_updates_on_start",false},
                {"taskbar_font","Segoe UI Variable Text"},{"taskbar_font_size",10},{"taskbar_unit","auto"},{"taskbar_precision",1},{"taskbar_upload_color","#3498db"},{"taskbar_download_color","#8bc4ea"},{"taskbar_offset_x",0},{"taskbar_offset_y",0},{"taskbar_mode","embedded"},{"taskbar_monitor",0},{"taskbar_background","transparent"},{"language","system"},
                {"ranking_windows_enabled",false},{"ranking_mihomo_enabled",false},{"ranking_domains_enabled",false},{"ranking_retention_days",30},{"mihomo_controller",""},{"usage_enabled",true},{"usage_idle_seconds",120},{"usage_exclusions",Json::array()},{"usage_icons",true},{"usage_retention_days",30}};
+    config_["music_enabled"]=false;config_["music_qq"]=true;config_["music_netease"]=true;config_["music_threshold_seconds"]=30;
     config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;config_["campus_price_unit"]="GiB";
     config_["campus_traffic_radix"]=1024;config_["campus_price_basis"]="school";config_["campus_linear_tariff"]=false;
     config_["campus_price_unit"]="GB";
@@ -104,6 +107,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
     session_ = std::to_string(utc_now_ms()) + "-" + std::to_string(GetCurrentProcessId());
     rankings_=std::make_unique<TrafficRankings>(data_);
     usage_=std::make_unique<AppUsageMonitor>();
+    music_=std::make_unique<MusicMonitor>();
     state_ = {{"input_ready", false},      {"input_error", ""},
               {"storage_error", ""},       {"network", Json::object()},
               {"session", session_},       {"last_flush_ms", 0},
@@ -170,12 +174,13 @@ bool CoreService::flush_now(std::chrono::milliseconds timeout){const auto target
 bool CoreService::prepare_stop(){
  quiescing_.store(true);std::int64_t unset=0;capture_window_.stop.compare_exchange_strong(unset,capture_clock());
  if(auto h=input_window_.load()){DWORD_PTR ignored{};SendMessageTimeoutW(h,WM_APP+18,0,0,SMTO_ABORTIFHUNG,1500,&ignored);}
- Json config;{std::lock_guard lock(mutex_);config=config_;}usage_->configure(config,false);
+ Json config;{std::lock_guard lock(mutex_);config=config_;}usage_->configure(config,false);music_->configure(config,false);
  if(!rankings_->quiesce(config))return false;
  return flush_now();
 }
 void CoreService::cancel_stop()noexcept{const bool was_quiescing=quiescing_.exchange(false);if(was_quiescing&&enabled_.load()&&!suspended_.load()){capture_window_.start.store(capture_clock());capture_window_.stop.store(0);}wake_.notify_all();}
 void CoreService::on_power_suspended(bool suspended)noexcept{
+ if(music_)music_->invalidate();
  if(suspended_.exchange(suspended)!=suspended)network_rebaseline_.store(true);keyboard_.reset_state();last_coverage_ms_=0;
  if(suspended){std::int64_t unset=0;capture_window_.stop.compare_exchange_strong(unset,capture_clock());}
  else if(enabled_.load()&&!quiescing_.load()){capture_window_.start.store(capture_clock());capture_window_.stop.store(0);}
@@ -485,6 +490,21 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         return {{"saved",true},{"snapshot",snapshot}};
     }
     if(type=="get_history_bounds")return database().history_bounds();
+    if(type=="get_music"||type=="export_music"){
+        const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
+        const auto live=music_->rows();auto floor=utc_now_ms()/60000-119;
+        for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
+        auto values=database().music(from,to,session_,floor);
+        for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)values.push_back(r);
+        if(type=="export_music"){
+            const auto name="pulsetrace-music-"+std::to_string(utc_now_ms())+".csv";std::ofstream out(data_/name,std::ios::binary);
+            const auto field=[](std::string text){if(!text.empty()&&std::string("=+-@\t\r\n").find(text.front())!=std::string::npos)text="'"+text;std::string result="\"";for(char c:text){if(c=='"')result+='"';result+=c;}return result+'"';};
+            out<<"\xEF\xBB\xBFutc_minute,player,title,artist,album,duration_ms,detected_played_ms,qualified_plays\r\n";
+            for(const auto &r:values)out<<r["minute"]<<','<<field(r["player"])<<','<<field(r["title"])<<','<<field(r["artist"])<<','<<field(r["album"])<<','<<r["duration_ms"]<<','<<r["played_ms"]<<','<<r["plays"]<<"\r\n";
+            out.close();if(!out)throw std::runtime_error("Music export failed");return {{"file",name}};
+        }
+        return {{"rows",values},{"status",music_->status()},{"precision","minute"}};
+    }
     if(type=="get_app_usage"||type=="export_app_usage"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
         const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
@@ -567,7 +587,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             capture_window_.stop.store(capture_clock());
         enabled_.store(active);
         rankings_->configure(config_,active&&!session_locked_.load());
-        usage_->configure(config_,active&&!session_locked_.load());
+        usage_->configure(config_,active&&!session_locked_.load());music_->configure(config_,active&&!session_locked_.load()&&!suspended_.load()&&!quiescing_.load());
         return status();
     }
     if (type == "get_statistics") {
@@ -670,7 +690,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             throw;
         }
         rankings_->configure(config_,enabled_.load()&&!session_locked_.load());
-        usage_->configure(config_,enabled_.load()&&!session_locked_.load());
+        usage_->configure(config_,enabled_.load()&&!session_locked_.load());music_->configure(config_,capture_enabled());
         return config_;
     }
     if(type=="backup_database"||type=="cloud_snapshot"){
@@ -739,7 +759,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         for(const auto &session:sessions)try{pending.acknowledge(session);}catch(...){}
         session_=std::to_string(utc_now_ms())+"-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(reset_generation_.load());persistence_revision_=0;
         {std::lock_guard lock(mutex_);state_["session"]=session_;unsaved_batch_=Json::object();}
-        rankings_->clear(false);usage_->clear();unsaved_usage_=Json::array();
+        rankings_->clear(false);usage_->clear();music_->clear();unsaved_usage_=Json::array();
         {std::lock_guard lock(mutex_);unsaved_rows_=Json::array();unsaved_events_=Json::array();unsaved_rankings_=Json::array();state_["pending_retry_rows"]=0;}
         clear_requested_ = true;
         return {{"cleared", true}};
@@ -751,7 +771,7 @@ void CoreService::worker() {
     NetworkMonitor network(&capture_window_);
     std::map<std::string,std::string> saved;
     std::map<std::string,Json> retry_rows;
-    Json saved_usage=Json::array(),saved_rankings=Json::array();
+    Json saved_usage=Json::array(),saved_rankings=Json::array(),saved_music=Json::array();
     auto last_flush=std::chrono::steady_clock::now()-std::chrono::hours(1),next_attempt=last_flush,last_network=last_flush;
     auto last_prune=std::chrono::steady_clock::now();
     unsigned failures=0;bool archive_recover=true,retry_blocked=false;
@@ -781,8 +801,8 @@ void CoreService::worker() {
             std::deque<std::pair<Json,std::function<void(Json)>>> requests;Json cfg,rows;bool done;
             {std::unique_lock lock(mutex_);wake_.wait_for(lock,std::chrono::seconds(1),[&]{return !requests_.empty()||flush_requested_.load()>flush_completed_||(stopping_.load()&&input_done_);});requests.swap(requests_);cfg=config_;rows=Json::array();for(const auto &[key,r]:input_pending_)rows.push_back(r);input_pending_.clear();done=stopping_.load()&&input_done_;}
             const bool collecting=enabled_.load()&&!session_locked_.load()&&!suspended_.load()&&!quiescing_.load();
-            rankings_->configure(cfg,collecting);usage_->configure(cfg,collecting);
-            if(done){rankings_->stop();usage_->stop();}
+            rankings_->configure(cfg,collecting);usage_->configure(cfg,collecting);music_->configure(cfg,collecting);
+            if(done){rankings_->stop();usage_->stop();music_->stop();}
             auto now=std::chrono::steady_clock::now();
             if(done||now-last_network>=std::chrono::seconds(1)||flush_requested_.load()>flush_completed_){
                 update_network(cfg);
@@ -793,9 +813,9 @@ void CoreService::worker() {
             const bool forced=requested>flush_completed_;
             if(done||forced||(!retry_blocked&&now>=next_attempt&&(!db||now-last_flush>=std::chrono::seconds(cfg.value("flush_seconds",30))))){
                 Json changed=Json::array();for(const auto &[key,r]:retry_rows)changed.push_back(r);
-                auto usage=usage_->rows(),rankings=rankings_->rows();
-                Json batch={{"format",1},{"session",session_},{"revision",++persistence_revision_},{"created_ms",utc_now_ms()},{"rows",changed},{"events",network_events_},{"usage",usage==saved_usage?Json::array():usage},{"rankings",rankings==saved_rankings?Json::array():rankings}};
-                const bool has_data=!changed.empty()||!network_events_.empty()||!batch["usage"].empty()||!batch["rankings"].empty();
+                auto usage=usage_->rows(),rankings=rankings_->rows(),music=music_->rows();
+                Json batch={{"format",1},{"session",session_},{"revision",++persistence_revision_},{"created_ms",utc_now_ms()},{"rows",changed},{"events",network_events_},{"music",music==saved_music?Json::array():music},{"usage",usage==saved_usage?Json::array():usage},{"rankings",rankings==saved_rankings?Json::array():rankings}};
+                const bool has_data=!changed.empty()||!network_events_.empty()||!batch["usage"].empty()||!batch["rankings"].empty()||!batch["music"].empty();
                 std::string journal_error;
                 if(has_data)try{journal.stage(batch);}catch(const std::exception &e){journal_error=e.what();}
                 try{
@@ -815,6 +835,8 @@ void CoreService::worker() {
                     if(has_data)db->save_batch(batch);
                     for(const auto &[key,r]:retry_rows)saved[key]=r.dump();
                     retry_rows.clear();network_events_=Json::array();
+                    music_->persisted_before(utc_now_ms()/60000-119);
+                    saved_music=Json::array();for(const auto &r:music)if(r["minute"].get<std::int64_t>()>=utc_now_ms()/60000-119)saved_music.push_back(r);
                     usage_->persisted_before(utc_now_ms()/60000-119);rankings_->persisted_before(utc_now_ms()/60000-119);
                     saved_usage=Json::array();saved_rankings=Json::array();
                     for(const auto &r:usage)if(r["minute"].get<std::int64_t>()>=utc_now_ms()/60000-119)saved_usage.push_back(r);
@@ -864,7 +886,7 @@ void CoreService::worker() {
                 }
                 try{reply(std::move(response));}catch(...){}
             }
-            if(clear_requested_){network=NetworkMonitor(&capture_window_);network_rows_=Json::array();network_events_=Json::array();saved.clear();retry_rows.clear();saved_usage=Json::array();saved_rankings=Json::array();clear_requested_=false;}
+            if(clear_requested_){network=NetworkMonitor(&capture_window_);network_rows_=Json::array();network_events_=Json::array();saved.clear();retry_rows.clear();saved_usage=Json::array();saved_rankings=Json::array();saved_music=Json::array();clear_requested_=false;}
             if(done)break;
         }
     }catch(const std::exception &e){record_error(e);}

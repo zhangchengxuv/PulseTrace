@@ -27,10 +27,15 @@ int main(){try{
  write(snapshot/"network-months/calendar.json",CloudBytes{'{','}'});write(snapshot/"credentials.bin",CloudBytes{'S','E','C','R','E','T'});
  const Json campus_config={{"campus_traffic_radix",1000},{"campus_unit_price",0.6},{"campus_price_unit","GiB"},{"campus_price_basis","legacy_bytes"},{"campus_linear_tariff",false}};
  auto snapshot_config=json_read(snapshot/"config.json");snapshot_config.update(campus_config);json_write(snapshot/"config.json",snapshot_config);
+ const Json music_config={{"music_enabled",false},{"music_qq",true},{"music_netease",false},{"music_threshold_seconds",45}};
+ snapshot_config.update(music_config);json_write(snapshot/"config.json",snapshot_config);
+ {DatabaseManager db(snapshot/"monitor.db");db.save_music("synthetic",Json::array({{{"minute",100},{"player","qq"},{"key","synthetic-track"},{"title","Synthetic"},{"artist","Synthetic artist"},{"album","Synthetic album"},{"duration_ms",120000},{"played_ms",30000},{"plays",1}}}));}
  auto plain=cloud_pack(snapshot);const std::string password="synthetic recovery password";auto cipher=cloud_encrypt(plain,password);check(cipher!=plain,"archive not encrypted");check(cloud_decrypt(cipher,password)==plain,"encryption round trip");
  rejected([&]{cloud_decrypt(cipher,"another recovery password");});auto tampered=cipher;tampered.back()^=1;rejected([&]{cloud_decrypt(tampered,password);});
  auto manifest=cloud_unpack(plain,root/"unpack");check(count(root/"unpack")==7,"snapshot database mismatch");check(!std::filesystem::exists(root/"unpack/credentials.bin"),"credential file included");check(!json_read(root/"unpack/config.json").contains("secret_do_not_upload"),"secret config included");
  const auto unpacked_config=json_read(root/"unpack/config.json");for(const auto &[key,value]:campus_config.items())check(unpacked_config.at(key)==value,"campus billing basis lost in cloud archive");
+ for(const auto &[key,value]:music_config.items())check(unpacked_config.at(key)==value,"music config lost in cloud archive");
+ {DatabaseManager db(root/"unpack/monitor.db");check(db.music(0,101)[0]["played_ms"]==30000,"music aggregates lost in encrypted backup");}
  std::map<std::string,CloudBytes> remote;std::mutex remote_mutex;std::atomic<unsigned> failure{},requests{};std::atomic<bool> block{},interrupt_upload{},corrupt_download{};
  auto transport=[&](const CloudRequest &r,std::atomic_bool &cancel)->CloudResponse{
   ++requests;check(r.url.starts_with("https://dav.jianguoyun.com/dav/"),"request escaped configured server");
@@ -60,6 +65,8 @@ int main(){try{
  auto failed_restore=cloud_apply_pending_restore(data,[&]{write(data/"monitor.db-wal",CloudBytes{'x'});throw std::runtime_error("synthetic storage failure");});check(failed_restore["phase"]=="restore_error","storage failure accepted");check(!std::filesystem::exists(data/"monitor.db-wal")||read(data/"monitor.db-wal")!=CloudBytes{'x'},"failed restore left a replacement WAL");check(count(data)==99,"failed restore changed original data");
  auto restored=cloud_apply_pending_restore(data);check(restored["phase"]=="restored"&&count(data)==7,"restore failed");const auto safety=data/"backups"/restored["safety_backup"].get<std::string>();check(count(safety)==99,"restore safety backup lost data");check(json_read(data/"config.json")["unknown_extension"]["keep"]==17,"unknown current config lost");check(!json_read(data/"config.json")["capture_on_launch"].get<bool>(),"restore restarted capture without review");
  for(const auto &[key,value]:campus_config.items())check(json_read(data/"config.json").at(key)==value,"campus billing basis lost after restore");
+ {DatabaseManager db(data/"monitor.db");check(db.music(0,101)[0]["plays"]==1,"music aggregates lost after cloud restore");}
+ for(const auto &[key,value]:music_config.items())check(json_read(data/"config.json").at(key)==value,"music settings lost after cloud restore");
  for(unsigned status:{401u,403u,429u,507u,500u}){failure=status;CloudBackupService errors(data,[&]{return snapshot;},transport);errors.command("cloud_test");wait(errors);check(errors.status()["phase"]=="error","DAV failure accepted");}
  failure=0;block=true;{CloudBackupService cancelled(data,[&]{return snapshot;},transport);const auto tick=GetTickCount64();cancelled.command("cloud_test");check(GetTickCount64()-tick<100,"network blocks caller");Sleep(30);
   {DatabaseManager db(data/"monitor.db");db.save("while-network-blocked",Json::array({{{"minute",100},{"module","keyboard"},{"metric","30"},{"value",3}}}),Json::array());}

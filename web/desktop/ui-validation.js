@@ -133,7 +133,7 @@ async function validateNavigationTransitions(){
  if(draft)draft.value='https://pending.example';
  navigate('dashboard');const probe=el('canvas',{width:32,height:8});c.append(probe);let paints=0;
  const observer=PulseRender.observe(probe,()=>{++paints;probe.getContext('2d').fillRect(0,0,32,8);});chartObservers.push(observer);
- const sequence=Array.from({length:4},()=>['dashboard','network','keyboard','mouse','usage','history','settings']).flat();
+ const sequence=Array.from({length:4},()=>['dashboard','network','keyboard','mouse','usage','music','history','settings']).flat();
  for(const next of sequence){
   const start=performance.now();navigate(next);times.push(performance.now()-start);
   if(c.dataset.page!==next)throw Error('Navigation did not present the selected page immediately');

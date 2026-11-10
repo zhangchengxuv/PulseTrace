@@ -19,9 +19,10 @@ try {
  Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination $stage
  Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
  foreach($name in @('MinGW-w64-runtime-LICENSE.txt','MinGW-w64-LICENSE.txt','winpthreads-LICENSE.txt')){Copy-Item -LiteralPath (Join-Path $root "licenses\$name") -Destination (Join-Path $stage 'licenses')}
- foreach($name in @('app-usage.md','traffic-rankings.md','performance-continuation.md','campus-portal.md','cloud-backup.md')){Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs')}
+ foreach($name in @('music.md','app-usage.md','traffic-rankings.md','performance-continuation.md','campus-portal.md','cloud-backup.md')){Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs')}
  Copy-Item -LiteralPath (Join-Path $root "docs\releases\v$($version.version).md") -Destination (Join-Path $stage 'docs\release-notes.md')
  Copy-Item -LiteralPath (Join-Path $build 'version.json') -Destination $stage
+ Copy-Item -LiteralPath (Join-Path $root 'build/deps/CppWinRT-LICENSE.txt') -Destination (Join-Path $stage 'licenses/CppWinRT-LICENSE.txt')
  $sdk=Join-Path $root 'build\deps\webview2'
  Copy-Item -LiteralPath (Join-Path $sdk 'LICENSE.txt') -Destination (Join-Path $stage 'licenses\WebView2-LICENSE.txt')
  Copy-Item -LiteralPath (Join-Path $sdk 'NOTICE.txt') -Destination (Join-Path $stage 'licenses\WebView2-NOTICE.txt')

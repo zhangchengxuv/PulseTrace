@@ -12,6 +12,7 @@ ctest --test-dir build/msvc -C Release --output-on-failure
 ```
 
 Build on Windows with CMake 3.24+, VS 2022 C++ tools and Windows SDK. The bootstrap script fetches pinned dependencies. No Node.js background runtime is bundled.
+Music uses generated C++/WinRT headers. Existing checkouts should also run `tools/bootstrap-music.ps1`; the main dependency bootstrap includes it. SMTC requires Windows 10 1809 or later. See [music support and validation](music.md).
 
 如果文档指定的便携 LLVM 工具链已就绪，也可执行 / With the documented portable LLVM toolchain already present:
 

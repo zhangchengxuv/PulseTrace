@@ -21,3 +21,5 @@ PulseTrace 自有源码与文档采用根目录 [MIT License](LICENSE)。下列�
 License scope: the root MIT license applies to PulseTrace-owned material only. Third-party components keep their original licenses. TrafficMonitor was consulted for taskbar integration concepts; no TrafficMonitor code, MFC dependency or binary is redistributed. Its Anti-996 license is not replaced by this project's MIT license.
 
 Mihomo 仅作为用户可选的外部控制 API 来源；不随 PulseTrace 分发其二进制或配置，也未移植其实现代码。API 兼容不代表将该外部项目改为 MIT。
+
+- Microsoft C++/WinRT 2.0.240405.15: MIT, Copyright Microsoft Corporation; generated Windows SDK projections, header-only runtime. License: licenses/CppWinRT-LICENSE.txt in distributed packages. SDK Contracts 10.0.26100.3916 supply build-time metadata only (not redistributed). https://github.com/microsoft/cppwinrt

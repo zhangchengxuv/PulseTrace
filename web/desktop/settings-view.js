@@ -12,7 +12,7 @@ function settings(c){
  renderLanguageSettings(general,true);general.prepend(general.lastElementChild);general.append(generalActions);groups.general.append(panel(tr('ui.57907a69fc5a'),general));
  const startup=el('input',{type:'checkbox',checked:state.autostart||false});startup.onchange=async()=>{try{await rpc('set_autostart',{enabled:startup.checked});feedback(tr('ui.434203a723b4'));}catch(e){startup.checked=!startup.checked;error(e);}};
  general.prepend(el('label',{class:'checkbox'},startup,tr('ui.eaaae3972868')));
- groups.monitoring.append(panel(tr('settings.monitoring'),monitor));const usage=el('div');renderUsageSettings(usage);groups.monitoring.append(disclosure('settings.usage',tr('usage.title'),null,usage));const campus=el('div');renderCampusSettings(campus);groups.campus.append(campus);groups.monitoring.append(rankingConfiguration());renderCloudSettings(groups.cloud);
+ groups.monitoring.append(panel(tr('settings.monitoring'),monitor));const music=el('div');renderMusicSettings(music);groups.monitoring.append(music);const usage=el('div');renderUsageSettings(usage);groups.monitoring.append(disclosure('settings.usage',tr('usage.title'),null,usage));const campus=el('div');renderCampusSettings(campus);groups.campus.append(campus);groups.monitoring.append(rankingConfiguration());renderCloudSettings(groups.cloud);
  renderUpdateSettings(groups.updates,groups.data);
  groups.data.append(panel(tr('ui.b1326f0910b9'),help(tr('ui.details'),el('p',{},tr('ui.c30c4947f572'))),archiveFolderButton()));
  const confirmation=el('input',{placeholder:tr('ui.4b7021984601'),'aria-label':tr('ui.fe43bc43c294')});

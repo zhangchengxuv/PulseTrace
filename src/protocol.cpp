@@ -123,7 +123,7 @@ void validate_request(const Json &r) {
         allowed = {"enabled"};
         if (!p.contains("enabled") || !p["enabled"].is_boolean())
             throw std::invalid_argument("enabled must be boolean");
-    } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="export_app_usage" || type=="get_usage_icon") {
+    } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="export_app_usage" || type=="get_usage_icon" || type=="get_music" || type=="export_music") {
         allowed = {"from", "to", "bucket"};
         if(type=="get_usage_icon"){allowed.insert("key");if(!p.contains("key")||!p["key"].is_string()||p["key"].get<std::string>().size()>2048)throw std::invalid_argument("Invalid usage icon key");}
         if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
@@ -145,7 +145,7 @@ void validate_request(const Json &r) {
         allowed={"token","confirmation"};if(!p.contains("token")||!p["token"].is_string()||p["token"].get<std::string>().size()!=32||p.value("confirmation",std::string())!="RESTORE")throw std::invalid_argument("Explicit restore confirmation required");
     }else if (type == "set_config")
         allowed = {"theme",         "retention_days",   "flush_seconds", "network_interface",
-                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days","campus_enabled","campus_portal_url","campus_allowed_origins","campus_refresh_minutes","campus_unit_price","campus_price_unit","campus_traffic_radix","campus_price_basis","campus_linear_tariff"};
+                   "close_to_tray", "capture_on_launch","update_channel","update_source","check_updates_on_start","taskbar_font","taskbar_font_size","taskbar_unit","taskbar_precision","taskbar_upload_color","taskbar_download_color","taskbar_offset_x","taskbar_offset_y","taskbar_mode","taskbar_monitor","taskbar_background","language","ranking_windows_enabled","ranking_mihomo_enabled","ranking_domains_enabled","ranking_retention_days","mihomo_controller","music_enabled","music_qq","music_netease","music_threshold_seconds","usage_enabled","usage_idle_seconds","usage_exclusions","usage_icons","usage_retention_days","campus_enabled","campus_portal_url","campus_allowed_origins","campus_refresh_minutes","campus_unit_price","campus_price_unit","campus_traffic_radix","campus_price_basis","campus_linear_tariff"};
     else if (type == "clear_data")
         allowed = {"confirmation"};
     else

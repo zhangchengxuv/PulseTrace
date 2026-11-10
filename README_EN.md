@@ -9,6 +9,7 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **Keyboard**: aggregate key statistics, ANSI 104 layout and the continuous Arctic heatmap.
 - **Mouse**: a five-button diagram and ranking; Mouse4 Back, Mouse5 Forward; temporal double clicks, wheel events and deltas tracked separately.
 - **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV export.
+- **Music (development build)**: optional QQ Music / NetEase SMTC playback duration, qualified plays, song/artist rankings and trends; disabled by default. [Support limits](docs/music.md).
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
 - **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
 - **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.

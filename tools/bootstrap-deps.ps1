@@ -15,3 +15,4 @@ Get-VerifiedFile 'https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip' (
 Expand-Archive -LiteralPath (Join-Path $deps 'webview2.zip') -DestinationPath (Join-Path $deps 'webview2') -Force
 Expand-Archive -LiteralPath (Join-Path $deps 'sqlite-3540100.zip') -DestinationPath $deps -Force
 Write-Output 'Pinned official dependencies verified and extracted to build/deps. No system settings changed.'
+& (Join-Path $PSScriptRoot 'bootstrap-music.ps1')

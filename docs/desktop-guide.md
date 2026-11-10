@@ -20,7 +20,9 @@ v0.7.0 新增默认关闭的坚果云 WebDAV 加密备份。使用第三方应�
 
 校园网监控默认关闭。配置门户与允许登录域名后，在独立 WebView2 窗口完成登录；自动识别结果需在设置页确认，无法识别时可点击网页字段手动映射。门户真实值、本地估算费用和未知状态分开显示；详见 [校园网说明](campus-portal.md)。
 
-当前版本使用 Schema v7，升级前自动创建一致性备份。Schema v7 新增校园网门户快照；保存失败保留待写入聚合并自动重试，详见 [恢复说明](persistence-recovery.md) 与 [校园网说明](campus-portal.md)。降级时使用兼容备份，不要用旧程序写新结构。
+开发版新增默认关闭的音乐统计，可在“设置 → 监测 → 音乐”启用 QQ 音乐 / 网易云，并开启主监测。提供检测播放时长、有效次数、排行、趋势和 CSV，详见 [音乐说明](music.md)。
+
+开发版使用 Schema v9，升级前自动创建一致性备份。v8 保留门户单位元数据，v9 新增音乐分钟聚合；保存失败保留待写入聚合并自动重试，详见 [恢复说明](persistence-recovery.md)。降级时使用兼容备份，不要用旧程序写新结构。
 
 更新支持 GitHub/Gitee。尚未配置可信发布签名，下载核对 SHA-256 后只提供手动安装，不自动执行 EXE。IPv4/IPv6 为真实物理接口观测，仍带未完成独立抓包对照的质量标识，不等于校园网账单。
 
@@ -42,7 +44,9 @@ v0.7.0 adds opt-in encrypted Jianguoyun WebDAV backup using a third-party app pa
 
 Campus monitoring is disabled by default. After configuring the portal and allowed sign-in origins, complete sign-in in an isolated WebView2 window. Recognition proposals require confirmation, and fields can be selected manually. Portal values, local estimates and unknown states remain separate; see [campus portal details](campus-portal.md).
 
-The current version uses schema v7 and creates a consistent backup before migration. Schema v7 adds campus-portal snapshots. Failed saves retain pending aggregates and retry; see [recovery notes](persistence-recovery.md) and [campus portal details](campus-portal.md). Use a compatible backup for downgrades rather than writing a newer database with older binaries.
+The development build adds opt-in QQ Music / NetEase playback statistics under Settings → Monitoring → Music. Enable the main capture switch too. Detected playback, qualified plays, rankings, trends and CSV are available; see [music limits](music.md).
+
+The development build uses schema v9 with consistent pre-migration backups. Schema v8 retains portal units; v9 adds music minute aggregates. Failed saves retain pending aggregates and retry; see [recovery notes](persistence-recovery.md). Use a compatible backup for downgrades rather than writing a newer database with older binaries.
 
 GitHub/Gitee update sources are supported. A trusted publisher signature is not configured, so hash-checked downloads require manual installation and never run automatically. IPv4/IPv6 values remain physical-interface observations with explicit quality limitations, not a billing total.
 

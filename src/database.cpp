@@ -76,6 +76,8 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
                 if(from<6)exec("CREATE TABLE persistence_receipts(session TEXT PRIMARY KEY,revision INTEGER NOT NULL) WITHOUT ROWID;PRAGMA user_version=6;");
                 if(from<7)exec("CREATE TABLE campus_snapshots(observed_ms INTEGER PRIMARY KEY,portal_origin TEXT NOT NULL,portal_url TEXT NOT NULL,balance REAL,used_bytes INTEGER,remaining_bytes INTEGER,quota_bytes INTEGER,fee REAL,cycle_text TEXT NOT NULL,quality TEXT NOT NULL,confidence REAL NOT NULL,details_json TEXT NOT NULL);CREATE INDEX campus_snapshots_origin_time ON campus_snapshots(portal_origin,observed_ms);PRAGMA user_version=7;");
                 if(from<8)exec("ALTER TABLE campus_snapshots ADD COLUMN measurement_json TEXT NOT NULL DEFAULT '{}';PRAGMA user_version=8;");
+                if(from<9)exec("CREATE TABLE IF NOT EXISTS music_minutes(session TEXT NOT NULL,minute INTEGER NOT NULL,player TEXT NOT NULL,identity TEXT NOT NULL,title TEXT NOT NULL,artist TEXT NOT NULL,album TEXT NOT NULL,duration_ms INTEGER NOT NULL,played_ms INTEGER NOT NULL CHECK(played_ms>=0),plays INTEGER NOT NULL CHECK(plays>=0),identity_version INTEGER NOT NULL,PRIMARY KEY(session,minute,player,identity)) WITHOUT ROWID;CREATE INDEX IF NOT EXISTS music_minutes_range ON music_minutes(minute,player);PRAGMA user_version=9;");
+                {Statement music(db_,"SELECT identity,played_ms,plays FROM music_minutes LIMIT 0");}
                 {Statement c(db_,"SELECT session,minute,module,metric,value FROM counts LIMIT 0");Statement n(db_,"SELECT session,sequence,observed_ms,kind,interface_id,name FROM network_events LIMIT 0");Statement p(db_,"SELECT session,minute,interface_id,source,basis,quality,ipv4_up,ipv4_down,ipv6_up,ipv6_down,accepted,rejected,unsupported,events_lost,buffers_lost FROM protocol_samples LIMIT 0");Statement r(db_,"SELECT identity,upload,download,quality FROM traffic_rankings LIMIT 0");Statement u(db_,"SELECT identity,foreground_ms,active_ms FROM app_usage LIMIT 0");Statement j(db_,"SELECT session,revision FROM persistence_receipts LIMIT 0");Statement cs(db_,"SELECT observed_ms,portal_origin,portal_url,quality,confidence,measurement_json FROM campus_snapshots LIMIT 0");}
                 {Statement check(db_,"PRAGMA quick_check");if(check.step()!=SQLITE_ROW||std::string(reinterpret_cast<const char *>(sqlite3_column_text(check.p,0)))!="ok")throw std::runtime_error("Migration integrity check failed");}
                 exec("COMMIT");
@@ -183,14 +185,14 @@ bool DatabaseManager::save_batch(const Json &batch){
   const auto rc=receipt.step();if(rc!=SQLITE_ROW&&rc!=SQLITE_DONE)throw SQLiteError(db_,"receipt",sqlite3_sql(receipt.p));
   if(rc==SQLITE_ROW&&sqlite3_column_int64(receipt.p,0)>=revision){sqlite3_reset(receipt.p);exec("COMMIT");batch_=false;return false;}
   sqlite3_reset(receipt.p);
-  save(session,batch.at("rows"),batch.at("events"));save_usage(session,batch.at("usage"));save_rankings(session,batch.at("rankings"));
+  save(session,batch.at("rows"),batch.at("events"));save_usage(session,batch.at("usage"));save_rankings(session,batch.at("rankings"));if(batch.contains("music"))save_music(session,batch.at("music"));
   Statement update(db_,"INSERT INTO persistence_receipts VALUES(?,?) ON CONFLICT(session) DO UPDATE SET revision=excluded.revision");bind_text(update.p,1,session);sqlite3_bind_int64(update.p,2,revision);
   if(update.step()!=SQLITE_DONE)throw SQLiteError(db_,"receipt",sqlite3_sql(update.p));
   exec("COMMIT");batch_=false;return true;
  }catch(...){batch_=false;sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr);throw;}
 }
 Json DatabaseManager::history_bounds() const {
-    Statement s(db_, "SELECT MIN(m) FROM (SELECT MIN(minute) m FROM counts UNION ALL SELECT MIN(minute) FROM protocol_samples UNION ALL SELECT MIN(minute) FROM app_usage UNION ALL SELECT MIN(minute) FROM traffic_rankings)");
+    Statement s(db_, "SELECT MIN(m) FROM (SELECT MIN(minute) m FROM counts UNION ALL SELECT MIN(minute) FROM protocol_samples UNION ALL SELECT MIN(minute) FROM app_usage UNION ALL SELECT MIN(minute) FROM traffic_rankings UNION ALL SELECT MIN(minute) FROM music_minutes)");
     if(s.step()!=SQLITE_ROW)throw SQLiteError(db_,"step");
     return {{"first_minute",sqlite3_column_type(s.p,0)==SQLITE_NULL?Json(nullptr):Json(sqlite3_column_int64(s.p,0))}};
 }
@@ -242,7 +244,7 @@ void DatabaseManager::clear(const std::vector<std::string> &pending_sessions){
  exec("BEGIN IMMEDIATE");try{
   Statement tombstone(db_,"INSERT INTO persistence_receipts VALUES(?,9223372036854775807) ON CONFLICT(session) DO UPDATE SET revision=excluded.revision");
   for(const auto &session:pending_sessions){bind_text(tombstone.p,1,session);if(tombstone.step()!=SQLITE_DONE)throw SQLiteError(db_,"clear",sqlite3_sql(tombstone.p));sqlite3_reset(tombstone.p);}
-  exec("DELETE FROM counts;DELETE FROM app_usage;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;DELETE FROM campus_snapshots;COMMIT;");
+  exec("DELETE FROM music_minutes;DELETE FROM counts;DELETE FROM app_usage;DELETE FROM network_events;DELETE FROM protocol_samples;DELETE FROM traffic_rankings;DELETE FROM campus_snapshots;COMMIT;");
  }catch(...){sqlite3_exec(db_,"ROLLBACK",nullptr,nullptr,nullptr);throw;}
 }
 Json DatabaseManager::traffic_summary(std::int64_t from,std::int64_t to) const {

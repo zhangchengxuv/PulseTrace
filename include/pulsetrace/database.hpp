@@ -38,7 +38,9 @@ class DatabaseManager {
     std::string usage_icon_path(const std::string &identity)const;
     void save_campus_snapshot(const Json &snapshot);
     Json campus_latest(const std::string &origin="") const;
-    static constexpr int supported_schema=8;
+    void save_music(const std::string &session,const Json &rows);
+    Json music(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0)const;
+    static constexpr int supported_schema=9;
     void backup(const std::filesystem::path &destination) const;
     static void backup_file(const std::filesystem::path &source,const std::filesystem::path &destination);
     Json migration_info() const{return migration_;}

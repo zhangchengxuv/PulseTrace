@@ -32,6 +32,7 @@ Json PendingStore::read(const std::filesystem::path &file)const{
  std::ifstream input(file,std::ios::binary);Json batch;input>>batch;
  if(batch.at("format")!=1||batch.at("revision").get<std::int64_t>()<1||path(batch.at("session"))!=file)throw std::runtime_error("Invalid pending aggregate identity; file preserved");
  for(const char *key:{"rows","events","usage","rankings"})if(!batch.at(key).is_array())throw std::runtime_error("Invalid pending aggregates; file preserved");
+ if(batch.contains("music")&&!batch.at("music").is_array())throw std::runtime_error("Invalid pending music aggregates; file preserved");
  return batch;
 }
 void PendingStore::acknowledge(const std::string &session)const{
