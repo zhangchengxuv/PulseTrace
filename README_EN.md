@@ -9,7 +9,7 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 - **Keyboard**: aggregate key statistics, ANSI 104 layout and the continuous Arctic heatmap.
 - **Mouse**: a five-button diagram and ranking; Mouse4 Back, Mouse5 Forward; temporal double clicks, wheel events and deltas tracked separately.
 - **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV export.
-- **Music (development build)**: optional QQ Music / NetEase SMTC playback duration, qualified plays, song/artist rankings and trends; disabled by default. [Support limits](docs/music.md).
+- **Music**: optional QQ Music / NetEase SMTC playback duration, qualified plays, song/artist rankings and trends; disabled by default. [Support limits](docs/music.md).
 - **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
 - **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
 - **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.
@@ -21,7 +21,7 @@ Collection starts paused. Input text, window titles and mouse trajectories are n
 
 ## Screenshots
 
-Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. v0.7.6 includes simplified copy and an updated mouse diagram; these captures remain from v0.7.4.
+Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. v0.8.0 includes simplified copy and an updated mouse diagram; these captures remain from v0.7.4.
 
 | Dashboard | Network |
 | --- | --- |
@@ -61,14 +61,14 @@ Current program files listed by the installer total **11.07 MiB**, excluding the
 
 ## Download and Install
 
-[GitHub v0.7.6](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.6) · [Gitee v0.7.6](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.6)
+[GitHub v0.8.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.8.0) · [Gitee v0.8.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.8.0)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Version **v0.7.6** fixes update API rate limits and error messages, preserving statistics, data and configuration. See [release notes](docs/releases/v0.7.6.md) for validation limits. [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+Version **v0.8.0** adds Music statistics, rankings, trends and CSV, preserving existing data through schema 9 migration. QQ reads work locally; real NetEase compatibility remains unverified. See [release notes](docs/releases/v0.8.0.md). [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 

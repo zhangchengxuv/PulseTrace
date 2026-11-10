@@ -1,5 +1,5 @@
 # Single source for app, resources, update comparison and package/installer names.
-set(PULSETRACE_VERSION "0.7.6")
+set(PULSETRACE_VERSION "0.8.0")
 if(NOT PULSETRACE_VERSION MATCHES "^([0-9]+)[.]([0-9]+)[.]([0-9]+)(-([0-9A-Za-z.-]+))?$")
   message(FATAL_ERROR "Invalid PulseTrace version")
 endif()

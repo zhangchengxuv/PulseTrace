@@ -9,7 +9,7 @@
 - **键盘**：按键聚合统计、ANSI 104 布局及 Arctic 连续热力图。
 - **鼠标**：二维五键热力图与排行，Mouse4 后退、Mouse5 前进；时间双击、滚轮事件与 delta 分开统计。
 - **应用使用**：前台停留与有效活跃时长、排行、小时/日期趋势、排除列表及 CSV 导出。
-- **音乐（开发版）**：可选 QQ 音乐 / 网易云 SMTC 播放时长、有效次数、歌曲/歌手排行及趋势；默认关闭。[支持范围](docs/music.md)。
+- **音乐**：可选 QQ 音乐 / 网易云 SMTC 播放时长、有效次数、歌曲/歌手排行及趋势；默认关闭。[支持范围](docs/music.md)。
 - **网络**：出口上传/下载、物理接口 IPv4/IPv6 观测、自然月每日流量热力图、接口与连接历史。
 - **校园网**：可选通用门户监控，独立 WebView2 登录、DOM 字段识别与确认、余额/额度/周期快照；默认关闭。
 - **页面精简**：网络页移除应用流量排行及其刷新请求，保留原历史；键位使用排名默认收起，展开状态随刷新保留。
@@ -21,7 +21,7 @@
 
 ## 软件截图
 
-真实 **v0.7.4 x64 Release** 界面，使用独立空数据目录并暂停采集。页面统一为 1600×900 DIP（125% DPI 下 2000×1125 像素）。校园网 **Demo** 使用内存合成读数，不含个人账号或统计。v0.7.6 已包含文案精简与鼠标图形更新；此处保留 v0.7.4 截图。
+真实 **v0.7.4 x64 Release** 界面，使用独立空数据目录并暂停采集。页面统一为 1600×900 DIP（125% DPI 下 2000×1125 像素）。校园网 **Demo** 使用内存合成读数，不含个人账号或统计。v0.8.0 已包含文案精简与鼠标图形更新；此处保留 v0.7.4 截图。
 
 | 总览 | 网络 |
 | --- | --- |
@@ -61,14 +61,14 @@
 
 ## 下载安装
 
-[GitHub v0.7.6](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.7.6) · [Gitee v0.7.6](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.7.6)
+[GitHub v0.8.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.8.0) · [Gitee v0.8.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.8.0)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-版本 **v0.7.6** 修复更新检查限流与错误提示，保留统计、数据和配置。验证范围见[发布说明](docs/releases/v0.7.6.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+版本 **v0.8.0** 新增音乐统计、排行、趋势及 CSV，保留原数据并升级至 schema 9。QQ 已验证读取，网易云真实客户端待验证。详见[发布说明](docs/releases/v0.8.0.md)。[使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
