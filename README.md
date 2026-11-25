@@ -60,14 +60,14 @@
 
 ## 下载安装
 
-[GitHub v0.8.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.8.0) · [Gitee v0.8.0](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.8.0)
+[GitHub v0.9.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.9.0) · [Gitee 发布页](https://gitee.com/zhangchenxuv/pulse-trace/releases)
 
 Windows 10/11 x64，需要 Microsoft Edge WebView2 Evergreen Runtime。
 
 - **安装版**：运行 `PulseTrace-Setup-*.exe`；数据在安装目录的 `data`，卸载默认保留。
 - **便携版**：完整解压 ZIP，保留 Web 资源、DLL 和 helper，运行 `PulseTrace.exe`。
 
-**v0.9.0 待发布**。本版增加输入洞察、活动节律、BGM Buff 和脉冲模式。从 v0.8.0 升级沿用 SQLite schema 9。页面上方的下载链接指向已发布的 v0.8.0。 [v0.9.0 发布说明](docs/releases/v0.9.0.md) · [使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
+**v0.9.0** 增加输入洞察、活动节律、BGM Buff 和脉冲模式。从 v0.8.0 升级沿用 SQLite schema 9。 [v0.9.0 发布说明](docs/releases/v0.9.0.md) · [使用说明](docs/desktop-guide.md) · [源码构建](docs/build.md)
 
 ## 技术栈
 
