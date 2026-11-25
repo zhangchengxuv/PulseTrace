@@ -4,6 +4,7 @@ globalThis.PulseViz = (() => {
     const maps = globalThis.PulseColorMaps;
     const clamp = n => Math.max(0, Math.min(1, n));
     const arcticStops=['#17364c','#245b81','#3498db','#72c7db','#e1bd77','#f4d48d'];
+    const arcticLightStops=['#f8fafc','#dbeeff','#a5d8fb','#5cb1ef','#2278b8','#123e71'];
     const linear = v => v <= .04045 ? v/12.92 : ((v+.055)/1.055)**2.4;
     const gamma = v => v <= .0031308 ? 12.92*v : 1.055*v**(1/2.4)-.055;
     function toLab(rgb) {
@@ -15,18 +16,22 @@ globalThis.PulseViz = (() => {
         const l=(L+.3963377774*a+.2158037573*b)**3,m=(L-.1055613458*a-.0638541728*b)**3,s=(L-.0894841775*a-1.291485548*b)**3;
         return [4.0767416621*l-3.3077115913*m+.2309699292*s,-1.2684380046*l+2.6097574011*m-.3413193965*s,-.0041960863*l-.7034186147*m+1.707614701*s].map(v=>clamp(gamma(v))*255);
     }
-    const labs=arcticStops.map(hex=>toLab(hex.slice(1).match(/../g).map(v=>parseInt(v,16))));
-    function arctic(t) {
+    const stopLabs=stops=>stops.map(hex=>toLab(hex.slice(1).match(/../g).map(v=>parseInt(v,16))));
+    const darkLabs=stopLabs(arcticStops),lightLabs=stopLabs(arcticLightStops);
+    function arctic(t, light=false) {
         if(!Number.isFinite(t))throw new Error('Invalid Arctic coordinate');
+        const labs=light?lightLabs:darkLabs;
         const scaled=clamp(t)*5,index=Math.min(4,Math.floor(scaled)),f=scaled-index;
         return fromLab(labs[index].map((v,i)=>v+(labs[index+1][i]-v)*f));
     }
     function normalized(value,max,mode='sqrt') {
         if(!Number.isFinite(value)||!Number.isFinite(max)||value<0||max<0)throw new Error('Invalid heatmap value');
         const t=max>0?clamp(value/max):0;
+        if(mode==='log')return max>0?Math.log1p(Math.min(value,max))/Math.log1p(max):0;
         if(mode!=='sqrt'&&mode!=='linear')throw new Error('Unknown normalization');
         return mode==='sqrt'?Math.sqrt(t):t;
     }
+    const heatTick=(t,max,mode)=>Math.round(mode==='log'?Math.expm1(t*Math.log1p(max)):t*max);
     function luminance(rgb) {
         const channels = rgb.map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
         return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
@@ -35,14 +40,15 @@ globalThis.PulseViz = (() => {
         const x = luminance(a), y = luminance(b);
         return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
     }
-    function color(name, value, max) {
-        if(name==='arctic')return arctic(normalized(value,max)).map(Math.round);
+    function rampColor(name,t,light=false) {
+        if(name==='arctic')return arctic(t,light).map(Math.round);
         if (!maps[name]) throw new Error('Unknown colour map');
-        if (!Number.isFinite(value) || value < 0 || !Number.isFinite(max) || max < 0)
-            throw new Error('Invalid heatmap value');
         // Matplotlib ListedColormap convention: floor(t*N), endpoint clamped.
-        const index = Math.min(255, Math.floor(clamp(max > 0 ? value / max : 0) * 256));
+        const index = Math.min(255, Math.floor(clamp(t) * 256));
         return maps[name][index].map(c => Math.round(c * 255));
+    }
+    function color(name, value, max, mode=name==='arctic'?'sqrt':'linear', light=false) {
+        return rampColor(name,normalized(value,max,mode),light);
     }
     const css = rgb => `rgb(${rgb.join(' ')})`;
     const foreground = rgb => contrast(rgb, [255,255,255]) >= contrast(rgb, [0,0,0]) ? '#ffffff' : '#000000';
@@ -52,18 +58,20 @@ globalThis.PulseViz = (() => {
         if (!points.length) return bucket;
         return Math.max(1, Math.ceil(((points.at(-1)[0] - points[0][0]) / bucket + 1) / limit)) * bucket;
     }
-    function aggregate(points, limit = 240, bucket = 1) {
+    function aggregate(points, limit = 240, bucket = 1, aligned = false) {
         const width = binWidth(points, limit, bucket), bins = new Map(), first = points[0]?.[0] || 0;
+        if (aligned && width === bucket) return points.slice();
         for (const [minute, value] of points) {
-            const start = first + Math.floor((minute - first) / width) * width;
-            bins.set(start, (bins.get(start) || 0) + value);
+            const index = Math.floor((minute - first) / width);
+            if (!bins.has(index)) bins.set(index,[aligned ? minute : first + index * width,0]);
+            bins.get(index)[1] += value;
         }
-        return [...bins];
+        return [...bins.values()];
     }
     function heatState(hasCoverage, value) {
         return !hasCoverage ? 'missing' : value === 0 ? 'zero' : 'positive';
     }
-    return {color, css, foreground, contrast, aggregate, binWidth, heatState, arctic, normalized, toLab, fromLab, arcticStops};
+    return {color, rampColor, css, foreground, contrast, aggregate, binWidth, heatState, heatTick, arctic, normalized, toLab, fromLab, arcticStops};
 })();
 
 // One shared default for all statistic pages; data refresh never changes a draft.

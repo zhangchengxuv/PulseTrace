@@ -3,20 +3,21 @@ const usageView={result:{rows:[]},recent:[],limit:10,sort:'active_ms',visible:10
 const usageText=key=>tr('usage.'+key);
 function usageDuration(ms){const minutes=Math.floor(ms/60000);if(ms<60000)return Math.floor(ms/1000)+' s';return minutes>=60?`${Math.floor(minutes/60)} h ${minutes%60} m`:`${minutes} m`;}
 function groupUsage(values){const result=new Map();for(const r of values){if(!result.has(r.key))result.set(r.key,{...r,active_ms:0,foreground_ms:0});const v=result.get(r.key);v.active_ms+=r.active_ms;v.foreground_ms+=r.foreground_ms;}return [...result.values()];}
-function usageBins(values,daily=false,metric='active_ms'){const bins=new Map();for(const r of values){const d=new Date(r.minute*60000);daily?d.setHours(0,0,0,0):d.setMinutes(0,0,0);const key=d.getTime()/60000;bins.set(key,(bins.get(key)||0)+r[metric]);}return [...bins].sort((a,b)=>a[0]-b[0]);}
+function usageBins(values,daily=false,metric='active_ms',zone='local'){const bins=new Map();for(const r of values){const key=daily?PulseDate.calendarStart(r.minute,'today',zone):PulseDate.hourStart(r.minute,zone);bins.set(key,(bins.get(key)||0)+r[metric]);}return [...bins].sort((a,b)=>a[0]-b[0]);}
 async function refreshUsage(){
- const selected=await rpc('get_app_usage',{from:range.from,to:range.to,bucket:range.bucket});
- const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-6);
- const recent=await rpc('get_app_usage',{from:d.getTime()/60000,to:Math.floor(Date.now()/60000)+1});
- usageView.result=selected;usageView.recent=recent.rows;
+ const generation=viewGeneration,zone=range.time_zone,end=Math.floor(Date.now()/60000)+1;
+ const selected=await rpc('get_app_usage',range);
+ if(generation!==viewGeneration)return;
+ const recent=await rpc('get_app_usage',{from:PulseDate.calendarStart(end-1,'today',zone,6),to:end});
+ if(generation===viewGeneration){usageView.result=selected;usageView.recent=recent.rows;}
 }
 function usageChart(title,values,daily=false){
- const series=PulseViz.aggregate(usageBins(values,daily),96,daily?1440:60);
+ const series=PulseViz.aggregate(usageBins(values,daily,'active_ms',range.time_zone),96,daily?1440:60,true);
  const canvas=el('canvas',{'aria-label':title,role:'img'}),host=panel(title);host.querySelector('h3').title=usageText('chart_unit');host.querySelector('h3').tabIndex=0;
  if(!series.length){host.append(el('div',{class:'chart-empty'},usageText('empty')));return host;}host.append(canvas);
  const draw=()=>{const width=canvas.clientWidth;if(!width)return;const height=180,dpr=devicePixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const css=getComputedStyle(document.documentElement),max=Math.max(...series.map(r=>r[1]))||1,left=42,right=width-12,span=(right-left)/series.length;
   ctx.font='11px Segoe UI';ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText((max/60000).toFixed(1)+' m',0,16);ctx.strokeStyle=css.getPropertyValue('--chart-grid');ctx.beginPath();ctx.moveTo(left,150);ctx.lineTo(right,150);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--data-time');for(let i=0;i<series.length;i++)ctx.fillRect(left+i*span+2,150-series[i][1]/max*120,Math.max(1,span-4),series[i][1]/max*120);
-  ctx.fillStyle=css.getPropertyValue('--muted');ctx.textAlign='left';const label=m=>PulseI18n.date(m*60000,daily?{month:'short',day:'numeric'}:{month:'numeric',day:'numeric',hour:'2-digit',hourCycle:'h23'});ctx.fillText(label(series[0][0]),left,172);if(width>350&&series.length>1){ctx.textAlign='right';ctx.fillText(label(series.at(-1)[0]),right,172);}};
+  ctx.fillStyle=css.getPropertyValue('--muted');ctx.textAlign='left';const label=m=>PulseDate.format(m,daily?{month:'short',day:'numeric'}:{month:'numeric',day:'numeric',hour:'2-digit',hourCycle:'h23'},range.time_zone);ctx.fillText(label(series[0][0]),left,172);if(width>350&&series.length>1){ctx.textAlign='right';ctx.fillText(label(series.at(-1)[0]),right,172);}};
  chartObservers.push(PulseRender.observe(canvas,draw));return host;
 }
 function appUsage(c){
@@ -32,8 +33,8 @@ function appUsage(c){
  };
  const detail=el('div');let detailPage=0;
  const details=()=>{detail.replaceChildren();if(!v.selected)return;const selected=v.result.rows.filter(r=>r.key===v.selected),name=selected[0]?.name||usageText('unknown');const contents=[];
-  for(const daily of [true,false]){const active=usageBins(selected,daily),foreground=new Map(usageBins(selected,daily,'foreground_ms'));contents.push(table([usageText(daily?'day':'hour'),usageText('active'),usageText('foreground')],active.slice(detailPage*100,detailPage*100+100).map(([m,n])=>[daily?PulseI18n.date(m*60000,{year:'numeric',month:'2-digit',day:'2-digit'}):formatTime(m),usageDuration(n),usageDuration(foreground.get(m)||0)])));}
-  const count=usageBins(selected).length;contents.push(el('div',{class:'actions'},el('button',{class:'secondary',disabled:detailPage===0,onclick:()=>{detailPage--;details();}},tr('ui.c9b9ae7a6144')),el('span',{},String(detailPage+1)),el('button',{class:'secondary',disabled:(detailPage+1)*100>=count,onclick:()=>{detailPage++;details();}},tr('ui.8a8542f69648'))));detail.append(panel(name,...contents));};
+  for(const daily of range.bucket===1440?[true]:[true,false]){const active=usageBins(selected,daily,'active_ms',range.time_zone),foreground=new Map(usageBins(selected,daily,'foreground_ms',range.time_zone));contents.push(table([usageText(daily?'day':'hour'),usageText('active'),usageText('foreground')],active.slice(detailPage*100,detailPage*100+100).map(([m,n])=>[daily?PulseDate.format(m,{year:'numeric',month:'2-digit',day:'2-digit'},range.time_zone):formatTime(m),usageDuration(n),usageDuration(foreground.get(m)||0)])));}
+  const count=usageBins(selected,range.bucket===1440,'active_ms',range.time_zone).length;contents.push(el('div',{class:'actions'},el('button',{class:'secondary',disabled:detailPage===0,onclick:()=>{detailPage--;details();}},tr('ui.c9b9ae7a6144')),el('span',{},String(detailPage+1)),el('button',{class:'secondary',disabled:(detailPage+1)*100>=count,onclick:()=>{detailPage++;details();}},tr('ui.8a8542f69648'))));detail.append(panel(name,...contents));};
  limit.onchange=()=>{v.limit=Number(limit.value);draw();};sort.onchange=()=>{v.sort=sort.value;draw();};
  c.append(panel(usageText('ranking'),el('div',{class:'actions'},limit,sort,el('button',{class:'secondary',onclick:async()=>{try{await rpc('export_app_usage',{from:range.from,to:range.to});}catch(e){error(e);}}},usageText('export'))),host),detail,el('div',{class:'chart-grid'},usageChart(usageText(range.bucket===1440?'day':'hourly'),v.result.rows,range.bucket===1440),usageChart(usageText('weekly'),v.recent,true)));draw();details();
 }

@@ -7,8 +7,8 @@ function musicGroups(values,artist=false,merge=false){
   if(!groups.has(key))groups.set(key,{...r,played_ms:0,plays:0});const g=groups.get(key);g.played_ms+=r.played_ms;g.plays+=r.plays;
  }return [...groups.values()].sort((a,b)=>b.played_ms-a.played_ms||a.key.localeCompare(b.key));
 }
-function musicBins(values,period){
- const bins=new Map();for(const r of values){const d=new Date(r.minute*60000);d.setHours(0,0,0,0);if(period==='week')d.setDate(d.getDate()-(d.getDay()+6)%7);if(period==='month')d.setDate(1);const key=d.getTime()/60000;bins.set(key,(bins.get(key)||0)+r.played_ms);}
+function musicBins(values,period,zone='local'){
+ const bins=new Map();for(const r of values){const key=PulseDate.calendarStart(r.minute,period,zone);bins.set(key,(bins.get(key)||0)+r.played_ms);}
  return [...bins].sort((a,b)=>a[0]-b[0]);
 }
 async function refreshMusic(){const generation=viewGeneration;const result=await rpc('get_music',{from:range.from,to:range.to});if(generation===viewGeneration)musicView.result=result;}
@@ -24,10 +24,10 @@ function musicPage(c){
  const rankings=el('div',{class:'chart-grid'});for(const key of ['songs_top','artists_top'])rankings.append(panel(musicText(key),el('div',{class:'usage-ranking','data-music-rank':key})));root.append(rankings);
  const period=el('select',{'aria-label':musicText('trend')},...['day','week','month'].map(v=>el('option',{value:v},musicText(v))));period.value=musicView.period;
  const canvas=el('canvas',{role:'img','aria-label':musicText('trend')}),empty=el('p',{class:'muted music-chart-empty'},musicText('empty'));
- const draw=()=>{if(!canvas.isConnected)return;const series=musicBins(musicRows(),musicView.period);empty.hidden=series.length>0;canvas.hidden=!series.length;const w=canvas.clientWidth;if(!series.length||!w)return;
+ const draw=()=>{if(!canvas.isConnected)return;const series=musicBins(musicRows(),musicView.period,range.time_zone);empty.hidden=series.length>0;canvas.hidden=!series.length;const w=canvas.clientWidth;if(!series.length||!w)return;
   const height=190,ratio=Math.min(devicePixelRatio||1,3);canvas.width=Math.round(w*ratio);canvas.height=Math.round(height*ratio);const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);const css=getComputedStyle(document.documentElement);ctx.fillStyle=css.getPropertyValue('--muted');ctx.font='11px Segoe UI';
-  const points=PulseViz.aggregate(series,120,1440),maximum=Math.max(...points.map(r=>r[1]),1),left=55,right=w-12;ctx.fillText(usageDuration(maximum),0,15);ctx.strokeStyle=css.getPropertyValue('--chart-grid');ctx.beginPath();ctx.moveTo(left,150);ctx.lineTo(right,150);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--chart-upload');const step=(right-left)/points.length;
-  points.forEach((r,i)=>ctx.fillRect(left+i*step+1,150-r[1]/maximum*120,Math.max(1,step-3),r[1]/maximum*120));ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText(PulseI18n.date(points[0][0]*60000,{month:'short',day:'numeric'}),left,178);if(w>330&&points.length>1){ctx.textAlign='right';ctx.fillText(PulseI18n.date(points.at(-1)[0]*60000,{month:'short',day:'numeric'}),right,178);}
+  const points=PulseViz.aggregate(series,120,1440,true),maximum=Math.max(...points.map(r=>r[1]),1),left=55,right=w-12;ctx.fillText(usageDuration(maximum),0,15);ctx.strokeStyle=css.getPropertyValue('--chart-grid');ctx.beginPath();ctx.moveTo(left,150);ctx.lineTo(right,150);ctx.stroke();ctx.fillStyle=css.getPropertyValue('--chart-upload');const step=(right-left)/points.length;
+  points.forEach((r,i)=>ctx.fillRect(left+i*step+1,150-r[1]/maximum*120,Math.max(1,step-3),r[1]/maximum*120));ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText(PulseDate.format(points[0][0],{month:'short',day:'numeric'},range.time_zone),left,178);if(w>330&&points.length>1){ctx.textAlign='right';ctx.fillText(PulseDate.format(points.at(-1)[0],{month:'short',day:'numeric'},range.time_zone),right,178);}
  };
  const observer=PulseRender.observe(canvas,draw);chartObservers.push(observer);root.musicSchedule=()=>observer.schedule?.();period.onchange=()=>{musicView.period=period.value;draw();};
  root.append(panel(musicText('trend'),period,canvas,empty),help(tr('ui.details'),el('p',{},musicText('basis'))));c.append(root);updateMusic(root);

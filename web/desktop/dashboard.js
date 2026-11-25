@@ -21,7 +21,7 @@ function rememberRates(){const n=state.network||{},stamp=Number(state.heartbeat_
 }
 function kpi(kind,title,value,side=null,foot=null){return el('article',{class:'kpi kpi-'+kind},el('div',{class:'kpi-head'},metricIcon(kind),el('span',{},title)),el('div',{class:'kpi-body'},el('div',{class:'kpi-number'},value),side),foot?el('div',{class:'kpi-foot'},foot):null);}
 function inputActivityChart(){
- const points=PulseDashboard.inputs(rows,range.bucket),host=panel(tr("ui.c92d238b742f")),legend=el('div',{class:'chart-legend'},el('span',{},el('i',{class:'key-mark'}),tr("ui.864200bbb241")),el('span',{},el('i',{class:'mouse-mark'}),tr("ui.f93ba1b7e928")));
+ const points=PulseDashboard.inputs(rows,range.bucket,96,true),host=panel(tr("ui.c92d238b742f")),legend=el('div',{class:'chart-legend'},el('span',{},el('i',{class:'key-mark'}),tr("ui.864200bbb241")),el('span',{},el('i',{class:'mouse-mark'}),tr("ui.f93ba1b7e928")));
  host.classList.add('input-chart');host.prepend(el('div',{class:'chart-heading'},host.querySelector('h3'),legend));host.querySelector('.chart-heading').title=tr("ui.2982ffca721a");host.querySelector('.chart-heading').tabIndex=0;
  if(!points.length){host.append(el('div',{class:'chart-empty'},state.monitoring?tr("ui.497c85690c4c"):tr("ui.f2b38c7b9fae")));return host;}
  const canvas=el('canvas',{'aria-label':tr("ui.e6f3f6627688")});host.append(canvas);
@@ -31,8 +31,9 @@ function inputActivityChart(){
   const slot=(right-left)*step/span,bw=Math.max(1,Math.min(10,slot*.29));
   for(const p of points){const x=left+(p.minute-first+step*.5)*(right-left)/span;
    for(const [key,color,offset]of [['keyboard','--series-primary',-bw-1],['mouse','--data-mouse',1]])if(p[key]!=null){const bh=p[key]/max*(bottom-top);ctx.fillStyle=style.getPropertyValue(color);ctx.fillRect(x+offset,bottom-bh,bw,bh);}}
-  if(first===last){ctx.fillStyle=style.getPropertyValue('--muted');ctx.textAlign='center';ctx.fillText(new Date(first*60000).toLocaleTimeString(PulseI18n.locale,{hour:'2-digit',minute:'2-digit'}),(left+right)/2,h-9);return;}
-  for(let i=0;i<4;i++){const minute=first+(last-first)*i/3,x=left+(minute-first)*(right-left)/span;ctx.fillStyle=style.getPropertyValue('--muted');ctx.textAlign=i===3?'right':'left';ctx.fillText(new Date(minute*60000).toLocaleTimeString(PulseI18n.locale,{hour:'2-digit',minute:'2-digit'}),i===3?right:x,h-9);}
+  const axisLabel=minute=>PulseDate.format(minute,range.bucket===1440?{month:'short',day:'numeric'}:{hour:'2-digit',minute:'2-digit',hourCycle:'h23'},range.time_zone);
+  if(first===last){ctx.fillStyle=style.getPropertyValue('--muted');ctx.textAlign='center';ctx.fillText(axisLabel(first),(left+right)/2,h-9);return;}
+  for(let i=0;i<4;i++){const minute=first+(last-first)*i/3,x=left+(minute-first)*(right-left)/span;ctx.fillStyle=style.getPropertyValue('--muted');ctx.textAlign=i===3?'right':'left';ctx.fillText(axisLabel(minute),i===3?right:x,h-9);}
  });return host;
 }
 function renderDashboard(c){
@@ -40,7 +41,7 @@ function renderDashboard(c){
  const mouseValues=[d.total(rows,'mouse',['left']),d.total(rows,'mouse',['right']),d.total(rows,'mouse',['middle','mouse4','mouse5'])],ratios=d.distribution(mouseValues),wheelRatio=d.distribution([up,down]),change=d.comparison(rows,comparisonRows);
  const mouseSide=el('div',{class:'distribution'},el('div',{class:'stack-track'},...(ratios?ratios.map((r,i)=>{const part=el('i',{class:['mouse-left','mouse-right','mouse-other'][i]});part.style.width=r*100+'%';return part;}):[])),...[tr("ui.5718442eaf28"),tr("ui.3ca47485aee8"),tr("ui.d2909f1647e7")].map((name,i)=>el('div',{class:'ratio-line'},el('span',{},el('i',{class:['mouse-left','mouse-right','mouse-other'][i]}),name),el('b',{},ratios?(ratios[i]*100).toFixed(0)+'%':'—'))));
  const wheelSide=el('div',{class:'wheel-ratios'},...['↑','↓'].map((arrow,i)=>{const track=el('div',{class:'ratio-track'},el('i'));if(wheelRatio)track.firstChild.style.width=wheelRatio[i]*100+'%';return el('div',{},el('span',{},arrow),track,el('b',{},wheelRatio?(wheelRatio[i]*100).toFixed(0)+'%':'—'));}));
- const keyboardSeries=d.series(rows,'keyboard'),keyboardSpark=sparkline([{points:PulseViz.aggregate(keyboardSeries,40,range.bucket),step:PulseViz.binWidth(keyboardSeries,40,range.bucket),color:'--series-primary'}]);
+ const keyboardSeries=d.series(rows,'keyboard'),keyboardSpark=sparkline([{points:PulseViz.aggregate(keyboardSeries,40,range.bucket,true),step:PulseViz.binWidth(keyboardSeries,40,range.bucket),color:'--series-primary'}]);
  const rateHistory=state.monitoring&&!state.network_error?liveRates:[];const rateSeries=rateHistory.map(r=>[r.t,r.up]),rateDown=rateHistory.map(r=>[r.t,r.down]),rateSpark=sparkline([{points:rateSeries,step:4.5,color:'--chart-upload'},{points:rateDown,step:4.5,color:'--chart-download',dash:[4,3]}]);
  const rateValue=el('div',{class:'network-values'},el('span',{},el('em',{},'↑'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.upload_bps||0)+'/s':tr("ui.eb0c326b60ae")),el('span',{},el('em',{},'↓'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.download_bps||0)+'/s':tr("ui.eb0c326b60ae")));
  const ipValues=el('div',{class:'ip-values'},el('span',{},el('i',{class:'ipv4-dot'}),'IPv4 ',el('b',{},ip.has?bytes(ip.bytes[0]):'—')),el('span',{},el('i',{class:'ipv6-dot'}),'IPv6 ',el('b',{},ip.has?bytes(ip.bytes[1]):'—')));

@@ -20,5 +20,7 @@ globalThis.PulseKeyboard = (() => {
     [[71,'Num 7'],[72,'Num 8'],[73,'Num 9'],[75,'Num 4'],[76,'Num 5'],[77,'Num 6'],[79,'Num 1'],[80,'Num 2'],[81,'Num 3']].forEach(([id,label],i)=>add(id,label,num+i%3,2+Math.floor(i/3),1,1,'numpad'));
     add(78,'Num +',num+3,2,1,2,'numpad');add(284,'Num Enter',num+3,4,1,2,'numpad');
     add(82,'Num 0',num,5,2,1,'numpad');add(83,'Num .',num+2,5,1,1,'numpad');
-    return {keys:keys.map(Object.freeze),width:22.7,height:6};
+    const ansi=keys.map(Object.freeze);
+    const layouts={ansi:{keys:ansi,width:22.7},tkl:{keys:ansi.filter(key=>key.group!=='numpad'),width:nav+3}};
+    return {keys:ansi,width:22.7,height:6,layouts};
 })();

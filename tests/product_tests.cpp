@@ -1,6 +1,7 @@
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
+#include "pulsetrace/statistics_buckets.hpp"
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -39,6 +40,24 @@ Json rpc(CoreService &core, const std::string &type, Json params = Json::object(
 } // namespace
 int main() {
     try {
+        {
+            DYNAMIC_TIME_ZONE_INFORMATION zone{};
+            zone.Bias = -345;
+            StatisticsBuckets day(1440, zone), hour(60, zone);
+            require(day.start(1094) == -345 && day.start(1095) == 1095,
+                    "local midnight uses the full UTC offset");
+            require(hour.start(74) == 15 && hour.start(75) == 75,
+                    "local hour follows quarter-hour zone offset");
+            zone.Bias = 300;
+            zone.DaylightBias = -60;
+            zone.DaylightDate = {0, 3, 0, 2, 2, 0, 0, 0};
+            zone.StandardDate = {0, 11, 0, 1, 2, 0, 0, 0};
+            StatisticsBuckets dst_day(1440, zone), dst_hour(60, zone);
+            require(dst_day.start(29550479) == 29549100 && dst_day.start(29550480) == 29550480,
+                    "spring-forward day is 23 elapsed hours");
+            require(dst_hour.start(29891850) == 29891820 && dst_hour.start(29891910) == 29891880,
+                    "fall-back keeps the two occurrences of 01:00 separate");
+        }
         for (const std::wstring argument : {L"", L"D:\\", L"C:\\a b\\", L"a\\\"b"}) {
             int argc = 0;
             const auto command = L"PulseTrace.exe " + quote_windows_argument(argument);
@@ -99,6 +118,13 @@ int main() {
             require(db.history_bounds()["first_minute"]==59,"bounds cover saved history");
             require(db.query(0,30000000,1440)[0]["value"]==9,"all-data query reaches records older than 366 days");
             require(parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":0,"to":30000000,"bucket":1440}})")["type"]=="get_statistics","all-data bridge accepts epoch sentinel");
+            rejects([&]{parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":1,"to":2,"time_zone":"foreign"}})");},"only local and UTC time zones are accepted");
+            for (int bucket : {60, 1440}) {
+                StatisticsBuckets local(bucket, true);
+                const auto rows = db.query(59, 60, bucket, "", 0, true);
+                require(rows.size() == 1 && rows[0]["minute"] == local.start(59) && rows[0]["value"] == 6,
+                        "SQLite local grouping preserves minute-range filtering and totals");
+            }
             rejects([&]{parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":1,"to":30000000}})");},"custom range remains bounded");
             db.prune(60);
             require(db.query(0, 61, 1).size() == 1, "retention cleanup");
@@ -258,6 +284,11 @@ int main() {
                 const auto samples=rpc(identity_core,"get_statistics",{{"from",minute},{"to",minute+1},{"bucket",bucket}})["protocol_samples"];
                 require(samples.size()==3,"core range query preserves capture source and basis identities at every granularity");
                 for(const auto &record:samples)require(record["ipv4_up"]==10&&record["accepted"]==1,"incompatible byte observations are never merged by core overlay");
+                StatisticsBuckets local(bucket,true);
+                const auto local_report=rpc(identity_core,"get_statistics",{{"from",minute},{"to",minute+1},{"bucket",bucket},{"time_zone","local"}});
+                require(local_report["time_zone"]=="local"&&local_report["protocol_samples"].size()==3,"local protocol query preserves observation identity");
+                for(const auto &record:local_report["protocol_samples"])
+                    require(record["minute"]==local.start(minute)&&record["ipv4_up"]==10,"protocol samples retain the exact local bucket start");
             }
             identity_core.stop();
         }

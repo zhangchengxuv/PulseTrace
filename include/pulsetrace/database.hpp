@@ -17,12 +17,13 @@ class DatabaseManager {
     bool save_batch(const Json &batch);
     Json history_bounds() const;
     Json query(std::int64_t from, std::int64_t to, int bucket, const std::string &exclude_session = "",
-               std::int64_t exclude_from = 0) const;
+               std::int64_t exclude_from = 0, bool local = false) const;
     void prune(std::int64_t cutoff);
     void clear(const std::vector<std::string> &pending_sessions={});
     Json network_events(std::int64_t from, std::int64_t to) const;
     Json protocol_samples(std::int64_t from, std::int64_t to, int bucket,
-                          const std::string &exclude_session = "", std::int64_t exclude_from = 0) const;
+                          const std::string &exclude_session = "", std::int64_t exclude_from = 0,
+                          bool local = false) const;
     void export_csv(const std::filesystem::path &file, std::int64_t from, std::int64_t to) const;
     Json traffic_summary(std::int64_t from=0,std::int64_t to=4223371680LL) const;
     void visit_traffic(const std::function<void(const std::string &, const Json &)> &visitor) const;
@@ -33,7 +34,8 @@ class DatabaseManager {
     void prune_rankings(std::int64_t cutoff);
     std::string ranking_icon_path(const std::string &source,const std::string &identity)const;
     void save_usage(const std::string &session,const Json &rows);
-    Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0,int bucket=1)const;
+    Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0,
+               int bucket=1,bool local=false)const;
     void prune_usage(std::int64_t cutoff);
     std::string usage_icon_path(const std::string &identity)const;
     void save_campus_snapshot(const Json &snapshot);

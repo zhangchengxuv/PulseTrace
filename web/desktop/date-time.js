@@ -2,23 +2,53 @@
 globalThis.PulseDate=(()=>{
  const pad=n=>String(n).padStart(2,'0');
  const days=(y,m)=>new Date(Date.UTC(y,m,0)).getUTCDate();
- function parts(minute){const d=new Date(minute*60000);return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:d.getHours(),minute:d.getMinutes()};}
- function parse(p){for(const k of ['year','month','day','hour','minute'])if(!Number.isInteger(p[k]))throw new Error(tr("ui.0660a6c6371d"));
-  if(p.year<1970||p.year>9999||p.month<1||p.month>12||p.day<1||p.day>days(p.year,p.month)||p.hour<0||p.hour>23||p.minute<0||p.minute>59)throw new Error(tr("ui.6e1c4df5b075"));
-  const d=new Date(p.year,p.month-1,p.day,p.hour,p.minute),r=parts(d.getTime()/60000);
-  if(Object.keys(r).some(k=>r[k]!==p[k]))throw new Error(tr("ui.783de662709a"));
-  return d.getTime()/60000;
+ function parts(minute,zone='local'){
+  const d=new Date(minute*60000),prefix=zone==='UTC'?'getUTC':'get';
+  return {year:d[prefix+'FullYear'](),month:d[prefix+'Month']()+1,day:d[prefix+'Date'](),hour:d[prefix+'Hours'](),minute:d[prefix+'Minutes']()};
  }
- const label=minute=>PulseI18n.date(minute*60000,{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+ function parse(p,zone='local'){for(const k of ['year','month','day','hour','minute'])if(!Number.isInteger(p[k]))throw new Error(tr('ui.0660a6c6371d'));
+  if(p.year<1970||p.year>9999||p.month<1||p.month>12||p.day<1||p.day>days(p.year,p.month)||p.hour<0||p.hour>23||p.minute<0||p.minute>59)throw new Error(tr('ui.6e1c4df5b075'));
+  const fields=[p.year,p.month-1,p.day,p.hour,p.minute];
+  const minute=(zone==='UTC'?Date.UTC(...fields):new Date(...fields).getTime())/60000,r=parts(minute,zone);
+  if(Object.keys(r).some(k=>r[k]!==p[k]))throw new Error(tr('ui.783de662709a'));
+  return minute;
+ }
+ function format(minute,options,zone='local'){return PulseI18n.date(minute*60000,zone==='UTC'?{...options,timeZone:'UTC'}:options);}
+ const label=(minute,zone)=>format(minute,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'},zone);
+ function calendarStart(minute,period,zone='local',daysBack=0){
+  const d=new Date(minute*60000),utc=zone==='UTC',get=utc?'getUTC':'get',set=utc?'setUTC':'set';
+  if(period==='week')d[set+'Date'](d[get+'Date']()-(d[get+'Day']()+6)%7);
+  if(period==='month')d[set+'Date'](1);
+  if(daysBack)d[set+'Date'](d[get+'Date']()-daysBack);
+  d[set+'Hours'](0,0,0,0);
+  return Math.floor(d.getTime()/60000);
+ }
+ function hourStart(minute,zone='local'){
+  const now=new Date(minute*60000);
+  if(zone==='UTC')return Math.floor(minute/60)*60;
+  const nominal=minute-now.getMinutes(),offset=now.getTimezoneOffset();
+  if(new Date(nominal*60000).getTimezoneOffset()===offset)return nominal;
+  // A non-hour offset jump can begin in the middle of this civil hour.
+  let low=nominal,high=minute;
+  while(low<high){const mid=Math.floor((low+high)/2);if(new Date(mid*60000).getTimezoneOffset()===offset)high=mid;else low=mid+1;}
+  return low;
+ }
+ function presetStart(preset,end,zone){
+  if(preset==='all')return 0;
+  if(['today','week','month'].includes(preset))return Math.max(0,calendarStart(end-1,preset,zone));
+  return Math.max(0,end-Number(preset));
+ }
+ function preference(key,fallback,allowed){try{const value=localStorage.getItem(key);if(allowed.includes(value))return value;}catch{}return fallback;}
+ function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
  function shift(p,delta){const d=new Date(Date.UTC(p.year,p.month-1+delta,1));return {...p,year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:Math.min(p.day,days(d.getUTCFullYear(),d.getUTCMonth()+1))};}
- return {days,parts,parse,label,shift};
+ return {days,parts,parse,format,label,shift,calendarStart,hourStart,presetStart,preference,savePreference};
 })();
 globalThis.PulseDatePicker=(()=>{
  let current=null;
  const node=(tag,text,attrs={})=>{const e=document.createElement(tag);if(text)e.textContent=text;for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;};
  class Picker{
-  constructor(button,getValue,commit){this.button=button;this.getValue=getValue;this.commit=commit;button.addEventListener('click',()=>this.open());}
-  open(){if(current)current.close();current=this;this.original=this.getValue();this.draft=PulseDate.parts(this.original);this.view={...this.draft};
+  constructor(button,getValue,commit,getZone=()=> 'local'){this.button=button;this.getValue=getValue;this.commit=commit;this.getZone=getZone;button.addEventListener('click',()=>this.open());}
+  open(){if(current)current.close();current=this;this.original=this.getValue();this.draft=PulseDate.parts(this.original,this.getZone());this.view={...this.draft};
    const d=this.dialog=node('dialog','',{class:'datetime-popup','aria-label':this.button.getAttribute('aria-label')||tr("ui.6ac8b7718121")});
    const head=node('div','',{class:'dt-head'}),prev=node('button','‹',{type:'button','aria-label':tr("ui.f9e727223456")}),next=node('button','›',{type:'button','aria-label':tr("ui.3e0b634699d4")});
    this.month=node('strong');this.year=node('input','',{type:'number',min:'1970',max:'9999','aria-label':tr("ui.bff0b9e4a393"),class:'dt-year'});this.year.value=this.view.year;
@@ -33,7 +63,7 @@ globalThis.PulseDatePicker=(()=>{
    d.addEventListener('cancel',e=>{e.preventDefault();this.close();});d.addEventListener('pointerdown',e=>{const r=d.getBoundingClientRect();if(e.target===d&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))this.close();});
    this.reposition=()=>this.position();window.addEventListener('resize',this.reposition);window.addEventListener('scroll',this.reposition,{passive:true});d.showModal();this.position();this.grid.querySelector('[tabindex="0"]')?.focus({preventScroll:true});
   }
-  draw(){const {year:y,month:m}=this.view;this.month.textContent=new Intl.DateTimeFormat(PulseI18n.locale,{month:"long"}).format(new Date(y,m-1,1));this.grid.replaceChildren();const start=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7,today=PulseDate.parts(Date.now()/60000);let selected=null;
+  draw(){const {year:y,month:m}=this.view;this.month.textContent=new Intl.DateTimeFormat(PulseI18n.locale,{month:"long"}).format(new Date(Date.UTC(y,m-1,15)));this.grid.replaceChildren();const start=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7,today=PulseDate.parts(Date.now()/60000,this.getZone());let selected=null;
    for(let i=0;i<start;i++)this.grid.append(node('span'));
    for(let day=1;day<=PulseDate.days(y,m);day++){const b=node('button',String(day),{type:'button',role:'gridcell','data-day':day,tabindex:'-1'});const active=this.draft.year===y&&this.draft.month===m&&this.draft.day===day;
     if(active){b.classList.add('selected');b.setAttribute('aria-selected','true');selected=b;}if(today.year===y&&today.month===m&&today.day===day)b.classList.add('today');
@@ -42,7 +72,7 @@ globalThis.PulseDatePicker=(()=>{
    }(selected||this.grid.querySelector('button')).tabIndex=0;
   }
   position(){if(!this.dialog?.open)return;const r=this.button.getBoundingClientRect(),d=this.dialog,w=Math.min(318,innerWidth-20);d.style.width=w+'px';const h=d.offsetHeight;d.style.left=Math.max(10,Math.min(r.left,innerWidth-w-10))+'px';d.style.top=Math.max(10,Math.min(r.bottom+8,innerHeight-h-10,r.bottom+8+h>innerHeight?r.top-h-8:r.bottom+8))+'px';}
-  confirm(){try{if(!/^\d{1,2}$/.test(this.hour.value)||!/^\d{1,2}$/.test(this.minute.value))throw new Error(tr("ui.9c295dcaf5d4"));const value=PulseDate.parse({...this.draft,hour:Number(this.hour.value),minute:Number(this.minute.value)});this.commit(value);this.close();}catch(e){this.error.textContent=e.message;}}
+  confirm(){try{if(!/^\d{1,2}$/.test(this.hour.value)||!/^\d{1,2}$/.test(this.minute.value))throw new Error(tr("ui.9c295dcaf5d4"));const value=PulseDate.parse({...this.draft,hour:Number(this.hour.value),minute:Number(this.minute.value)},this.getZone());this.commit(value);this.close();}catch(e){this.error.textContent=e.message;}}
   close(){if(!this.dialog)return;window.removeEventListener('resize',this.reposition);window.removeEventListener('scroll',this.reposition);this.dialog.close();this.dialog.remove();this.dialog=null;if(current===this)current=null;this.button.focus({preventScroll:true});}
  }
  return {Picker,get current(){return current;},close(){current?.close();}};

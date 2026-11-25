@@ -1,4 +1,6 @@
 #include "pulsetrace/database.hpp"
+#include "pulsetrace/statistics_buckets.hpp"
+#include <memory>
 #include <fstream>
 #include <sqlite3.h>
 #include <stdexcept>
@@ -6,7 +8,72 @@
 #include <windows.h>
 #include <chrono>
 namespace pulsetrace {
+StatisticsBuckets::StatisticsBuckets(int width, bool local) : width_(width), local_(local && width > 1) {
+    if (local_ && GetDynamicTimeZoneInformation(&zone_) == TIME_ZONE_ID_INVALID)
+        throw std::runtime_error("Cannot determine statistics timezone");
+}
+StatisticsBuckets::StatisticsBuckets(int width, const DYNAMIC_TIME_ZONE_INFORMATION &zone)
+    : width_(width), local_(width > 1), zone_(zone) {}
+std::int64_t StatisticsBuckets::start(std::int64_t minute) {
+    if (!local_)
+        return minute / width_ * width_;
+    if (minute >= first_ && minute < end_)
+        return first_;
+    const TIME_ZONE_INFORMATION fixed{zone_.Bias, {}, zone_.StandardDate, zone_.StandardBias,
+                                      {}, zone_.DaylightDate, zone_.DaylightBias};
+    const auto civil = [&](std::int64_t value) {
+        ULARGE_INTEGER time{};
+        time.QuadPart = (value * 60 + 11644473600LL) * 10000000ULL;
+        const FILETIME file{time.LowPart, time.HighPart};
+        SYSTEMTIME utc{}, local{};
+        if (!FileTimeToSystemTime(&file, &utc) ||
+            !(zone_.TimeZoneKeyName[0] ? SystemTimeToTzSpecificLocalTimeEx(&zone_, &utc, &local)
+                                      : SystemTimeToTzSpecificLocalTime(&fixed, &utc, &local)))
+            throw std::runtime_error("Cannot convert statistics timezone");
+        return local;
+    };
+    const auto now = civil(minute);
+    const auto nominal_hour = minute - now.wMinute;
+    const auto same = [&](std::int64_t value) {
+        const auto other = civil(value);
+        return other.wYear == now.wYear && other.wMonth == now.wMonth && other.wDay == now.wDay &&
+               (width_ == 1440 || (other.wHour == now.wHour && value - other.wMinute == nominal_hour));
+    };
+    // At a clock change, civil days may be shorter or longer, and a civil
+    // hour may repeat or start partway through. Search for its actual edges.
+    const auto boundary = [&](std::int64_t low, std::int64_t high, bool entering) {
+        while (low < high) {
+            const auto middle = low + (high - low) / 2;
+            if (same(middle) == entering)
+                high = middle;
+            else
+                low = middle + 1;
+        }
+        return low;
+    };
+    const int window = width_ == 1440 ? 2880 : 60;
+    first_ = boundary(minute - window, minute, true);
+    end_ = boundary(minute + 1, minute + window, false);
+    return first_;
+}
 namespace {
+void local_bucket(sqlite3_context *context, int, sqlite3_value **values) noexcept {
+    try {
+        const auto minute = sqlite3_value_int64(values[0]);
+        auto *buckets = static_cast<StatisticsBuckets *>(sqlite3_get_auxdata(context, 1));
+        if (buckets) {
+            sqlite3_result_int64(context, buckets->start(minute));
+        } else {
+            auto fresh = std::make_unique<StatisticsBuckets>(sqlite3_value_int(values[1]), true);
+            sqlite3_result_int64(context, fresh->start(minute));
+            sqlite3_set_auxdata(context, 1, fresh.release(), [](void *ptr) {
+                delete static_cast<StatisticsBuckets *>(ptr);
+            });
+        }
+    } catch (const std::exception &error) {
+        sqlite3_result_error(context, error.what(), -1);
+    }
+}
 Json error_detail(sqlite3 *db,const char *phase,const char *sql,const std::string &path){
  const int extended=db?sqlite3_extended_errcode(db):SQLITE_CANTOPEN;
  const char *filename=db?sqlite3_db_filename(db,"main"):nullptr;
@@ -55,6 +122,9 @@ DatabaseManager::DatabaseManager(const std::filesystem::path &file) {
     try {
         sqlite3_extended_result_codes(db_,1);
         sqlite3_busy_timeout(db_, 2000);
+        if (sqlite3_create_function_v2(db_, "stats_local_bucket", 2, SQLITE_UTF8 | SQLITE_DIRECTONLY,
+                                       nullptr, local_bucket, nullptr, nullptr, nullptr) != SQLITE_OK)
+            throw SQLiteError(db_, "register statistics bucket");
         int from=0;
         {Statement version(db_, "PRAGMA user_version");if(version.step()!=SQLITE_ROW)throw std::runtime_error("Cannot read database schema");from=sqlite3_column_int(version.p,0);}
         if(from>supported_schema||from<0)throw std::runtime_error("Database schema is newer than supported; update PulseTrace or restore a compatible backup. Original database preserved.");
@@ -197,13 +267,14 @@ Json DatabaseManager::history_bounds() const {
     return {{"first_minute",sqlite3_column_type(s.p,0)==SQLITE_NULL?Json(nullptr):Json(sqlite3_column_int64(s.p,0))}};
 }
 Json DatabaseManager::query(std::int64_t from, std::int64_t to, int bucket,
-                            const std::string &exclude_session, std::int64_t exclude_from) const {
+                            const std::string &exclude_session, std::int64_t exclude_from, bool local) const {
     if (from < 0 || to <= from || (bucket != 1 && bucket != 60 && bucket != 1440) || to > 4223371680LL || (from != 0 && to - from > 527040))
         throw std::invalid_argument("Invalid minute range (maximum 366 days) or bucket");
-    Statement s(db_, "SELECT (minute/?)*?,module,metric,SUM(value) FROM counts WHERE minute>=? AND minute<? "
+    Statement s(db_, "SELECT CASE WHEN ?2 THEN stats_local_bucket(minute,?1) ELSE (minute/?1)*?1 END,"
+                     "module,metric,SUM(value) FROM counts WHERE minute>=? AND minute<? "
                      "AND NOT(session=? AND minute>=?) GROUP BY 1,module,metric ORDER BY 1,module,metric");
     sqlite3_bind_int(s.p, 1, bucket);
-    sqlite3_bind_int(s.p, 2, bucket);
+    sqlite3_bind_int(s.p, 2, local && bucket > 1);
     sqlite3_bind_int64(s.p, 3, from);
     sqlite3_bind_int64(s.p, 4, to);
     bind_text(s.p, 5, exclude_session);
@@ -332,18 +403,19 @@ Json DatabaseManager::network_events(std::int64_t from, std::int64_t to) const {
     return events;
 }
 Json DatabaseManager::protocol_samples(std::int64_t from, std::int64_t to, int bucket,
-                                       const std::string &exclude, std::int64_t floor) const {
+                                       const std::string &exclude, std::int64_t floor, bool local) const {
     if (from < 0 || to <= from || to > 4223371680LL || (from != 0 && to - from > 527040) || (bucket != 1 && bucket != 60 && bucket != 1440))
         throw std::invalid_argument("Invalid protocol range");
     Statement s(
         db_,
-        "SELECT (minute/?)*?,interface_id,source,basis,CASE WHEN MAX(quality='incomplete_observation') THEN "
+        "SELECT CASE WHEN ?2 THEN stats_local_bucket(minute,?1) ELSE (minute/?1)*?1 END,"
+        "interface_id,source,basis,CASE WHEN MAX(quality='incomplete_observation') THEN "
         "'incomplete_observation' ELSE 'observed_unverified_reference' "
         "END,SUM(ipv4_up),SUM(ipv4_down),SUM(ipv6_up),SUM(ipv6_down),SUM(accepted),SUM(rejected),SUM("
         "unsupported),MAX(events_lost),MAX(buffers_lost) FROM protocol_samples WHERE minute>=? AND minute<? "
         "AND NOT(session=? AND minute>=?) GROUP BY 1,interface_id,source,basis ORDER BY 1,interface_id");
     sqlite3_bind_int(s.p, 1, bucket);
-    sqlite3_bind_int(s.p, 2, bucket);
+    sqlite3_bind_int(s.p, 2, local && bucket > 1);
     sqlite3_bind_int64(s.p, 3, from);
     sqlite3_bind_int64(s.p, 4, to);
     bind_text(s.p, 5, exclude);

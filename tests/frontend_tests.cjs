@@ -59,6 +59,9 @@ check(key(63).x-key(62).x>1&&key(67).x-key(66).x>1,'function group gaps');
 check(key(338).x-15>=.25&&key(69).x-(key(338).x+3)>=.25,'main, navigation and numpad have distinct group spacing');
 check(key(57).w===6.25&&key(42).w===2.25&&key(54).w===2.75,'ANSI relative widths');
 check(v.normalized(25,100)===.5&&v.normalized(0,0)===0,'sqrt normalization and zero guard');
+check(v.normalized(10,10000,'log')>.2&&v.normalized(10,10000,'linear')===.001,'log scale separates low and middle frequencies');
+check(v.heatTick(.5,9995,'linear')===4998&&v.heatTick(.5,10000,'log')===99,'heat legend uses integer ticks');
+check(v.color('arctic',0,0,'linear',true).join() ==='248,250,252','light Arctic zero key uses pearl surface');
 for(const n of [NaN,Infinity,-1])assert.throws(()=>v.color('arctic',n,1));
 for(let i=0;i<6;i++){const expected=v.arcticStops[i].slice(1).match(/../g).map(h=>parseInt(h,16));check(v.arctic(i/5).every((x,c)=>Math.abs(x-expected[c])<.01),'Arctic stop '+i);}
 let prior=v.arctic(0);for(let i=1;i<=4096;i++){const rgb=v.arctic(i/4096);check(rgb.every(x=>Number.isFinite(x)&&x>=0&&x<=255),'Arctic in gamut');check(Math.max(...rgb.map((x,j)=>Math.abs(x-prior[j])))<1,'Arctic continuous interpolation');const fg=v.foreground(rgb)==='#ffffff'?[255,255,255]:[0,0,0];check(v.contrast(rgb,fg)>=4.5,'Arctic readable labels');prior=rgb;}

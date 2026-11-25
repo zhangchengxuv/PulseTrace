@@ -1,4 +1,21 @@
 'use strict';
+function validateKeyboardLayouts(host,theme){
+ const layout=host.querySelector('.heat-toolbar select'),previous=layout.value;
+ const scale=host.querySelectorAll('.heat-toolbar select')[1],previousScale=scale.value;
+ const choose=(select,value)=>{select.value=value;select.dispatchEvent(new Event('change'));};
+ try{
+  choose(layout,'ansi');
+  const caps=host.querySelectorAll('.cap');
+  if(caps.length!==104||new Set([...caps].map(key=>key.dataset.key)).size!==104)throw Error('ANSI 104 DOM mapping invalid');
+  host.querySelector('[data-key="28"]').click();
+  if(host.querySelector('.key-detail').dataset.key!=='28'||!host.querySelector('.key-detail strong').textContent.includes('Enter'))throw Error('Keyboard detail interaction failed');
+  choose(layout,'tkl');choose(scale,'log');
+  if(host.querySelectorAll('.cap').length!==87||host.querySelector('.cap[data-group="numpad"]'))throw Error('TKL DOM mapping invalid');
+  if(PulseDate.preference(keyboardScalePreference,'linear',['linear','log'])!=='log')throw Error('Keyboard scale was not persisted');
+  const rgb=getComputedStyle(host.querySelector('.zero-swatch')).backgroundColor.match(/\d+/g).slice(0,3).map(Number);
+  if(rgb.join()!==PulseViz.color(heatmapName,0,0,'log',theme==='light').join())throw Error('Zero legend differs from keyboard colors');
+ }finally{choose(layout,previous);choose(scale,previousScale);}
+}
 async function validateSettingsCategories(){
  if(!state.self_test||page!=='settings')return;
  const initial=settingsActive,before=await rpc('get_status'),buttons=[...document.querySelectorAll('[data-settings-tab]')];

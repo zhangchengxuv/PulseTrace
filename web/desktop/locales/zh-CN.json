@@ -803,5 +803,22 @@
   "music.count": "次",
   "music.enable": "启用音乐统计",
   "music.threshold": "有效播放阈值（连续秒数）",
-  "music.basis": "仅累计 Windows 报告播放中的检测时长，不代表实际可听时长。暂停、锁屏、休眠及观测间断不累计；缺少完整时间线时无法识别同曲循环。跨播放器合并仅适用于标题、歌手、专辑、曲序与时长均匹配的记录。"
+  "music.basis": "仅累计 Windows 报告播放中的检测时长，不代表实际可听时长。暂停、锁屏、休眠及观测间断不累计；缺少完整时间线时无法识别同曲循环。跨播放器合并仅适用于标题、歌手、专辑、曲序与时长均匹配的记录。",
+  "range.today": "今日",
+  "range.last7": "近 7 天",
+  "range.month": "本月",
+  "range.all_short": "全部",
+  "range.local": "本地时间",
+  "range.utc": "UTC",
+  "range.zone": "时区",
+  "range.day": "天",
+  "range.shortcuts": "快捷时间范围",
+  "keyboard.heatmap": "键盘热力图",
+  "keyboard.ansi": "ANSI 104",
+  "keyboard.tkl": "TKL（87 键）",
+  "keyboard.layout": "键盘布局",
+  "keyboard.scale": "热力色阶",
+  "keyboard.linear": "线性",
+  "keyboard.log": "对数",
+  "keyboard.arctic": "Arctic · 自定义色带"
 }

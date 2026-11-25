@@ -478,5 +478,22 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"music.count",L"次",L"plays"},
 {"music.enable",L"启用音乐统计",L"Enable music statistics"},
 {"music.threshold",L"有效播放阈值（连续秒数）",L"Qualified play threshold (continuous seconds)"},
-{"music.basis",L"仅累计 Windows 报告播放中的检测时长，不代表实际可听时长。暂停、锁屏、休眠及观测间断不累计；缺少完整时间线时无法识别同曲循环。跨播放器合并仅适用于标题、歌手、专辑、曲序与时长均匹配的记录。",L"Counts detected time reported as Playing by Windows, not audible listening time. Pauses, lock, sleep and observation gaps are excluded. Same-song loops require a complete timeline. Cross-player merging requires matching title, artist, album, track number and duration."}
+{"music.basis",L"仅累计 Windows 报告播放中的检测时长，不代表实际可听时长。暂停、锁屏、休眠及观测间断不累计；缺少完整时间线时无法识别同曲循环。跨播放器合并仅适用于标题、歌手、专辑、曲序与时长均匹配的记录。",L"Counts detected time reported as Playing by Windows, not audible listening time. Pauses, lock, sleep and observation gaps are excluded. Same-song loops require a complete timeline. Cross-player merging requires matching title, artist, album, track number and duration."},
+{"range.today",L"今日",L"Today"},
+{"range.last7",L"近 7 天",L"Last 7 days"},
+{"range.month",L"本月",L"This month"},
+{"range.all_short",L"全部",L"All"},
+{"range.local",L"本地时间",L"Local"},
+{"range.utc",L"UTC",L"UTC"},
+{"range.zone",L"时区",L"Time zone"},
+{"range.day",L"天",L"Day"},
+{"range.shortcuts",L"快捷时间范围",L"Quick time ranges"},
+{"keyboard.heatmap",L"键盘热力图",L"Keyboard heatmap"},
+{"keyboard.ansi",L"ANSI 104",L"ANSI 104"},
+{"keyboard.tkl",L"TKL（87 键）",L"TKL (87 keys)"},
+{"keyboard.layout",L"键盘布局",L"Keyboard layout"},
+{"keyboard.scale",L"热力色阶",L"Heatmap scale"},
+{"keyboard.linear",L"线性",L"Linear"},
+{"keyboard.log",L"对数",L"Log"},
+{"keyboard.arctic",L"Arctic · 自定义色带",L"Arctic · Custom Colormap"}
 };}

@@ -125,6 +125,11 @@ void validate_request(const Json &r) {
             throw std::invalid_argument("enabled must be boolean");
     } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="export_app_usage" || type=="get_usage_icon" || type=="get_music" || type=="export_music") {
         allowed = {"from", "to", "bucket"};
+        if (type == "get_statistics" || type == "get_app_usage") {
+            allowed.insert("time_zone");
+            if (p.contains("time_zone") && p["time_zone"] != "local" && p["time_zone"] != "UTC")
+                throw std::invalid_argument("Invalid statistics time zone");
+        }
         if(type=="get_usage_icon"){allowed.insert("key");if(!p.contains("key")||!p["key"].is_string()||p["key"].get<std::string>().size()>2048)throw std::invalid_argument("Invalid usage icon key");}
         if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
             !p["to"].is_number_integer())

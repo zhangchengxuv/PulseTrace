@@ -3,15 +3,17 @@ globalThis.PulseDashboard=(()=>{
  const mouseKeys=['left','right','middle','mouse4','mouse5'];
  const total=(rows,module,metrics=null)=>rows.reduce((n,r)=>n+(r.module===module&&(!metrics||metrics.includes(r.metric))?Number(r.value):0),0);
  function series(rows,module,metrics=null){const map=new Map();for(const r of rows)if(r.module===module&&(!metrics||metrics.includes(r.metric)))map.set(Number(r.minute),(map.get(Number(r.minute))||0)+Number(r.value));return [...map].sort((a,b)=>a[0]-b[0]);}
- function inputs(rows,bucket=60,limit=96){
+ function inputs(rows,bucket=60,limit=96,aligned=false){
   if(!Number.isInteger(bucket)||bucket<1||!Number.isInteger(limit)||limit<2)throw new RangeError('Invalid chart aggregation');
   const all=rows.filter(r=>r.module==='keyboard'||r.module==='coverage'||r.module==='mouse'&&mouseKeys.includes(r.metric));
   if(!all.length)return [];
-  const first=Math.min(...all.map(r=>r.minute)),last=Math.max(...all.map(r=>r.minute));
+  let first=Infinity,last=-Infinity;
+  for(const {minute} of all){first=Math.min(first,minute);last=Math.max(last,minute);}
   let step=Math.max(bucket,Math.ceil((last-first+bucket)/(limit*bucket))*bucket);
-  while(Math.floor(last/step)-Math.floor(first/step)+1>limit)step+=bucket;
+  while(!aligned&&Math.floor(last/step)-Math.floor(first/step)+1>limit)step+=bucket;
   const bins=new Map();
-  for(const r of all){const m=Math.floor(r.minute/step)*step;if(!bins.has(m))bins.set(m,{minute:m,keyboard:null,mouse:null,coverage:0,step});const b=bins.get(m);
+  for(const r of all){const m=aligned?(step===bucket?r.minute:Math.floor((r.minute-first)/step)):Math.floor(r.minute/step)*step;if(!bins.has(m))bins.set(m,{minute:aligned?r.minute:m,keyboard:null,mouse:null,coverage:0,step});const b=bins.get(m);
+   if(aligned)b.minute=Math.min(b.minute,r.minute);
    if(r.module==='coverage')b.coverage+=Number(r.value);else b[r.module]=(b[r.module]||0)+Number(r.value);
   }
   return [...bins.values()].sort((a,b)=>a.minute-b.minute).map(b=>({...b,keyboard:b.keyboard??(b.coverage>0?0:null),mouse:b.mouse??(b.coverage>0?0:null)}));

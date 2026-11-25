@@ -1,4 +1,5 @@
 #include "pulsetrace/core_service.hpp"
+#include "pulsetrace/statistics_buckets.hpp"
 #include "pulsetrace/protocol.hpp"
 #include "pulsetrace/version.hpp"
 #include "pulsetrace/localization.hpp"
@@ -510,11 +511,13 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
         for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
         const int bucket=type=="export_app_usage"?1:p.value("bucket",1);
-        auto values=database().usage(from,to,session_,floor,bucket);
-        for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)values.push_back(r);
+        const bool local=type=="get_app_usage"&&p.value("time_zone","UTC")=="local";
+        StatisticsBuckets buckets(bucket,local);
+        auto values=database().usage(from,to,session_,floor,bucket,local);
+        for(auto r:live)if(r["minute"]>=from&&r["minute"]<to){r["minute"]=buckets.start(r["minute"]);values.push_back(std::move(r));}
         if(type!="export_app_usage"){
             std::map<std::pair<std::int64_t,std::string>,Json> grouped;
-            for(auto r:values){r["minute"]=r["minute"].get<std::int64_t>()/bucket*bucket;const auto key=std::make_pair(r["minute"].get<std::int64_t>(),r["key"].get<std::string>());
+            for(auto r:values){const auto key=std::make_pair(r["minute"].get<std::int64_t>(),r["key"].get<std::string>());
                 if(!grouped.contains(key))grouped[key]=r;else for(const char *f:{"foreground_ms","active_ms"})grouped[key][f]=grouped[key][f].get<std::uint64_t>()+r[f].get<std::uint64_t>();}
             values=Json::array();for(const auto &[key,r]:grouped)values.push_back(r);
         }
@@ -594,7 +597,9 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         const auto from = p.at("from").get<std::int64_t>(), to = p.at("to").get<std::int64_t>(),
                    floor = utc_now_ms() / 60000 - 119;
         const int bucket = p.value("bucket", 1);
-        auto historical = database().query(from, to, bucket, session_, floor);
+        const bool local = p.value("time_zone", "UTC") == "local";
+        StatisticsBuckets buckets(bucket, local);
+        auto historical = database().query(from, to, bucket, session_, floor, local);
         Json live;
         {
             std::lock_guard lock(mutex_);
@@ -608,7 +613,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         for (const auto &r : live) {
             auto minute = r["minute"].get<std::int64_t>();
             if (minute >= floor && minute >= from && minute < to)
-                values[{minute / bucket * bucket, r["module"], r["metric"]}] +=
+                values[{buckets.start(minute), r["module"], r["metric"]}] +=
                     r["value"].get<std::int64_t>();
         }
         Json result = Json::array();
@@ -623,7 +628,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             if (ms >= from * 60000 && ms < to * 60000)
                 events.push_back(e);
         }
-        auto protocol = database().protocol_samples(from, to, bucket, session_, floor);
+        auto protocol = database().protocol_samples(from, to, bucket, session_, floor, local);
         // Capture sources and packet-length bases are distinct observations, never additive.
         using ProtocolKey = std::tuple<std::int64_t, std::string, std::string, std::string>;
         const auto protocol_key = [](const Json &record) -> ProtocolKey {
@@ -639,7 +644,6 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             }
         std::map<ProtocolKey, Json> grouped;
         const auto merge = [&](Json p) {
-            p["minute"] = p["minute"].get<std::int64_t>() / bucket * bucket;
             const auto key = protocol_key(p);
             if (!grouped.contains(key)) {
                 grouped[key] = std::move(p);
@@ -656,8 +660,10 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         };
         for (const auto &p : protocol)
             merge(p);
-        for (const auto &[key, p] : live_protocol)
-            merge(p);
+        for (auto &[key, p] : live_protocol) {
+            p["minute"] = buckets.start(p["minute"]);
+            merge(std::move(p));
+        }
         protocol = Json::array();
         for (const auto &[key, p] : grouped)
             protocol.push_back(p);
@@ -667,7 +673,7 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
                 {"legacy_protocol_split", "unknown"},
                 {"from", from},
                 {"to", to},
-                {"time_zone", "UTC"},
+                {"time_zone", local ? "local" : "UTC"},
                 {"freshness", "实时聚合快照 + SQLite 历史；快照约 1 秒更新"}};
     }
     if (type == "set_config") {

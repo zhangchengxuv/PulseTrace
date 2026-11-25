@@ -19,3 +19,7 @@ progress{width:min(100%,420px);height:8px;accent-color:var(--accent)}
 @container(max-width:760px){.settings-layout{grid-template-columns:minmax(0,1fr)}.settings-tabs{position:static;grid-template-columns:repeat(4,minmax(0,1fr))}.settings-tabs button{text-align:center;padding:9px 5px}.settings-body .settings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@container(max-width:480px){.settings-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-body .settings-grid{grid-template-columns:minmax(0,1fr)}}
 .settings-body .settings-grid label.checkbox{grid-column:auto}.settings-body [role=status]:empty{display:none}.settings-body .settings-form-actions>[role=status]{margin:0}.settings-body .settings-form-actions{margin-top:2px}
 .settings-body .checkbox span small{display:block;margin-top:2px;font-weight:400}
+
+.range-shortcuts{display:flex;flex-wrap:wrap;gap:5px}
+.range-shortcuts button{padding:7px 10px;border-radius:999px;font-size:12px}
+.range-shortcuts button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}

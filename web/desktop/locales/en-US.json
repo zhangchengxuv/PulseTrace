@@ -803,5 +803,22 @@
   "music.count": "plays",
   "music.enable": "Enable music statistics",
   "music.threshold": "Qualified play threshold (continuous seconds)",
-  "music.basis": "Counts detected time reported as Playing by Windows, not audible listening time. Pauses, lock, sleep and observation gaps are excluded. Same-song loops require a complete timeline. Cross-player merging requires matching title, artist, album, track number and duration."
+  "music.basis": "Counts detected time reported as Playing by Windows, not audible listening time. Pauses, lock, sleep and observation gaps are excluded. Same-song loops require a complete timeline. Cross-player merging requires matching title, artist, album, track number and duration.",
+  "range.today": "Today",
+  "range.last7": "Last 7 days",
+  "range.month": "This month",
+  "range.all_short": "All",
+  "range.local": "Local",
+  "range.utc": "UTC",
+  "range.zone": "Time zone",
+  "range.day": "Day",
+  "range.shortcuts": "Quick time ranges",
+  "keyboard.heatmap": "Keyboard heatmap",
+  "keyboard.ansi": "ANSI 104",
+  "keyboard.tkl": "TKL (87 keys)",
+  "keyboard.layout": "Keyboard layout",
+  "keyboard.scale": "Heatmap scale",
+  "keyboard.linear": "Linear",
+  "keyboard.log": "Log",
+  "keyboard.arctic": "Arctic · Custom Colormap"
 }
