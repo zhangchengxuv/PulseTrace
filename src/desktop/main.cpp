@@ -3,6 +3,7 @@
 #include "pulsetrace/desktop/webview_host.hpp"
 #include "pulsetrace/desktop/campus_portal_host.hpp"
 #include "pulsetrace/desktop/caption_bar.hpp"
+#include "pulsetrace/desktop/startup.hpp"
 #include "pulsetrace/probe_report.hpp"
 #include "pulsetrace/protocol.hpp"
 #include "pulsetrace/update.hpp"
@@ -18,6 +19,7 @@
 #include <shobjidl.h>
 #include <wincrypt.h>
 #include <thread>
+#include <system_error>
 using namespace pulsetrace;
 namespace {
 constexpr UINT tray_message = WM_APP + 1, response_message = WM_APP + 2;
@@ -82,7 +84,9 @@ class DesktopApplication {
     Json appearance() const{return {{"transparency",caption_.transparency()},{"reduced_motion",caption_.reduced_motion()},{"active",caption_.active()},{"dark",caption_.dark()}};}
     HWND window_{};
     HINSTANCE instance_{};
-    std::filesystem::path data_, exe_, test_summary_png_;
+    std::filesystem::path data_, exe_, exe_file_, test_summary_png_;
+    StartupTaskState startup_task_;
+    const char *startup_stage_="Process initialization";
     std::unique_ptr<CoreService> core_;
     std::unique_ptr<WebViewHost> web_;
     std::unique_ptr<CampusPortalHost> portal_;
@@ -393,29 +397,26 @@ void DesktopApplication::command(Json request) {
         web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"opened",true}}}});
         return;
     }
-    if (request["type"] == "set_autostart") {
-        const bool enabled = request.at("params").at("enabled").get<bool>();
-        HKEY key{};
-        const auto result =
-            RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
-                            nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr);
-        if (result != ERROR_SUCCESS)
-            throw std::runtime_error("Cannot open user startup settings");
-        wchar_t path[32768]{};
-        GetModuleFileNameW(nullptr, path, 32768);
-        const auto value = quote_windows_argument(path) + L" --background --data-dir " +
-                           quote_windows_argument(data_.wstring());
-        auto error = enabled ? RegSetValueExW(key, L"PulseTrace", 0, REG_SZ,
-                                              reinterpret_cast<const BYTE *>(value.c_str()),
-                                              static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)))
-                             : RegDeleteValueW(key, L"PulseTrace");
-        RegCloseKey(key);
-        if (error != ERROR_SUCCESS && error != ERROR_FILE_NOT_FOUND)
-            throw std::runtime_error("Cannot update startup setting");
-        web_->post({{"type", "response"},
-                    {"request_id", request["request_id"]},
-                    {"ok", true},
-                    {"data", {{"autostart", enabled}}}});
+    if(kind=="get_autostart"||kind=="set_autostart"){
+        const auto &params=request["params"];
+        const auto mode=kind=="set_autostart"&&params.value("enabled",false)?params.value("method","run"):"off";
+        try{
+            if(kind=="set_autostart"){
+                if(selftest_)throw std::runtime_error("Autostart is disabled in the isolated self-test");
+                startup_task_=set_startup_mode(mode,exe_file_,data_);
+            }else if(!selftest_)startup_task_=read_startup_task();
+            const auto run=selftest_?StartupRunState{}:read_startup_run();
+            Json value={{"autostart",startup_task_.enabled||(run.registered&&!run.blocked)},
+                        {"autostart_run_registered",run.registered},{"autostart_run_blocked",run.blocked},
+                        {"autostart_task_registered",startup_task_.registered},{"autostart_task_enabled",startup_task_.enabled},
+                        {"autostart_task_available",startup_task_.available}};
+            web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",std::move(value)}});
+        }catch(const std::exception &e){
+            const auto *failure=dynamic_cast<const std::system_error *>(&e);
+            const bool denied=failure&&(failure->code().value()==E_ACCESSDENIED||failure->code().value()==ERROR_ACCESS_DENIED);
+            web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",false},
+                        {"error",{{"code",denied?"STARTUP_ACCESS_DENIED":"STARTUP_FAILED"},{"message",e.what()}}}});
+        }
         return;
     }
     if (request["type"] == "ping") {
@@ -438,15 +439,10 @@ void DesktopApplication::command(Json request) {
                 json["data"]["data_directory"] = directory;
                 json["data"]["installation_mode"]=installed?"installed":"portable";
                 json["data"]["effective_language"]=effective_language(json["data"]["config"].value("language","system"));
-                HKEY key{};
-                bool enabled = false;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
-                                  KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
-                    enabled = RegQueryValueExW(key, L"PulseTrace", nullptr, nullptr, nullptr, nullptr) ==
-                              ERROR_SUCCESS;
-                    RegCloseKey(key);
-                }
-                json["data"]["autostart"] = enabled;
+                const auto run=test?StartupRunState{}:read_startup_run();
+                json["data"]["autostart"]=run.registered&&!run.blocked;
+                json["data"]["autostart_run_registered"]=run.registered;
+                json["data"]["autostart_run_blocked"]=run.blocked;
             }
             auto *response = new Response{generation, std::move(json)};
             if (!PostMessageW(hwnd, response_message, 0, reinterpret_cast<LPARAM>(response)))
@@ -551,7 +547,14 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("latest")&&response->json["data"].contains("rule"))response->json["data"]["runtime_status"]=campus_runtime_status_;
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("language")){set_ui_language(response->json["data"].value("language","system"));}
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config")){
-            response->json["data"]["appearance"]=appearance();
+            auto &data=response->json["data"];
+            data["appearance"]=appearance();
+            if(data.contains("autostart")){
+                data["autostart"]=data.value("autostart",false)||startup_task_.enabled;
+                data["autostart_task_available"]=startup_task_.available;
+                data["autostart_task_registered"]=startup_task_.registered;
+                data["autostart_task_enabled"]=startup_task_.enabled;
+            }
         }
         if(portal_&&response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("campus_enabled")){
             const auto context=core_->campus_portal_context();
@@ -763,7 +766,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return DefWindowProcW(h, m, w, l);
     }
 }
-int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
+int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) try {
     instance_ = instance;
     selftest_ = options.selftest;
     picker_test_ = options.picker_test;
@@ -773,10 +776,13 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     expect_failure_ = options.expect_failure;
     crash_test_ = options.crash_test;
     start_tick_ = GetTickCount64();
+    startup_stage_="Executable path";
     wchar_t executable[32768]{};
-    if (!GetModuleFileNameW(nullptr, executable, 32768))
-        throw std::runtime_error("Cannot resolve executable path");
-    exe_ = std::filesystem::path(executable).parent_path();
+    const auto length=GetModuleFileNameW(nullptr,executable,32768);
+    if(!length||length>=32768)throw std::runtime_error("Cannot resolve executable path");
+    exe_file_=std::filesystem::path(executable);
+    exe_=exe_file_.parent_path();
+    startup_stage_="Data directory";
     data_ = DataDirectoryManager::resolve(exe_,options.data);
     try {
         std::filesystem::create_directories(data_ / "logs");
@@ -786,7 +792,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         if (!probe)
             throw std::runtime_error("Data directory is not writable");
     } catch (const std::exception &) {
-        if (selftest_)
+        if (selftest_ || options.background)
             throw;
         if(std::filesystem::exists(exe_/L"installed.ini"))throw std::runtime_error("Installed data directory is not writable. Repair permissions or choose another installation directory. Data is preserved.");
         const auto answer =
@@ -811,6 +817,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         CoTaskMemFree(path);
         std::filesystem::create_directories(data_ / "logs");
     }
+    startup_stage_="Data lock";
     std::uint64_t hash = 1469598103934665603ULL;
     for (auto c : std::filesystem::weakly_canonical(data_).wstring()) {
         hash ^= static_cast<std::uint64_t>(towlower(c));
@@ -828,6 +835,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     // Filesystem lock also covers other logon sessions and executable copies.
     data_lock_=CreateFileW((data_/L"data.lock").c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(data_lock_==INVALID_HANDLE_VALUE)throw std::runtime_error("PulseTrace data directory is already in use or cannot be locked; existing data preserved");
+    startup_stage_="Desktop log";
     const auto logfile = data_ / "logs" / "desktop.log";
     if (std::filesystem::exists(logfile) && std::filesystem::file_size(logfile) > 1024 * 1024)
         MoveFileExW(logfile.c_str(), (data_ / "logs" / "desktop.previous.log").c_str(),
@@ -835,6 +843,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     log_.open(logfile, std::ios::app);
     if (!log_)
         throw std::runtime_error("Application data directory is not writable");
+    startup_stage_="Statistics and settings";
     if(!selftest_)cloud_apply_pending_restore(data_);
     core_ = std::make_unique<CoreService>(data_);
     set_ui_language(core_->status()["config"].value("language","system"));
@@ -850,6 +859,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     if(!selftest_&&core_->status()["config"].value("check_updates_on_start",false)){
         const auto cfg=core_->status()["config"];updates_->check(cfg.value("update_channel","stable"),cfg.value("update_source","auto"));
     }
+    startup_stage_="Application window";
     WNDCLASSW wc{};
     wc.hInstance = instance;
     wc.style=CS_DBLCLKS;
@@ -940,6 +950,11 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
     web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));
     tray();
+    if(!selftest_&&options.data.empty()&&!options.core_seconds){
+        try{if(calibrate_startup_run(exe_file_))diagnostic("Updated moved PulseTrace startup path");}
+        catch(const std::exception &){diagnostic("Cannot update moved PulseTrace startup path");}
+        startup_task_=read_startup_task();
+    }
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);
     if (!options.background || !tray_added_)
         open();
@@ -947,6 +962,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         hide();
         pending_open_ = true;
     }
+    startup_stage_=nullptr;
     MSG msg{};
     int result{};
     while ((result = GetMessageW(&msg, nullptr, 0, 0)) > 0) {
@@ -969,12 +985,20 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
         return failure_observed_ ? 0 : 2;
     return selftest_ ? (ready_count_ == cycles_ && ping_count_ >= cycles_ * 2 && preview_ok_ ? 0 : 2)
                      : (result == -1 ? 1 : 0);
+}catch(const std::exception &error){
+    if(startup_stage_&&!options.selftest){
+        const auto *system=dynamic_cast<const std::system_error *>(&error);
+        write_startup_error(startup_stage_,system?static_cast<unsigned long>(system->code().value()):0);
+    }
+    throw;
+}catch(...){
+    if(startup_stage_&&!options.selftest)write_startup_error(startup_stage_);
+    throw;
 }
 } // namespace
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
     const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(com))
-        return 1;
+    if (FAILED(com)){write_startup_error("COM initialization",static_cast<unsigned long>(com));return 1;}
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     (void)command;
     int argc{};
@@ -1025,7 +1049,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR command, int) {
             const auto directory=options.data.empty()?executable_data_directory():options.data;
             std::ofstream out(directory/"logs"/"desktop.log",std::ios::app);out<<"SELFTEST FAIL: "<<e.what()<<'\n';
         }
-        if (!options.selftest)
+        if (!options.selftest&&!options.background)
             MessageBoxW(nullptr, (std::wstring(ui_text("native.ui_failed"))+L"\n\n"+widen(e.what())).c_str(), ui_text("native.start_failed"), MB_OK | MB_ICONERROR);
     }
     CoUninitialize();

@@ -1,6 +1,42 @@
 ﻿'use strict';
 let settingsActive='general';
 function resumeSettingsPanel(){if(page==='settings')document.querySelector('[data-settings-group]:not([hidden])')?.onSettingsShown?.();}
+function renderAutostart(host,group){
+ const task=el('option',{value:'task'},tr('startup.task'));
+ const mode=el('select',{},el('option',{value:'off'},tr('startup.off')),el('option',{value:'run'},tr('startup.run')),task);
+ const notice=el('p',{class:'startup-status muted',role:'status'});
+ const feedback=el('p',{class:'startup-status muted',role:'status'});
+ const save=el('button',{type:'button',class:'secondary'},tr('startup.apply'));
+ let saving=false;
+ const show=status=>{
+  Object.assign(state,status);
+  mode.value=status.autostart_task_registered?'task':status.autostart_run_registered?'run':'off';
+  task.disabled=status.autostart_task_available===false&&!status.autostart_task_registered;
+  notice.textContent=status.autostart_run_blocked?tr('startup.run_blocked'):
+   status.autostart_task_registered&&!status.autostart_task_enabled?tr('startup.task_blocked'):
+   status.autostart_task_available===false?tr('startup.task_unavailable'):'';
+ };
+ save.onclick=async()=>{
+  saving=true;save.disabled=true;mode.disabled=true;feedback.textContent='';
+  try{
+   const value=mode.value;
+   show(await rpc('set_autostart',{enabled:value!=='off',...(value==='off'?{}:{method:value})}));
+   feedback.textContent=tr('startup.saved');
+  }catch(e){
+   const denied=e.code==='STARTUP_ACCESS_DENIED'&&(mode.value==='task'||state.autostart_task_registered);
+   feedback.textContent=tr(denied?'startup.elevation':'startup.failed');
+   try{show(await rpc('get_autostart'));}catch{}
+  }finally{saving=false;save.disabled=false;mode.disabled=false;}
+ };
+ group.onSettingsShown=async()=>{
+  if(saving||!host.isConnected||group.hidden)return;
+  try{const result=await rpc('get_autostart');if(host.isConnected&&!saving)show(result);}
+  catch{}
+ };
+ show(state);
+ host.prepend(el('div',{class:'startup-settings'},el('label',{},el('strong',{},tr('startup.label')),mode),
+  notice,el('div',{class:'actions'},save,feedback)));
+}
 function settings(c){
  const groups={};for(const key of ['general','monitoring','campus','cloud','data','updates','about'])groups[key]=el('section',{class:'settings-section','data-settings-group':key},el('h3',{class:'settings-group-title'},tr('settings.'+key)));
  const cfg=state.config||{},general=el('div',{class:'settings-grid'}),monitor=el('div',{class:'settings-grid'}),theme=el('select',{},...[['system',tr('theme.system')],['light',tr('theme.pearl')],['dark',tr('theme.ocean')]].map(([v,t])=>el('option',{value:v},t)));theme.value=cfg.theme||'system';
@@ -10,8 +46,7 @@ function settings(c){
  const feedbackNodes=Array.from({length:3},()=>el('p',{class:'muted',role:'status'})),feedback=text=>feedbackNodes.forEach(n=>n.textContent=text),save=async group=>{try{if(group!=='general'&&(!days.checkValidity()||!flush.checkValidity()))throw Error(tr('settings.invalid'));await rpc('set_config',group==='general'?{theme:theme.value,close_to_tray:close.checked,capture_on_launch:launch.checked}:{retention_days:Number(days.value),flush_seconds:Number(flush.value),network_interface:interfaces.value});applyTheme(theme.value);feedback(tr('ui.1bd91a7d0c53'));state=await rpc('get_status');}catch(e){error(e);}};
  const generalActions=el('div',{class:'actions settings-form-actions'},el('button',{onclick:()=>save('general')},tr('ui.a3030bf8f16d')),feedbackNodes[0]);general.append(generalActions);monitor.append(el('div',{class:'actions settings-form-actions'},el('button',{onclick:()=>save('monitoring')},tr('ui.a3030bf8f16d')),feedbackNodes[1]));
  renderLanguageSettings(general,true);general.prepend(general.lastElementChild);general.append(generalActions);groups.general.append(panel(tr('ui.57907a69fc5a'),general));
- const startup=el('input',{type:'checkbox',checked:state.autostart||false});startup.onchange=async()=>{try{await rpc('set_autostart',{enabled:startup.checked});feedback(tr('ui.434203a723b4'));}catch(e){startup.checked=!startup.checked;error(e);}};
- general.prepend(el('label',{class:'checkbox'},startup,tr('ui.eaaae3972868')));
+ renderAutostart(general,groups.general);
  groups.monitoring.append(panel(tr('settings.monitoring'),monitor));const music=el('div');renderMusicSettings(music);groups.monitoring.append(music);const usage=el('div');renderUsageSettings(usage);groups.monitoring.append(disclosure('settings.usage',tr('usage.title'),null,usage));const campus=el('div');renderCampusSettings(campus);groups.campus.append(campus);groups.monitoring.append(rankingConfiguration());renderCloudSettings(groups.cloud);
  renderUpdateSettings(groups.updates,groups.data);
  groups.data.append(panel(tr('ui.b1326f0910b9'),help(tr('ui.details'),el('p',{},tr('ui.c30c4947f572'))),archiveFolderButton()));

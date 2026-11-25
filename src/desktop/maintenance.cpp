@@ -1,6 +1,7 @@
 #include "pulsetrace/database.hpp"
 #include "pulsetrace/core_service.hpp"
 #include "pulsetrace/installation.hpp"
+#include "pulsetrace/desktop/startup.hpp"
 #include <shellapi.h>
 #include <objbase.h>
 #include <restartmanager.h>
@@ -44,7 +45,19 @@ int wmain(int argc,wchar_t **argv){try{
  if(argc==3&&std::wstring(argv[1])==L"--write-user-sid"){std::wofstream file{std::filesystem::path(argv[2])};file<<current_user_sid();if(!file)throw std::runtime_error("Cannot save original-user identity");return 0;}
  if(argc==3&&std::wstring(argv[1])==L"--check-install-path"){check_install_path(argv[2]);return 0;}
  if(argc==5&&std::wstring(argv[1])==L"--permissions"){set_install_permissions(argv[2],argv[3],std::wstring(argv[4])==L"unlock");return 0;}
- if(argc==5&&std::wstring(argv[1])==L"--existing-autostart"){update_existing_autostart(argv[2],argv[3],std::wstring(argv[4])==L"remove");return 0;}
+ if(argc==5&&std::wstring(argv[1])==L"--existing-autostart"){
+  const bool remove=std::wstring(argv[4])==L"remove";
+  update_existing_autostart(argv[2],argv[3],remove);
+  if(remove){
+   const auto com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+   if(SUCCEEDED(com)){
+    try{remove_startup_task_for_installation(argv[3],canonical_path(std::filesystem::path(argv[2])/L"PulseTrace.exe"));}
+    catch(...){CoUninitialize();throw;}
+    CoUninitialize();
+   }
+  }
+  return 0;
+ }
  if(argc==3&&std::wstring(argv[1])==L"--quiesce-data"){quiesce_data(argv[2]);return 0;}
  if(argc==3&&std::wstring(argv[1])==L"--close"){close_application(argv[2]);return 0;}
  if(argc==4&&(std::wstring(argv[1])==L"--backup"||std::wstring(argv[1])==L"--import")){copy_data(argv[2],argv[3],std::wstring(argv[1])==L"--import");return 0;}

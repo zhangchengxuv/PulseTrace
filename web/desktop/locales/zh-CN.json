@@ -856,5 +856,16 @@
   "summary.save_failed": "无法保存 PNG。",
   "summary.peak": "峰值输入速率",
   "summary.peak_units": "每分钟按键数／按键与点击总数",
-  "summary.saved": "PNG 已保存。"
+  "summary.saved": "PNG 已保存。",
+  "startup.label": "Windows 登录时启动",
+  "startup.off": "关闭",
+  "startup.run": "Windows 启动项",
+  "startup.task": "计划任务（最高可用权限）",
+  "startup.apply": "保存自启设置",
+  "startup.run_blocked": "此启动项已被 Windows 任务管理器禁用。重新保存 Windows 启动项即可启用。",
+  "startup.task_blocked": "PulseTrace 登录任务已在任务计划程序中禁用。重新保存此方式即可启用。",
+  "startup.task_unavailable": "当前无法访问 Windows 任务计划程序。",
+  "startup.elevation": "请以管理员身份运行 PulseTrace，再修改登录计划任务。",
+  "startup.failed": "Windows 无法更新 PulseTrace 自启设置。",
+  "startup.saved": "自启设置已保存。"
 }

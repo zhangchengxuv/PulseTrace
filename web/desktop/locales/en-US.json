@@ -856,5 +856,16 @@
   "summary.save_failed": "The PNG could not be saved.",
   "summary.peak": "Peak input rate",
   "summary.peak_units": "Keys / keys and clicks per minute",
-  "summary.saved": "PNG saved."
+  "summary.saved": "PNG saved.",
+  "startup.label": "Start at Windows sign-in",
+  "startup.off": "Off",
+  "startup.run": "Windows startup",
+  "startup.task": "Task Scheduler (highest available privileges)",
+  "startup.apply": "Save startup setting",
+  "startup.run_blocked": "Windows Task Manager disabled this startup entry. Save Windows startup again to re-enable it.",
+  "startup.task_blocked": "The PulseTrace logon task is disabled in Task Scheduler. Save this method again to enable it.",
+  "startup.task_unavailable": "Task Scheduler is currently unavailable.",
+  "startup.elevation": "Run PulseTrace as administrator to change the logon task.",
+  "startup.failed": "Windows could not update the PulseTrace startup setting.",
+  "startup.saved": "Startup setting saved."
 }

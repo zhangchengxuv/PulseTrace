@@ -531,5 +531,16 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"summary.save_failed",L"无法保存 PNG。",L"The PNG could not be saved."},
 {"summary.peak",L"峰值输入速率",L"Peak input rate"},
 {"summary.peak_units",L"每分钟按键数／按键与点击总数",L"Keys / keys and clicks per minute"},
-{"summary.saved",L"PNG 已保存。",L"PNG saved."}
+{"summary.saved",L"PNG 已保存。",L"PNG saved."},
+{"startup.label",L"Windows 登录时启动",L"Start at Windows sign-in"},
+{"startup.off",L"关闭",L"Off"},
+{"startup.run",L"Windows 启动项",L"Windows startup"},
+{"startup.task",L"计划任务（最高可用权限）",L"Task Scheduler (highest available privileges)"},
+{"startup.apply",L"保存自启设置",L"Save startup setting"},
+{"startup.run_blocked",L"此启动项已被 Windows 任务管理器禁用。重新保存 Windows 启动项即可启用。",L"Windows Task Manager disabled this startup entry. Save Windows startup again to re-enable it."},
+{"startup.task_blocked",L"PulseTrace 登录任务已在任务计划程序中禁用。重新保存此方式即可启用。",L"The PulseTrace logon task is disabled in Task Scheduler. Save this method again to enable it."},
+{"startup.task_unavailable",L"当前无法访问 Windows 任务计划程序。",L"Task Scheduler is currently unavailable."},
+{"startup.elevation",L"请以管理员身份运行 PulseTrace，再修改登录计划任务。",L"Run PulseTrace as administrator to change the logon task."},
+{"startup.failed",L"Windows 无法更新 PulseTrace 自启设置。",L"Windows could not update the PulseTrace startup setting."},
+{"startup.saved",L"自启设置已保存。",L"Startup setting saved."}
 };}

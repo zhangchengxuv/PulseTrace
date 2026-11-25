@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process');
+const executable=path.resolve(process.argv[2]),base=path.resolve(process.argv[3]);
+fs.mkdirSync(base,{recursive:true});
+const temp=fs.mkdtempSync(path.join(base,'early-startup-')),invalid=path.join(temp,'synthetic-data-is-a-file');
+fs.writeFileSync(invalid,'fixture');
+const child=spawnSync(executable,['--background','--data-dir',invalid],{env:{...process.env,TEMP:temp,TMP:temp},windowsHide:true,timeout:15000});
+assert.ifError(child.error);
+assert.equal(child.status,1,'unusable data directory exits before creating a WebView');
+const log=fs.readFileSync(path.join(temp,'PulseTrace-startup-error.log'),'utf8');
+assert.match(log,/PulseTrace startup failed/);
+assert.match(log,/Stage: Data directory/);
+assert.ok(log.length<512&&!log.includes(invalid)&&!log.includes('synthetic-data-is-a-file'),'fallback log is bounded and contains no private paths');
+console.log('Early background startup failure wrote a short fallback log to the isolated TEMP directory');

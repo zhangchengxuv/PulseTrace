@@ -261,6 +261,10 @@ int main() {
             },
             "nested JSON bounded");
         rejects([] { parse_message(std::string(65537, ' ')); }, "message size bounded");
+        require(parse_message(R"({"type":"set_autostart","request_id":4,"params":{"enabled":true,"method":"task"}})")["params"]["method"]=="task",
+                "task scheduler may be selected explicitly");
+        rejects([]{parse_message(R"({"type":"set_autostart","request_id":4,"params":{"enabled":true,"method":"other"}})");},
+                "invalid startup methods rejected");
         {
             const auto png=std::string("iVBORw0KGgo")+std::string(70001,'A');
             const Json message={{"type","save_summary_png"},{"request_id",7},{"params",{{"png",png}}}};
