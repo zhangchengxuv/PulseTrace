@@ -20,6 +20,55 @@ check(mouse.buttons.find(b=>b.id==='mouse4').share===.25&&mouse.buttons.find(b=>
 check(mouse.buttons.find(b=>b.id==='left').state==='zero'&&PulseMouse.model([]).buttons[0].state==='missing','mouse zero differs from missing');
 require(path.join(root,'web/desktop/dashboard-data.js'));const dash=PulseDashboard;
 const r=(minute,module,metric,value)=>({minute,module,metric,value});
+require('../web/desktop/keyboard-layout.js');
+require('../web/desktop/date-time.js');
+require('../web/desktop/insights-data.js');
+{
+ const insight=PulseInsights;
+ const start=Date.UTC(2026,10,15)/60000,selection={from:start,to:start+10*1440,bucket:60,time_zone:'UTC'};
+ const keyboard=insight.keyboard({17:2,30:8,36:10,56:3,312:4,57:12,14:2,339:1,71:5},47);
+ check(keyboard.fingers.length===10&&keyboard.fingers.find(f=>f.hand==='left'&&f.name==='pinky').count===8,'finger data uses physical scan codes');
+ check(keyboard.left===13&&keyboard.right===16&&keyboard.space===12&&keyboard.unassigned===6,'hand, shared and unassigned counts reconcile');
+ check(keyboard.typed===20&&keyboard.corrections===3&&keyboard.correctionRate===.15,'correction counts include Delete and exclude keypad digits');
+ check(insight.keyboard({},0).correctionRate===null&&PulseKeyboard.alphanumeric.length===36,'empty correction rate and 36 typing keys');
+ const assignments=Object.values(PulseKeyboard.fingerKeys).flatMap(hand=>Object.values(hand).flat());
+ check(new Set(assignments).size===assignments.length&&PulseKeyboard.alphanumeric.every(key=>assignments.includes(key))&&!assignments.includes(57),'finger assignments are exclusive and cover letters and digits');
+ check(insight.wheel([])===null&&insight.wheel([r(start,'coverage','observed_ms',50)]).metres===0,'wheel estimate distinguishes empty from observed zero');
+ const wheel=insight.wheel([r(start,'mouse','wheel_up_delta',60),r(start,'mouse','wheel_down_delta',-240),r(start,'mouse','wheel_down_events',9),
+  r(start+60,'mouse','wheel_down_events',2),r(start,'mouse','horizontal_events',10)]);
+ check(wheel.fallback&&Math.abs(wheel.metres-.0135)<1e-12,'wheel delta keeps partial notches and falls back by bucket and direction');
+ check(insight.rating('keyboard')===50000000&&insight.rating('mouse')===20000000&&!insight.validRating(1.5),'default lifetime ratings and integer validation');
+ const originalStorage=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+ const saved=new Map();
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)}});
+ try{
+  insight.saveRatings({keyboard:70000000,mouse:30000000});
+  check(saved.size===1&&insight.rating('keyboard')===70000000&&insight.rating('mouse')===30000000,'custom ratings persist together in this profile');
+  insight.saveRatings({keyboard:-1,mouse:0});
+  check(insight.rating('keyboard')===50000000&&insight.rating('mouse')===20000000,'invalid stored ratings fall back to defaults');
+ }finally{if(originalStorage)Object.defineProperty(globalThis,'localStorage',originalStorage);else delete globalThis.localStorage;}
+ const dates=[r(start-60,'coverage','observed_ms',30000),r(start+8*1440,'keyboard','30',100)];
+ const days=insight.observedDays(dates,selection,'keyboard');
+ check(days===8+60/1440&&insight.observedDays(dates,{...selection,to:start+60},'keyboard')===1/24,'wear annualization clamps elapsed observation span to selected range');
+ check(insight.wear(100,500,6).years===null&&insight.wear(100,500,days).years>0&&insight.wear(600,500,0).years===0,'wear has sample gate and nonnegative years at rated end');
+ check(insight.wear(0,500,10).years===null&&insight.wear(null,500,10).share===null,'zero-use and missing-use model');
+ const actions=[r(start+60,'keyboard','17',100),r(start+240,'keyboard','57',200),
+  r(start+60,'mouse','left',200),r(start+240,'mouse','right',600),
+  r(start+60,'mouse','wheel_up_events',1500),r(start+60,'repeat','17',200)];
+ const progress=insight.achievements(actions,selection);
+ check(progress.keyCount===2&&progress.wasd===1/3&&progress.night===300/1100,'WASD and nighttime use the correct denominators and exclude 04:00');
+ check(progress.clicks.level===1&&progress.clicks.target===1000&&progress.presses.target===1000,'separate graded milestones');
+ check(insight.achievements(actions,{...selection,bucket:1440}).night===null&&insight.achievements([],selection).wasd===null,'daily rolls and empty data cannot imply night or WASD ratios');
+ check(insight.achievements(PulseKeyboard.keys.map(key=>r(start,'keyboard',key.id,1)),selection).keyCount===104,'all physical keys stay eligible with TKL display');
+ check(insight.achievements([r(start,'keyboard','30',1e12),r(start,'mouse','left',1e10)],selection).presses.level===4,'milestones tolerate large aggregates and retain final tier');
+ check(insight.songPlays([{player:'qq',key:'a',plays:5},{player:'qq',key:'a',plays:6},
+  {player:'netease',key:'a',plays:10},{player:'qq',key:'b',plays:3}])===11,'most repeated qualified plays group by track within one player');
+ const originalZone=process.env.TZ;
+ process.env.TZ='Asia/Singapore';
+ const shifted=[r(start-60,'mouse','left',1),r(start+16*60,'mouse','right',4)];
+ check(insight.achievements(shifted,{...selection,time_zone:'local'}).night===.8&&insight.achievements(shifted,selection).night===0,'night uses requested civil timezone');
+ if(originalZone===undefined)delete process.env.TZ;else process.env.TZ=originalZone;
+}
 check(dash.inputs([]).length===0,'empty dashboard does not invent bins');
 let bin=dash.inputs([r(1,'keyboard','30',3)],1)[0];check(bin.keyboard===3&&bin.mouse===null,'unknown mouse interval stays missing');
 bin=dash.inputs([r(1,'coverage','observed_ms',1000)],1)[0];check(bin.keyboard===0&&bin.mouse===0,'observed idle interval is real zero');

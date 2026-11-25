@@ -83,5 +83,7 @@ function renderKeyboard(c){
  keyboard.classList.add('keyboard-panel');
  c.append(keyboard);redraw();
  chartObservers.push(PulseRender.observe(viewport,fit));
- c.append(trend('keyboard',null,tr("ui.5ab2a33a8977")),keyboardRanking(counts,top));
+ c.append(trend('keyboard',null,tr("ui.5ab2a33a8977")));
+ renderKeyboardInsights(c,counts,total,top,rows,range);
+ c.append(keyboardRanking(counts,top));
 }

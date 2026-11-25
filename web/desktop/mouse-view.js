@@ -27,4 +27,5 @@ function renderMouseDiagram(container){
  }
  const legend=el('div',{class:'mouse-color-scale'});legend.style.background='linear-gradient(to right,'+Array.from({length:65},(_,i)=>PulseViz.css(PulseViz.arctic(i/64).map(Math.round))).join(',')+')';
  legend.title=tr('mouse.mapping');legend.tabIndex=0;ranking.append(legend,el('small',{},data.has?tr('mouse.legend',{count:fmt(data.max)}):tr('mouse.no_data')));host.append(layout);container.append(host);
+ renderMouseInsights(container,rows,range,names,data);
 }

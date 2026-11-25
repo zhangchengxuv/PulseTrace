@@ -1,4 +1,28 @@
 'use strict';
+function validateInsights(name,host){
+ const check=(condition,message)=>{if(!condition)throw new Error('Insights: '+message);};
+ if(name==='keyboard'){
+  const hands=[...host.querySelectorAll('.insight-hand')];
+  check(hands.length===2&&hands.every(hand=>hand.querySelectorAll('svg [data-finger]').length===5),'ten SVG fingers');
+  const tokens=getComputedStyle(document.documentElement);
+  check(hands.every(hand=>getComputedStyle(hand).getPropertyValue('--insight-series').trim()===
+   tokens.getPropertyValue(hand.dataset.side==='left'?'--series-primary':'--series-comparison').trim()),'series tokens');
+ }
+ if(name==='mouse')check(host.querySelectorAll('.insight-stat').length===2,'individual mouse switch estimates');
+ if(name==='settings'){
+  const inputs=[...host.querySelectorAll('[data-insight-rating] input')];
+  check(inputs.length===2&&inputs.every(input=>PulseInsights.validRating(Number(input.value))),'editable hardware ratings');
+ }
+ if(name==='dashboard'){
+  const details=host.querySelector('.insight-achievements'),initial=details?.open;
+  check(details&&(!initial?details.querySelectorAll('.insight-achievement').length===0:true),'lazy folded achievements');
+  details.open=true;
+  details.dispatchEvent(new Event('toggle'));
+  check(details.querySelectorAll('.insight-achievement-grid article').length===5,'scoped achievement cards');
+  details.open=initial;
+  details.dispatchEvent(new Event('toggle'));
+ }
+}
 async function validateSummaryDownload(){
  const sample=[
   {module:'keyboard',metric:'30',value:19472},

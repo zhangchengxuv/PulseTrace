@@ -22,5 +22,13 @@ globalThis.PulseKeyboard = (() => {
     add(82,'Num 0',num,5,2,1,'numpad');add(83,'Num .',num+2,5,1,1,'numpad');
     const ansi=keys.map(Object.freeze);
     const layouts={ansi:{keys:ansi,width:22.7},tkl:{keys:ansi.filter(key=>key.group!=='numpad'),width:nav+3}};
-    return {keys:ansi,width:22.7,height:6,layouts};
+    // Standard touch-typing assignments for the main block. Space can use either thumb.
+    const fingerKeys={
+        left:{pinky:[41,2,15,16,58,30,42,44,29],ring:[3,17,31,45],middle:[4,18,32,46],
+            index:[5,6,19,20,33,34,47,48],thumb:[56]},
+        right:{pinky:[11,12,13,14,25,26,27,43,39,40,28,53,54,285],ring:[10,24,38,52],
+            middle:[9,23,37,51],index:[7,8,21,22,35,36,49,50],thumb:[312]}
+    };
+    const alphanumeric=ansi.filter(key=>key.group==='main'&&(/^[A-Z]$/.test(key.label)||/^[0-9] /.test(key.label))).map(key=>key.id);
+    return {keys:ansi,width:22.7,height:6,layouts,fingerKeys,alphanumeric};
 })();

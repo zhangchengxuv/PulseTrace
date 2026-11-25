@@ -59,5 +59,6 @@ function renderDashboard(c){
  const exportButton=el('button',{class:'secondary',type:'button',onclick:()=>openSummaryCard(records,selection)},tr('summary.export'));
  report.prepend(el('div',{class:'summary-entry'},report.querySelector('h3'),exportButton));
  c.append(el('div',{class:'dashboard-bottom'},report,panel(tr("ui.b8f945ea49ff"),el('div',{class:'connection-current'},el('i',{class:selected?.up?'connected':'disconnected'}),selected?.name||tr("ui.e9632ab2e04a"),el('span',{class:'muted'},selected?.up?tr("ui.5be0323e8adc"):tr("ui.3d52574ce150"))),el('div',{class:'connection-history'},...(networkEvents.length?networkEvents.slice(0,2).map(e=>el('div',{},el('time',{},new Date(e.observed_ms).toLocaleTimeString(PulseI18n.locale,{hour:'2-digit',minute:'2-digit'})),el('span',{},e.name||e.interface_id),el('b',{},connectionLabel(e.kind)))):[el('p',{class:'muted'},tr("ui.a62927c9a91f"))])))));
- const monthly=el('details',{class:'monthly-drawer'},el('summary',{},tr("ui.52663916db41")));renderMonthlyTraffic(monthly);c.append(monthly);
+ const monthly=el('details',{class:'monthly-drawer'},el('summary',{},tr("ui.52663916db41")));renderMonthlyTraffic(monthly);
+ c.append(renderAchievements(records,selection,state.config?.music_enabled===true),monthly);
 }

@@ -1,0 +1,46 @@
+.insight-grid,.insight-hands,.insight-achievement-grid{
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;
+}
+.insight-grid{margin-bottom:16px}
+.insight-grid>.panel{margin:0;min-width:0}
+.insight-hand,.insight-achievement{
+ --insight-series:var(--series-primary);--insight-ink:var(--series-primary-text);
+}
+[data-side=right].insight-grid,
+[data-side=right].insight-hand,[data-side=right].insight-achievement{
+ --insight-series:var(--series-comparison);--insight-ink:var(--series-comparison);
+}
+.insight-number,.insight-emphasis,.insight-busiest{color:var(--insight-ink,var(--series-primary-text))}
+.insight-number{display:block;font-size:clamp(18px,2.2vw,27px);line-height:1.25;font-weight:650;overflow-wrap:anywhere}
+.insight-note,.insight-secondary-counts{font-size:12px;line-height:1.6;margin:8px 0 0}
+.insight-busiest{font-size:13px;font-weight:650;margin:0 0 12px}
+.insight-hand,.insight-achievement,.insight-stat{
+ min-width:0;padding:13px;border:1px solid var(--line);border-radius:var(--radius-input);
+}
+.insight-hand h4,.insight-achievement h4{font-size:13px;margin:0;min-width:0}
+.insight-hand h4,.insight-achievement-heading{
+ display:flex;align-items:baseline;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;
+}
+.insight-hand-svg{display:block;width:min(128px,100%);height:auto;margin:0 auto}
+.insight-finger-shape{fill:color-mix(in srgb,var(--insight-series) var(--finger-load,0%),var(--track))}
+.insight-palm{fill:var(--track)}
+.insight-palm,.insight-finger-shape{stroke:var(--control-border);stroke-width:1px}
+.insight-finger-list,.insight-stats,.insight-achievement{display:grid;gap:8px}
+.insight-finger-list>div{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:4px 8px;font-size:12px}
+.insight-finger-list small,.insight-stat small{font-size:11px;color:var(--muted)}
+.insight-progress{appearance:none;display:block;width:100%;height:5px;min-width:0;border:0;border-radius:999px}
+.insight-finger-list .insight-progress{grid-column:1/-1}
+.insight-progress::-webkit-progress-bar{background:var(--track);border-radius:inherit}
+.insight-progress::-webkit-progress-value{background:var(--insight-series,var(--series-primary));border-radius:inherit}
+.insight-stats{margin-top:10px}
+.insight-stat{display:grid;gap:5px}
+.insight-achievements{margin-bottom:16px}
+.insight-achievement-heading small{font-size:11px}
+.insight-achievement-grid+div:not(:empty){margin-top:14px}
+.insight-music-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-size:12px}
+@container (max-width:540px){
+ .insight-grid,.insight-achievement-grid{grid-template-columns:minmax(0,1fr)}
+}
+@container (max-width:380px){
+ .insight-hands{grid-template-columns:minmax(0,1fr)}
+}
