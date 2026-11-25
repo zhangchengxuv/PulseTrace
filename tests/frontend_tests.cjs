@@ -99,9 +99,46 @@ chartContext.trend=(...args)=>args;require('node:vm').runInNewContext(fs.readFil
 check(chartContext.protocolTrend()[4][0].value===10,'actual chart renderer ignores incompatible legacy generic rows');
 chartContext.protocolSamples.push({...sample,minute:60,interface_id:'19',basis:'other'});
 check(chartContext.protocolTrend()[4].length===0,'actual chart renderer leaves incompatible observation gaps empty');
-const monitored=(ms,presses)=>[r(1,'coverage','observed_ms',ms),r(1,'keyboard','30',presses)];
-check(dash.comparison(monitored(60000,12),monitored(60000,10))===.2,'comparison uses actual equivalent observation periods');
-check(dash.comparison(monitored(30000,12),monitored(60000,10))===null&&dash.comparison(monitored(60000,12),[])===null,'incomparable coverage suppresses change percentage');
+const minute=(...fields)=>Date.UTC(...fields)/60000;
+const previousRange=(preset,from,to,zone='UTC')=>dash.previousPeriod({from,to,time_zone:zone},preset);
+assert.deepEqual(previousRange('10080',12000,22080),{from:1920,to:12000,time_zone:'UTC'});
+assert.deepEqual(previousRange('today',minute(2026,8,1),minute(2026,8,1,14)),{from:minute(2026,7,31),to:minute(2026,7,31,14),time_zone:'UTC'});
+assert.deepEqual(previousRange('month',minute(2024,2,1),minute(2024,2,31,10)),{from:minute(2024,1,1),to:minute(2024,2,1),time_zone:'UTC'});
+check(previousRange('all',0,50000)===null,'All has no comparison period');
+const totals=dash.periodTotals([r(1,'coverage','observed_ms',60000),r(1,'keyboard','30',12),
+ r(1,'mouse','wheel_up_events',6),r(1,'mouse','double/left',99),r(1,'network','interface_download_bytes',128),
+ r(1,'network_ip','ipv4_down',1000)]);
+assert.deepEqual(totals,{keyboard:12,mouse:0,wheel:6,coverage:60000,network:128});
+check(dash.change(totals.keyboard,10)===.2&&dash.change(totals.mouse,8)===-1,'trend differences include observed zero');
+check(dash.change(dash.periodTotals([]).keyboard,10)===null&&dash.change(12,0)===null&&dash.change(12,null)===null,'missing or zero baseline suppresses the percentage');
+require('../web/desktop/activity-history.js');
+const rhythm=PulseActivity.rhythm([
+ {minute:minute(2024,0,1,7),value:20},{minute:minute(2024,0,8,7),value:0},
+ {minute:minute(2024,0,7,23),value:7}], 'UTC');
+check(rhythm.length===168&&rhythm[7].value===10&&rhythm[7].total===20&&rhythm[7].samples===2,'rhythm includes known zero in average');
+check(rhythm[8].value===null&&rhythm[167].value===7,'Monday/Sunday mapping and unobserved cell');
+const now=minute(2024,2,1);
+const leap=PulseActivity.yearCells(2024,[{minute:minute(2024,1,29),value:0}], 'UTC',now);
+const normal=PulseActivity.yearCells(2023,[],'UTC',now);
+check(leap.length===366&&normal.length===365&&normal[0].day===6&&normal[1].week===1,'annual week alignment and leap years');
+check(leap[59].value===0&&leap[60].value===null&&!leap[60].future&&leap[61].future,'annual missing, known zero and future are distinct');
+assert.deepEqual(PulseActivity.yearRange(2024,'UTC',now),{from:minute(2024,0,1),to:now+1,time_zone:'UTC'});
+assert.deepEqual(PulseActivity.yearRange(2023,'UTC',now),{from:minute(2023,0,1),to:minute(2024,0,1),time_zone:'UTC'});
+const yearRequest={...PulseActivity.yearRange(2024,'UTC',now+780),view:'year',metric:'keyboard'};
+const yearWindows=PulseActivity.queryWindows(yearRequest,now+780);
+check(yearWindows.history.to===now&&yearWindows.recent.from===now,'live update splits on a day boundary');
+const nextMinute=PulseActivity.queryWindows({...yearRequest,to:yearRequest.to+1},now+781);
+check(JSON.stringify(nextMinute.history)===JSON.stringify(yearWindows.history),'unchanged year history can be reused');
+const rhythmWindows=PulseActivity.queryWindows({from:now,to:now+800,time_zone:'UTC',view:'rhythm'},now+799);
+check(rhythmWindows.history.to===now+660&&rhythmWindows.history.to===rhythmWindows.recent.from,'rhythm splits outside the mutable hours without a gap');
+const beforeZone=process.env.TZ;
+try{
+ process.env.TZ='America/New_York';
+ const fold=PulseActivity.rhythm([{minute:minute(2024,10,3,5),value:20},{minute:minute(2024,10,3,6),value:10}],'local');
+ check(fold[145].samples===2&&fold[145].value===15,'both observations in a folded hour enter the civil average');
+ const march=previousRange('today',minute(2024,2,10,5),minute(2024,2,10,16),'local');
+ check(march.from===minute(2024,2,9,5)&&march.to===minute(2024,2,9,17),'calendar comparisons align wall time during DST changes');
+}finally{if(beforeZone===undefined)delete process.env.TZ;else process.env.TZ=beforeZone;}
 require(path.join(root,'web/desktop/keyboard-layout.js'));
 const keys=PulseKeyboard.keys;
 check(keys.length===104,'ANSI exactly 104 keys');check(new Set(keys.map(k=>k.id)).size===104,'ANSI unique Raw Input IDs');

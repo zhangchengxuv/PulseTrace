@@ -138,6 +138,24 @@ void validate_request(const Json &r) {
             if(p.contains("method")&&p["method"]!="run"&&p["method"]!="task")
                 throw std::invalid_argument("Invalid startup method");
         }
+    } else if (type == "get_activity") {
+        allowed = {"from", "to", "time_zone", "view", "metric"};
+        if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
+            !p["to"].is_number_integer() || p["from"] < 0 || p["to"] <= p["from"] ||
+            p["to"].get<double>() > 4223371680.0 ||
+            p["to"].get<std::int64_t>() - p["from"].get<std::int64_t>() > 367 * 1440)
+            throw std::invalid_argument("Invalid activity range");
+        if (!p.contains("time_zone") || (p["time_zone"] != "UTC" && p["time_zone"] != "local"))
+            throw std::invalid_argument("Invalid activity time zone");
+        const auto view = p.value("view", "");
+        if (view == "year") {
+            const auto metric = p.value("metric", "");
+            if (metric != "keyboard" && metric != "mouse" && metric != "active" &&
+                metric != "network" && metric != "music")
+                throw std::invalid_argument("Invalid activity metric");
+        } else if ((view != "rhythm" && view != "summary") || p.contains("metric")) {
+            throw std::invalid_argument("Invalid activity view");
+        }
     } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="get_active_duration" || type=="export_app_usage" || type=="get_usage_icon" || type=="get_music" || type=="export_music") {
         allowed = {"from", "to", "bucket"};
         if(type=="get_active_duration")allowed.erase("bucket");

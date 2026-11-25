@@ -1,5 +1,5 @@
 'use strict';
-let comparisonRows=[],comparisonRange='',comparisonFetched=0,liveRates=[],lastRateStamp=0;
+let comparisonTotals=null,comparisonRange='',comparisonFetched=0,liveRates=[],lastRateStamp=0;
 const metricPaths={wallet:'M3 6h17v15H3z M3 6V3h14v3 M16 11h5v5h-5z M17.5 13.5h1',keyboard:'M3 5h18v14H3z M6 9h1m3 0h1m3 0h1m3 0h1M6 13h1m3 0h1m3 0h1m3 0h1M8 16h8',mouse:'M12 3a6 6 0 0 0-6 6v6a6 6 0 0 0 12 0V9a6 6 0 0 0-6-6z M12 3v7M6 10h12',wheel:'M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4',time:'M21 12a9 9 0 1 0-18 0 9 9 0 0 0 18 0M12 7v5l3 2',network:'M7 3v18M3 7l4-4 4 4M17 21V3m-4 14 4 4 4-4',protocol:'M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3c-5 4-5 14 0 18M12 3c5 4 5 14 0 18'};
 function metricIcon(kind){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS(svg.namespaceURI,'path');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');path.setAttribute('d',metricPaths[kind]);svg.append(path);return svg;}
 function duration(ms){const m=Math.floor(ms/60000);return m>=60?Math.floor(m/60)+' h '+m%60+' m':m+' m';}
@@ -38,7 +38,15 @@ function inputActivityChart(){
 }
 function renderDashboard(c){
  rememberRates();const d=PulseDashboard,n=state.network||{},clicks=d.total(rows,'mouse',d.mouseKeys),up=d.total(rows,'mouse',['wheel_up_events']),down=d.total(rows,'mouse',['wheel_down_events']),wheel=up+down,coverage=d.total(rows,'coverage',['observed_ms']),ip=d.protocol(protocolSelection());
- const mouseValues=[d.total(rows,'mouse',['left']),d.total(rows,'mouse',['right']),d.total(rows,'mouse',['middle','mouse4','mouse5'])],ratios=d.distribution(mouseValues),wheelRatio=d.distribution([up,down]),change=d.comparison(rows,comparisonRows);
+ const mouseValues=[d.total(rows,'mouse',['left']),d.total(rows,'mouse',['right']),d.total(rows,'mouse',['middle','mouse4','mouse5'])],ratios=d.distribution(mouseValues),wheelRatio=d.distribution([up,down]);
+ const totals=comparisonTotals?d.periodTotals(rows):null;
+ const changeLabel=(metric,fallback)=>{
+  const change=d.change(totals?.[metric],comparisonTotals?.[metric]);
+  if(change===null)return fallback;
+  const percent=new Intl.NumberFormat(PulseI18n.locale,{style:'percent',signDisplay:'exceptZero',maximumFractionDigits:1}).format(change);
+  const key=metric==='network'?'activity.change_network':'activity.change';
+  return el('span',{class:'period-change',title:tr('activity.change_basis'),'data-direction':Math.sign(change)},tr(key,{percent}));
+ };
  const mouseSide=el('div',{class:'distribution'},el('div',{class:'stack-track'},...(ratios?ratios.map((r,i)=>{const part=el('i',{class:['mouse-left','mouse-right','mouse-other'][i]});part.style.width=r*100+'%';return part;}):[])),...[tr("ui.5718442eaf28"),tr("ui.3ca47485aee8"),tr("ui.d2909f1647e7")].map((name,i)=>el('div',{class:'ratio-line'},el('span',{},el('i',{class:['mouse-left','mouse-right','mouse-other'][i]}),name),el('b',{},ratios?(ratios[i]*100).toFixed(0)+'%':'—'))));
  const wheelSide=el('div',{class:'wheel-ratios'},...['↑','↓'].map((arrow,i)=>{const track=el('div',{class:'ratio-track'},el('i'));if(wheelRatio)track.firstChild.style.width=wheelRatio[i]*100+'%';return el('div',{},el('span',{},arrow),track,el('b',{},wheelRatio?(wheelRatio[i]*100).toFixed(0)+'%':'—'));}));
  const keyboardSeries=d.series(rows,'keyboard'),keyboardSpark=sparkline([{points:PulseViz.aggregate(keyboardSeries,40,range.bucket,true),step:PulseViz.binWidth(keyboardSeries,40,range.bucket),color:'--series-primary'}]);
@@ -46,10 +54,9 @@ function renderDashboard(c){
  const rateValue=el('div',{class:'network-values'},el('span',{},el('em',{},'↑'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.upload_bps||0)+'/s':tr("ui.eb0c326b60ae")),el('span',{},el('em',{},'↓'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.download_bps||0)+'/s':tr("ui.eb0c326b60ae")));
  const ipValues=el('div',{class:'ip-values'},el('span',{},el('i',{class:'ipv4-dot'}),'IPv4 ',el('b',{},ip.has?bytes(ip.bytes[0]):'—')),el('span',{},el('i',{class:'ipv6-dot'}),'IPv6 ',el('b',{},ip.has?bytes(ip.bytes[1]):'—')));
  let ring=null;if(ip.ratio){ring=el('div',{class:'ip-ring',role:'img','aria-label':tr("ui.1fb26aceb606")+(ip.ratio[0]*100).toFixed(1)+'%'},el('div',{},el('b',{},(ip.ratio[0]*100).toFixed(0)+'%'),el('small',{},tr("ui.869d94bf30fb"))));ring.style.setProperty('--ip-share',ip.ratio[0]*100+'%');}
- const comparison=change==null?tr("ui.702023aefc26"):el('span',{class:change>=0?'positive':'negative',title:tr("ui.2c1ada410244")},tr("ui.07f310dd48d2")+(change>=0?'+':'')+(change*100).toFixed(1)+'%');
  c.append(el('div',{class:'kpi-grid'},
-  kpi('keyboard',tr("ui.dd544c02ab73"),fmt(d.total(rows,'keyboard')),keyboardSpark,comparison),kpi('mouse',tr("ui.361881b8b343"),fmt(clicks),mouseSide,tr("ui.702023aefc26")),kpi('wheel',tr("ui.5faa29113975"),fmt(wheel),wheelSide,tr("ui.8461f0798e3d")),
-  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),tr("ui.5c4d2a0e0434")),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,tr("ui.cba5020e0dad")),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality)),PulseCampus.dashboardCard()));
+  kpi('keyboard',tr("ui.dd544c02ab73"),fmt(d.total(rows,'keyboard')),keyboardSpark,changeLabel('keyboard',tr("ui.702023aefc26"))),kpi('mouse',tr("ui.361881b8b343"),fmt(clicks),mouseSide,changeLabel('mouse',tr("ui.702023aefc26"))),kpi('wheel',tr("ui.5faa29113975"),fmt(wheel),wheelSide,changeLabel('wheel',tr("ui.8461f0798e3d"))),
+  kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),changeLabel('coverage',tr("ui.5c4d2a0e0434"))),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,changeLabel('network',tr("ui.cba5020e0dad"))),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality)),PulseCampus.dashboardCard()));
  if(state.network_error)c.append(el('div',{class:'capture-error',role:'alert'},tr("ui.7b2a6e670e15")+state.network_error));
  c.append(el('div',{class:'dashboard-charts'},inputActivityChart(),protocolTrend(tr("ui.50aa5251963c"))));
  const selected=(n.interfaces||[]).find(x=>x.id===n.selected),summary=el('div',{class:'daily-summary'},...[

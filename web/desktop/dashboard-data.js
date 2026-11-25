@@ -29,11 +29,36 @@ globalThis.PulseDashboard=(()=>{
   if(!protocol(selected).has)return [];
   return selected.filter(r=>r.accepted>0).flatMap(r=>['ipv4_up','ipv4_down','ipv6_up','ipv6_down'].map(key=>({minute:r.minute,module:'network_ip',metric:interfaceId+'/'+key,value:Number(r[key])})));
  }
- function comparison(current,previous){
-  const a=total(current,'coverage',['observed_ms']),b=total(previous,'coverage',['observed_ms']);
-  if(!a||!b||Math.abs(a-b)/Math.max(a,b)>.01)return null;
-  const before=total(previous,'keyboard');return before>0?(total(current,'keyboard')-before)/before:null;
+ function previousPeriod({from,to,time_zone},preset){
+  const span=to-from;
+  if(!from||span<=0||preset==='all')return null;
+  let start=from-span,end=from;
+  if(['today','week','month'].includes(preset)){
+   start=PulseDate.calendarStart(from-1,preset,time_zone);
+   const a=PulseDate.parts(from,time_zone),b=PulseDate.parts(to-1,time_zone);
+   const days=(Date.UTC(b.year,b.month-1,b.day)-Date.UTC(a.year,a.month-1,a.day))/86400000;
+   const prior=PulseDate.parts(start,time_zone);
+   const fields=[prior.year,prior.month-1,prior.day+days,b.hour,b.minute];
+   const last=(time_zone==='UTC'?Date.UTC(...fields):new Date(...fields).getTime())/60000;
+   end=Math.min(from,last+1);
+  }
+  return start>=0&&end>start?{from:start,to:end,time_zone}:null;
  }
+ function periodTotals(rows){
+  const totals={keyboard:null,mouse:null,wheel:null,coverage:null,network:null};
+  for(const {module,metric,value} of rows){
+   let key;
+   if(module==='keyboard')key='keyboard';
+   else if(module==='mouse'&&mouseKeys.includes(metric))key='mouse';
+   else if(module==='mouse'&&['wheel_up_events','wheel_down_events'].includes(metric))key='wheel';
+   else if(module==='coverage'&&metric==='observed_ms')key='coverage';
+   else if(module==='network'&&['interface_upload_bytes','interface_download_bytes'].includes(metric))key='network';
+   if(key)totals[key]=(totals[key]??0)+Number(value);
+  }
+  if(totals.coverage>0)for(const key of ['keyboard','mouse','wheel'])totals[key]??=0;
+  return totals;
+ }
+ const change=(current,previous)=>current!=null&&previous>0?(current-previous)/previous:null;
  function peakInput(rows){
   const minutes=new Map();
   let covered=false,kpm=0,apm=0;
@@ -48,5 +73,5 @@ globalThis.PulseDashboard=(()=>{
   }
   return covered||minutes.size?{kpm,apm}:null;
  }
- return {mouseKeys,total,series,inputs,distribution,protocol,protocolRows,comparison,peakInput};
+ return {mouseKeys,total,series,inputs,distribution,protocol,protocolRows,previousPeriod,periodTotals,change,peakInput};
 })();

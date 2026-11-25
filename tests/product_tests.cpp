@@ -119,6 +119,12 @@ int main() {
             require(db.query(0,30000000,1440)[0]["value"]==9,"all-data query reaches records older than 366 days");
             require(parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":0,"to":30000000,"bucket":1440}})")["type"]=="get_statistics","all-data bridge accepts epoch sentinel");
             rejects([&]{parse_message(R"({"type":"get_statistics","request_id":1,"params":{"from":1,"to":2,"time_zone":"foreign"}})");},"only local and UTC time zones are accepted");
+            require(parse_message(R"({"type":"get_activity","request_id":1,"params":{"from":1,"to":3,"time_zone":"local","view":"year","metric":"active"}})")["type"]=="get_activity",
+                    "activity bridge accepts calendar metric and a civil time zone");
+            rejects([&]{parse_message(R"({"type":"get_activity","request_id":1,"params":{"from":1,"to":2,"time_zone":"UTC","view":"year","metric":"title"}})");},
+                    "activity projection never accepts a metadata field");
+            rejects([&]{parse_message(R"({"type":"get_activity","request_id":1,"params":{"from":0,"to":900000,"time_zone":"UTC","view":"rhythm"}})");},
+                    "activity bridge bounds the indexed minute scan");
             for (int bucket : {60, 1440}) {
                 StatisticsBuckets local(bucket, true);
                 const auto rows = db.query(59, 60, bucket, "", 0, true);
@@ -304,6 +310,68 @@ int main() {
                     require(record["minute"]==local.start(minute)&&record["ipv4_up"]==10,"protocol samples retain the exact local bucket start");
             }
             identity_core.stop();
+        }
+        {
+            const auto fixture = dir / "activity";
+            std::filesystem::create_directories(fixture);
+            const auto minute = (utc_now_ms() / 60000 - 300) / 60 * 60 + 7;
+            const auto count = [](auto at, const char *module, const char *metric, int value) {
+                return Json{{"minute", at}, {"module", module}, {"metric", metric}, {"value", value}};
+            };
+            {
+                DatabaseManager seed(fixture / "monitor.db");
+                seed.save("fixture", Json::array({count(minute, "keyboard", "30", 12),
+                    count(minute, "repeat", "30", 500), count(minute, "mouse", "left", 3),
+                    count(minute, "mouse", "double/left", 2), count(minute, "mouse", "wheel_up_events", 7),
+                    count(minute, "network", "interface_upload_bytes", 100),
+                    count(minute, "network", "interface_download_bytes", 250),
+                    count(minute, "network", "bytes/other", 5000),
+                    count(minute + 60, "coverage", "observed_ms", 60000),
+                    count(minute + 120, "network", "interface_download_bytes", 0)}));
+                seed.save_usage("fixture", Json::array({{{"minute", minute}, {"key", "FixtureApp"},
+                    {"path", "fixture.exe"}, {"name", "Fixture"}, {"foreground_ms", 60000}, {"active_ms", 5000}}}));
+                seed.save_music("fixture", Json::array({{{"minute", minute}, {"key", "FixtureTrack"},
+                    {"player", "qq"}, {"title", "Fixture Title"}, {"artist", "Fixture Artist"},
+                    {"album", ""}, {"duration_ms", 180000}, {"played_ms", 15000}, {"plays", 0}}}));
+                seed.save("overlay", Json::array({count(minute, "keyboard", "30", 99)}));
+                const auto counts = seed.activity_counts(minute, minute + 121, 0, false, "overlay", minute).at(0);
+                require(counts.keyboard == 12 && counts.mouse == 3 && counts.wheel == 7 &&
+                        counts.coverage == 60000 && counts.network == 350, "bounded summary counts and live exclusion");
+                const auto empty = seed.activity_counts(minute - 1, minute, 0, false, "fixture", minute).at(0);
+                require(!empty.keyboard && !empty.coverage && !empty.network, "no rows leave null totals");
+                require(seed.activity_duration(minute, minute+1, false, false, "fixture", minute).empty() &&
+                        seed.activity_duration(minute, minute+1, true, false, "fixture", minute).empty(),
+                        "duration projections exclude same-session live rows");
+            }
+            CoreService core(fixture);
+            core.start();
+            Json range = {{"from", minute}, {"to", minute + 121}, {"time_zone", "UTC"}, {"view", "rhythm"}};
+            auto rhythm = rpc(core, "get_activity", range).at("rows");
+            require(rhythm.size() == 2 && rhythm.at(0) == Json{{"minute", minute - 7}, {"value", 114}} &&
+                    rhythm.at(1) == Json{{"minute", minute + 53}, {"value", 0}},
+                    "hourly input separates zero from missing, without repeats, scroll or double clicks");
+            range["view"] = "summary";
+            const auto summary = rpc(core, "get_activity", range).at("totals");
+            require(summary.at("keyboard") == 111 && summary.at("mouse") == 3 && summary.at("network") == 350,
+                    "summary values are independent projections");
+            range["view"] = "year";
+            range["time_zone"] = "local";
+            range["to"] = minute + 1;
+            StatisticsBuckets local_day(1440, true);
+            for (const auto &[metric, value] : {std::pair{"keyboard", 111}, std::pair{"mouse", 3},
+                                               std::pair{"network", 350}, std::pair{"active", 5000}}) {
+                range["metric"] = metric;
+                const auto daily = rpc(core, "get_activity", range).at("rows");
+                require(daily.size() == 1 && daily.at(0) == Json{{"minute",local_day.start(minute)},{"value",value}},
+                        "only local daily totals cross the bridge");
+            }
+            range["metric"] = "music";
+            require(rpc(core, "get_activity", range).at("rows").empty(), "music data stays hidden while disabled");
+            rpc(core, "set_config", {{"music_enabled", true}});
+            const auto music = rpc(core, "get_activity", range).at("rows");
+            require(music.size() == 1 && music.at(0) == Json{{"minute", local_day.start(minute)}, {"value", 15000}},
+                    "music metric returns duration without track metadata");
+            core.stop();
         }
         {
             CoreService core(dir);

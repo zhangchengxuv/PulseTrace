@@ -1,4 +1,35 @@
 'use strict';
+async function validateActivityHistory(host){
+ const check=(condition,message)=>{if(!condition)throw new Error('Activity history: '+message);};
+ await activityHistory.update();
+ const rhythm=host.querySelector('.activity-grid.activity-rhythm');
+ check(rhythm?.querySelectorAll('button').length===168,'weekly matrix dimensions');
+ const tokens=getComputedStyle(document.documentElement);
+ check(getComputedStyle(rhythm).getPropertyValue('--activity-series').trim()===tokens.getPropertyValue('--series-primary').trim(),'primary rhythm token');
+ const first=rhythm.querySelector('button');
+ first.focus({preventScroll:true});
+ first.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+ check(document.activeElement.dataset.column==='1'&&host.querySelector('.activity-detail').textContent===document.activeElement.title,'arrow keys and cell details');
+ document.activeElement.blur();
+ const [year,metric]=host.querySelectorAll('.activity-options select');
+ const oldYear=year.value,oldMetric=metric.value;
+ const checkWall=()=>{
+  const wall=host.querySelector('.activity-grid.activity-wall');
+  const days=365+Number(PulseDate.days(Number(year.value),2)===29);
+  check(wall?.querySelectorAll('button').length===days,'annual day count');
+  check(getComputedStyle(wall).getPropertyValue('--activity-series').trim()===tokens.getPropertyValue('--series-comparison').trim(),'comparison wall token');
+ };
+ checkWall();
+ year.selectedIndex=1;
+ year.dispatchEvent(new Event('change'));
+ metric.value='network';
+ metric.dispatchEvent(new Event('change'));
+ await activityHistory.update();
+ checkWall();
+ year.value=oldYear;metric.value=oldMetric;
+ year.dispatchEvent(new Event('change'));
+ await activityHistory.update();
+}
 function validateInsights(name,host){
  const check=(condition,message)=>{if(!condition)throw new Error('Insights: '+message);};
  if(name==='keyboard'){

@@ -3,10 +3,16 @@
 #include "pulsetrace/sqlite_error.hpp"
 #include <filesystem>
 #include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 struct sqlite3;
 namespace pulsetrace {
+struct ActivityCounts {
+    std::optional<std::int64_t> keyboard, mouse, wheel, coverage, network;
+    void add(const std::string &module, const std::string &metric, std::int64_t value);
+};
 class DatabaseManager {
   public:
     explicit DatabaseManager(const std::filesystem::path &file);
@@ -18,6 +24,12 @@ class DatabaseManager {
     Json history_bounds() const;
     Json query(std::int64_t from, std::int64_t to, int bucket, const std::string &exclude_session = "",
                std::int64_t exclude_from = 0, bool local = false) const;
+    std::map<std::int64_t, ActivityCounts> activity_counts(
+        std::int64_t from, std::int64_t to, int bucket, bool local, const std::string &exclude_session,
+        std::int64_t floor) const;
+    std::map<std::int64_t, std::int64_t> activity_duration(
+        std::int64_t from, std::int64_t to, bool music, bool local, const std::string &exclude_session,
+        std::int64_t floor) const;
     void prune(std::int64_t cutoff);
     void clear(const std::vector<std::string> &pending_sessions={});
     Json network_events(std::int64_t from, std::int64_t to) const;

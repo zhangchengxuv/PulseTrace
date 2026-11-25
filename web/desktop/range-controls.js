@@ -1,5 +1,5 @@
 'use strict';
-let rangeRoot=null,rangeDraft=null,rangeDirty=false,rangePreset='all',rangeFields=null;
+let rangeRoot=null,rangeDraft=null,rangeDirty=false,rangePreset='all',appliedRangePreset='all',rangeFields=null;
 const rangeZonePreference='pulsetrace.range.zone';
 const rangeZones=['local','UTC'];
 function newStatisticsRange(){
@@ -17,7 +17,7 @@ function rangeControls(){
   if(rangeDraft.from<0||rangeDraft.to<=rangeDraft.from||rangePreset!=='all'&&rangeDraft.to-rangeDraft.from>527040){
    error(new Error(tr('ui.d400e986a59f')));return;
   }
-  range={...rangeDraft};rangeDirty=false;
+  range={...rangeDraft};appliedRangePreset=rangePreset;rangeDirty=false;
   PulseDate.savePreference(rangeZonePreference,range.time_zone);
   labels();viewGeneration++;renderKey='';refresh(true);
  };

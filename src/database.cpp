@@ -293,6 +293,78 @@ Json DatabaseManager::query(std::int64_t from, std::int64_t to, int bucket,
         throw SQLiteError(db_,"step");
     return rows;
 }
+void ActivityCounts::add(const std::string &module, const std::string &metric, std::int64_t value) {
+    std::optional<std::int64_t> *total = nullptr;
+    if (module == "keyboard")
+        total = &keyboard;
+    else if (module == "coverage" && metric == "observed_ms")
+        total = &coverage;
+    else if (module == "network" && (metric == "interface_upload_bytes" || metric == "interface_download_bytes"))
+        total = &network;
+    else if (module == "mouse") {
+        if (metric == "left" || metric == "right" || metric == "middle" || metric == "mouse4" || metric == "mouse5")
+            total = &mouse;
+        else if (metric == "wheel_up_events" || metric == "wheel_down_events")
+            total = &wheel;
+    }
+    if (total)
+        *total = total->value_or(0) + value;
+}
+std::map<std::int64_t, ActivityCounts> DatabaseManager::activity_counts(
+    std::int64_t from, std::int64_t to, int bucket, bool local, const std::string &exclude, std::int64_t floor) const {
+    if (bucket != 0 && bucket != 60 && bucket != 1440)
+        throw std::invalid_argument("Invalid activity bucket");
+    std::string sql = R"SQL(
+        SELECT CASE WHEN ?1=0 THEN 0 WHEN ?2 THEN stats_local_bucket(minute,?1) ELSE (minute/?1)*?1 END,
+               SUM(CASE WHEN module='keyboard' THEN value END),
+               SUM(CASE WHEN module='mouse' AND metric IN ('left','right','middle','mouse4','mouse5') THEN value END),
+               SUM(CASE WHEN module='mouse' AND metric IN ('wheel_up_events','wheel_down_events') THEN value END),
+               SUM(CASE WHEN module='coverage' AND metric='observed_ms' THEN value END),
+               SUM(CASE WHEN module='network' AND metric IN ('interface_upload_bytes','interface_download_bytes') THEN value END)
+          FROM counts
+         WHERE minute>=?3 AND minute<?4 AND NOT(session=?5 AND minute>=?6)
+           AND module IN ('keyboard','mouse','coverage','network')
+    )SQL";
+    if (bucket)
+        sql += " GROUP BY 1";
+    Statement s(db_, sql.c_str());
+    sqlite3_bind_int(s.p, 1, bucket);
+    sqlite3_bind_int(s.p, 2, local);
+    sqlite3_bind_int64(s.p, 3, from);
+    sqlite3_bind_int64(s.p, 4, to);
+    bind_text(s.p, 5, exclude);
+    sqlite3_bind_int64(s.p, 6, floor);
+    std::map<std::int64_t, ActivityCounts> result;
+    while (s.step() == SQLITE_ROW) {
+        const auto value = [&](int column) -> std::optional<std::int64_t> {
+            if (sqlite3_column_type(s.p, column) == SQLITE_NULL)
+                return std::nullopt;
+            return sqlite3_column_int64(s.p, column);
+        };
+        result.emplace(sqlite3_column_int64(s.p, 0), ActivityCounts{value(1), value(2), value(3), value(4), value(5)});
+    }
+    return result;
+}
+std::map<std::int64_t, std::int64_t> DatabaseManager::activity_duration(
+    std::int64_t from, std::int64_t to, bool music, bool local, const std::string &exclude, std::int64_t floor) const {
+    // Select between fixed aggregate tables. Bind the range to keep their minute
+    // indexes usable before computing the civil day for each matching row.
+    const auto *sql = music
+        ? "SELECT CASE WHEN ?1 THEN stats_local_bucket(minute,1440) ELSE (minute/1440)*1440 END,SUM(played_ms) "
+         "FROM music_minutes WHERE minute>=?2 AND minute<?3 AND NOT(session=?4 AND minute>=?5) GROUP BY 1"
+        : "SELECT CASE WHEN ?1 THEN stats_local_bucket(minute,1440) ELSE (minute/1440)*1440 END,SUM(active_ms) "
+         "FROM app_usage WHERE minute>=?2 AND minute<?3 AND NOT(session=?4 AND minute>=?5) GROUP BY 1";
+    Statement s(db_, sql);
+    sqlite3_bind_int(s.p, 1, local);
+    sqlite3_bind_int64(s.p, 2, from);
+    sqlite3_bind_int64(s.p, 3, to);
+    bind_text(s.p, 4, exclude);
+    sqlite3_bind_int64(s.p, 5, floor);
+    std::map<std::int64_t, std::int64_t> result;
+    while (s.step() == SQLITE_ROW)
+        result.emplace(sqlite3_column_int64(s.p, 0), sqlite3_column_int64(s.p, 1));
+    return result;
+}
 void DatabaseManager::prune(std::int64_t cutoff) {
     Statement ip(db_, "DELETE FROM protocol_samples WHERE minute<?");
     sqlite3_bind_int64(ip.p, 1, cutoff);

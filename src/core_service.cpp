@@ -610,6 +610,73 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         usage_->configure(config_,active&&!session_locked_.load());music_->configure(config_,active&&!session_locked_.load()&&!suspended_.load()&&!quiescing_.load());
         return status();
     }
+    if (type == "get_activity") {
+        const auto from = p.at("from").get<std::int64_t>(), to = p.at("to").get<std::int64_t>();
+        const auto view = p.at("view").get<std::string>(), metric = p.value("metric", "");
+        const bool local = p.at("time_zone") == "local";
+        const int bucket = view == "year" ? 1440 : view == "rhythm" ? 60 : 0;
+        StatisticsBuckets buckets(bucket ? bucket : 1, local);
+        auto floor = utc_now_ms() / 60000 - 119;
+        Json result = Json::array();
+        if (metric == "active" || metric == "music") {
+            const bool music = metric == "music";
+            if (music && !config_.value("music_enabled", false))
+                return {{"rows", result}};
+            const auto live = music ? music_->rows() : usage_->rows();
+            for (const auto &r : live)
+                floor = std::min(floor, r.at("minute").get<std::int64_t>());
+            auto days = database().activity_duration(from, to, music, local, session_, floor);
+            for (const auto &r : live) {
+                const auto minute = r.at("minute").get<std::int64_t>();
+                if (minute >= from && minute < to)
+                    days[buckets.start(minute)] += r.at(music ? "played_ms" : "active_ms").get<std::int64_t>();
+            }
+            for (const auto &[minute, value] : days)
+                result.push_back({{"minute", minute}, {"value", value}});
+            return {{"rows", result}};
+        }
+        auto totals = database().activity_counts(from, to, bucket, local, session_, floor);
+        const auto merge = [&](const Json &live) {
+            for (const auto &r : live) {
+                const auto minute = r.at("minute").get<std::int64_t>();
+                if (minute >= floor && minute >= from && minute < to)
+                    totals[bucket ? buckets.start(minute) : 0].add(r.at("module"), r.at("metric"),
+                                                                  r.at("value").get<std::int64_t>());
+            }
+        };
+        Json live_input;
+        {
+            std::lock_guard lock(mutex_);
+            live_input = input_rows_;
+        }
+        merge(live_input);
+        merge(network_rows_);
+        if (view == "summary") {
+            const auto &counts = totals[0];
+            const auto number = [](const std::optional<std::int64_t> &value) {
+                return value ? Json(*value) : Json(nullptr);
+            };
+            return {{"totals", {{"keyboard", number(counts.keyboard)}, {"mouse", number(counts.mouse)},
+                                {"wheel", number(counts.wheel)}, {"coverage", number(counts.coverage)},
+                                {"network", number(counts.network)}}}};
+        }
+        for (const auto &[minute, counts] : totals) {
+            std::optional<std::int64_t> value;
+            if (view == "rhythm") {
+                if (counts.keyboard || counts.mouse || counts.coverage.value_or(0) > 0)
+                    value = counts.keyboard.value_or(0) + counts.mouse.value_or(0);
+            } else if (metric == "network") {
+                value = counts.network;
+            } else {
+                value = metric == "keyboard" ? counts.keyboard : counts.mouse;
+                if (!value && counts.coverage.value_or(0) > 0)
+                    value = 0;
+            }
+            if (value)
+                result.push_back({{"minute", minute}, {"value", *value}});
+        }
+        return {{"rows", result}};
+    }
     if (type == "get_statistics") {
         const auto from = p.at("from").get<std::int64_t>(), to = p.at("to").get<std::int64_t>(),
                    floor = utc_now_ms() / 60000 - 119;

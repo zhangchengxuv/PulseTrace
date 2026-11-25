@@ -28,8 +28,8 @@ const fragment={items:[],append(...items){this.items.push(...items);}};
 const nodes={content,state:node(),toggle:node(),title:node(),error:node()};
 const context=vm.createContext({
  $:id=>nodes[id],loading:false,nativeVisible:true,document:{hidden:false,createElement:tag=>{assert.equal(tag,'section');return stage;},createDocumentFragment:()=>fragment,querySelectorAll:()=>[]},
- viewGeneration:0,refreshTimer:0,refreshQueued:false,page:'settings',range:{from:1,to:2,bucket:1},rangePreset:'custom',rangeDirty:false,pendingScrollTop:null,pageScrollPositions:new Map(),selectedTrafficMonth:'all',
- state:{},campusData:null,rows:[],protocolSamples:[],networkEvents:[],comparisonRows:[],comparisonRange:'',comparisonFetched:0,monthlyTraffic:null,renderKey:'',updateOpenPending:false,window:{scrollTo(){throw new Error('refresh must not reset scroll');}},
+ viewGeneration:0,refreshTimer:0,refreshQueued:false,page:'settings',range:{from:1,to:2,bucket:1},rangePreset:'custom',appliedRangePreset:'custom',rangeDirty:false,pendingScrollTop:null,pageScrollPositions:new Map(),selectedTrafficMonth:'all',
+ state:{},campusData:null,rows:[],protocolSamples:[],networkEvents:[],comparisonTotals:null,PulseDashboard:{previousPeriod:()=>null},comparisonRange:'',comparisonFetched:0,monthlyTraffic:null,renderKey:'',updateOpenPending:false,window:{scrollTo(){throw new Error('refresh must not reset scroll');}},
  PulseCampus:{refresh:async()=>{}},PulseI18n:{use:()=>false},PulseDatePicker:{current:null,close(){}},applyTheme(){},applyAppearance(){},tr:k=>k,error(e){throw e;},clearCharts(){},finishStartup(){},
  mountRangeControls(){},names:{settings:'Settings'},settings(){rendered=true;stage.childNodes.push({kind:'rendered'});},dashboard(){},networkPage(){},keyboardPage(){},mousePage(){},history(){},appUsage(){},
  scheduleRefresh(){},clearTimeout,queueMicrotask,requestAnimationFrame:fn=>fn(),
