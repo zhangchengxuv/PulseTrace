@@ -517,10 +517,16 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         }
         return {{"rows",values},{"status",music_->status()},{"precision","minute"}};
     }
-    if(type=="get_app_usage"||type=="export_app_usage"){
+    if(type=="get_active_duration"||type=="get_app_usage"||type=="export_app_usage"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
         const auto live=usage_->rows();auto floor=utc_now_ms()/60000-119;
         for(const auto &r:live)floor=std::min(floor,r.at("minute").get<std::int64_t>());
+        if(type=="get_active_duration"){
+            auto duration=database().active_duration(from,to,session_,floor);
+            for(const auto &r:live)if(r["minute"]>=from&&r["minute"]<to)
+                duration=(duration.is_null()?0:duration.get<std::int64_t>())+r.at("active_ms").get<std::int64_t>();
+            return {{"active_ms",duration}};
+        }
         const int bucket=type=="export_app_usage"?1:p.value("bucket",1);
         const bool local=type=="get_app_usage"&&p.value("time_zone","UTC")=="local";
         StatisticsBuckets buckets(bucket,local);

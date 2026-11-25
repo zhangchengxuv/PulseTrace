@@ -31,6 +31,12 @@ Json DatabaseManager::usage(std::int64_t from,std::int64_t to,const std::string 
         result.push_back({{"minute",sqlite3_column_int64(s.p,0)},{"key",text(1)},{"name",text(2)},{"path",text(3)},{"foreground_ms",sqlite3_column_int64(s.p,4)},{"active_ms",sqlite3_column_int64(s.p,5)}});
     }if(rc!=SQLITE_DONE)throw SQLiteError(db_,"step",sqlite3_sql(s.p));return result;
 }
+Json DatabaseManager::active_duration(std::int64_t from,std::int64_t to,const std::string &exclude,std::int64_t floor)const{
+    UsageStatement s(db_,"SELECT SUM(active_ms) FROM app_usage WHERE minute>=? AND minute<? AND NOT(session=? AND minute>=?)");
+    sqlite3_bind_int64(s.p,1,from);sqlite3_bind_int64(s.p,2,to);s.text(3,exclude);sqlite3_bind_int64(s.p,4,floor);
+    if(s.step()!=SQLITE_ROW)throw SQLiteError(db_,"step",sqlite3_sql(s.p));
+    return sqlite3_column_type(s.p,0)==SQLITE_NULL?Json(nullptr):Json(sqlite3_column_int64(s.p,0));
+}
 void DatabaseManager::prune_usage(std::int64_t cutoff){UsageStatement s(db_,"DELETE FROM app_usage WHERE minute<?");sqlite3_bind_int64(s.p,1,cutoff);if(s.step()!=SQLITE_DONE)throw SQLiteError(db_,"step",sqlite3_sql(s.p));}
 std::string DatabaseManager::usage_icon_path(const std::string &identity)const{
     UsageStatement s(db_,"SELECT path FROM app_usage WHERE identity=? ORDER BY minute DESC LIMIT 1");s.text(1,identity);

@@ -29,6 +29,12 @@ const shiftedBins=dash.inputs(inputRows.map(row=>({...row,minute:row.minute+31})
 check(shiftedBins.length<=96&&shiftedBins.reduce((n,b)=>n+b.keyboard,0)===6000,'unaligned range still respects point bound and totals');
 check(dash.distribution([0,0])===null&&dash.distribution([1,3])[1]===.75,'ratio requires real denominator');
 const sample={accepted:1,source:'ndis',basis:'ip',ipv4_up:10,ipv4_down:20,ipv6_up:20,ipv6_down:10,quality:'incomplete_observation'};
+const peak=dash.peakInput([
+ {minute:10,module:'keyboard',metric:'30',value:18},{minute:10,module:'keyboard',metric:'31',value:12},
+ {minute:10,module:'mouse',metric:'left',value:7},{minute:11,module:'mouse',metric:'left',value:51},
+ {minute:11,module:'mouse',metric:'wheel_up_delta',value:12000},{minute:10,module:'repeat',metric:'30',value:100}
+]);
+check(peak.kpm===30&&peak.apm===51&&dash.peakInput([])===null,'peak rates use minute counts without repeat presses or scroll delta');
 check(dash.protocol([sample]).ratio[0]===.5&&dash.protocol([sample]).quality==='不完整观测','observed ratio retains quality');
 check(!dash.protocol([sample,{...sample,basis:'other'}]).has,'incomparable protocol bases are not summed');
 check(!dash.protocol([{...sample,accepted:0}]).has,'rejected-only samples are not a valid zero');

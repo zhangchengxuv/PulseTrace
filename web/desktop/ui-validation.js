@@ -1,4 +1,22 @@
 'use strict';
+async function validateSummaryDownload(){
+ const sample=[
+  {module:'keyboard',metric:'30',value:19472},
+  {module:'mouse',metric:'left',value:743},
+  {module:'network',metric:'interface_download_bytes',value:2147483648},
+  {module:'ignored',metric:'test-private-value',value:99}
+ ];
+ const totals=summaryTotals(sample),modules=new Set(['keyboard','mouse','active','network']);
+ const music={song:'Test-private-song',artist:'Test-private-artist'};
+ const metrics=summaryMetrics(totals,3280000,music,modules),canvas=el('canvas');
+ if(metrics.length!==5||metrics.some(metric=>metric.value.includes('Test-private')))throw Error('Summary privacy projection invalid');
+ const period=summaryPeriod({from:0,to:200000,bucket:60});
+ drawSummaryCard(canvas,period,metrics,true);
+ const light=canvas.getContext('2d').getImageData(0,30,1,1).data[0];
+ drawSummaryCard(canvas,period,metrics,false);
+ if(canvas.getContext('2d').getImageData(0,30,1,1).data[0]>=light)throw Error('Summary palette did not switch');
+ if(!(await saveSummaryPNG(canvas)).saved)throw Error('Summary PNG export returned no file');
+}
 function validateNetworkSummary(host){
  if(host.querySelectorAll('.network-transfer').length!==3)throw Error('Network summary must contain three transfer cards');
  const trend=host.querySelector('.network-trends');

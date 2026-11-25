@@ -249,7 +249,7 @@ void WebViewHost::configure() {
                 const std::wstring w(raw);
                 CoTaskMemFree(raw);
                 raw = nullptr;
-                if (w.size() > 65536)
+                if (w.size() > desktop_message_limit)
                     throw std::invalid_argument("Message too large");
                 auto json = parse_message(narrow(w),&request_id);
                 message_(std::move(json));

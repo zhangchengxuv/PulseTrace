@@ -36,6 +36,8 @@ class DatabaseManager {
     void save_usage(const std::string &session,const Json &rows);
     Json usage(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0,
                int bucket=1,bool local=false)const;
+    Json active_duration(std::int64_t from,std::int64_t to,const std::string &exclude_session,
+                         std::int64_t floor)const;
     void prune_usage(std::int64_t cutoff);
     std::string usage_icon_path(const std::string &identity)const;
     void save_campus_snapshot(const Json &snapshot);

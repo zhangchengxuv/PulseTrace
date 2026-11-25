@@ -16,7 +16,12 @@ function renderKeyboard(c){
  const hasCoverage=sum('coverage','observed_ms')>0||Object.keys(counts).length>0;
  const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
  const unique=card(tr('ui.4259deb9a5a6'),fmt(Object.keys(counts).length));
- c.append(el('div',{class:'cards dashboard-cards'},card(tr("ui.db4534c1cf62"),fmt(total),tr("ui.25e86d15f9d4")),card(tr("ui.3f9edb5674d2"),top?keyLabel(Number(top[0])):'—',top?fmt(top[1])+tr("ui.f81526efce19"):tr("ui.46ca86da52b3")),unique));
+ const stats=el('div',{class:'cards dashboard-cards'},card(tr("ui.db4534c1cf62"),fmt(total),tr("ui.25e86d15f9d4")),card(tr("ui.3f9edb5674d2"),top?keyLabel(Number(top[0])):'—',top?fmt(top[1])+tr("ui.f81526efce19"):tr("ui.46ca86da52b3")),unique);
+ if(range.bucket===1){
+  const peak=PulseDashboard.peakInput(rows);
+  stats.append(card(tr("summary.peak"),peak?fmt(peak.kpm)+" / "+fmt(peak.apm):"—",tr("summary.peak_units")));
+ }
+ c.append(stats);
  const viewport=el('div',{class:'keyboard-heat keyboard-viewport'}),stage=el('div',{class:'keyboard-stage'}),board=el('div',{class:'keyboard-board',role:'group'}),detail=el('div',{class:'key-detail',role:'status'});
  const countLabel=value=>hasCoverage?fmt(value)+tr('ui.f81526efce19'):tr('ui.da87c243aa0a');
  const drawDetail=id=>{

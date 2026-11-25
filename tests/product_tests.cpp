@@ -262,6 +262,15 @@ int main() {
             "nested JSON bounded");
         rejects([] { parse_message(std::string(65537, ' ')); }, "message size bounded");
         {
+            const auto png=std::string("iVBORw0KGgo")+std::string(70001,'A');
+            const Json message={{"type","save_summary_png"},{"request_id",7},{"params",{{"png",png}}}};
+            require(parse_message(message.dump())==message,"PNG export accepts a bounded larger message");
+            auto other=message;other["type"]="ping";
+            rejects([&]{parse_message(other.dump());},"other messages retain the original request limit");
+            auto oversized=message;oversized["params"]["png"]=png+std::string(summary_png_base64_limit,'A');
+            rejects([&]{parse_message(oversized.dump());},"PNG export also has a hard size limit");
+        }
+        {
             NetworkMonitor network;
             const auto sample = network.sample(utc_now_ms() / 60000, false, "");
             require(sample.status["interfaces"].is_array(), "real IP Helper interface enumeration");

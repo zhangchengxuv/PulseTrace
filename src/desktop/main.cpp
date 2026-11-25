@@ -16,6 +16,7 @@
 #include <memory>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <wincrypt.h>
 #include <thread>
 using namespace pulsetrace;
 namespace {
@@ -75,12 +76,13 @@ class DesktopApplication {
     void campus_event(Json event);
     void notify_campus(const Json &event);
     void open_campus(bool background=false);
+    bool save_summary_png(const std::string &encoded);
     void diagnostic(const std::string &text);
     void save_window();
     Json appearance() const{return {{"transparency",caption_.transparency()},{"reduced_motion",caption_.reduced_motion()},{"active",caption_.active()},{"dark",caption_.dark()}};}
     HWND window_{};
     HINSTANCE instance_{};
-    std::filesystem::path data_, exe_;
+    std::filesystem::path data_, exe_, test_summary_png_;
     std::unique_ptr<CoreService> core_;
     std::unique_ptr<WebViewHost> web_;
     std::unique_ptr<CampusPortalHost> portal_;
@@ -227,6 +229,52 @@ void DesktopApplication::notify_campus(const Json &event){
         free?"campus.alert_low_free":"campus.alert_low_balance"),_TRUNCATE);
     Shell_NotifyIconW(NIM_MODIFY,&notification);
 }
+bool DesktopApplication::save_summary_png(const std::string &encoded){
+    DWORD count{};
+    constexpr DWORD flags=CRYPT_STRING_BASE64|CRYPT_STRING_STRICT;
+    if(!CryptStringToBinaryA(encoded.c_str(),static_cast<DWORD>(encoded.size()),flags,nullptr,&count,nullptr,nullptr))
+        throw std::runtime_error("Invalid summary image");
+    std::vector<BYTE> bytes(count);
+    if(!CryptStringToBinaryA(encoded.c_str(),static_cast<DWORD>(encoded.size()),flags,bytes.data(),&count,nullptr,nullptr)||
+       count<33||std::string_view(reinterpret_cast<const char *>(bytes.data()),8)!="\x89PNG\r\n\x1a\n"||
+       std::string_view(reinterpret_cast<const char *>(bytes.data()+12),4)!="IHDR")
+        throw std::runtime_error("Invalid summary image");
+    const auto dimension=[&](size_t index){
+        return (static_cast<unsigned>(bytes[index])<<24)|(static_cast<unsigned>(bytes[index+1])<<16)|
+               (static_cast<unsigned>(bytes[index+2])<<8)|bytes[index+3];
+    };
+    if(dimension(16)==0||dimension(16)>1600||dimension(20)==0||dimension(20)>1600)
+        throw std::runtime_error("Invalid summary dimensions");
+    auto path=test_summary_png_;
+    if(path.empty()){
+        ComPtr<IFileSaveDialog> dialog;
+        if(FAILED(CoCreateInstance(CLSID_FileSaveDialog,nullptr,CLSCTX_INPROC_SERVER,IID_IFileSaveDialog,
+                                   reinterpret_cast<void **>(dialog.put()))))
+            throw std::runtime_error("Cannot open PNG save dialog");
+        const COMDLG_FILTERSPEC filter{L"PNG",L"*.png"};
+        dialog->SetFileTypes(1,&filter);
+        dialog->SetOptions(FOS_FORCEFILESYSTEM|FOS_OVERWRITEPROMPT|FOS_PATHMUSTEXIST);
+        dialog->SetDefaultExtension(L"png");
+        dialog->SetFileName(L"PulseTrace-summary.png");
+        const auto shown=dialog->Show(window_);
+        if(shown==HRESULT_FROM_WIN32(ERROR_CANCELLED))return false;
+        ComPtr<IShellItem> item;LPWSTR name{};
+        if(FAILED(shown)||FAILED(dialog->GetResult(item.put()))||!item||
+           FAILED(item->GetDisplayName(SIGDN_FILESYSPATH,&name))||!name)
+            throw std::runtime_error("Cannot resolve PNG file path");
+        path=name;CoTaskMemFree(name);
+    }
+    if(_wcsicmp(path.extension().c_str(),L".png")!=0)throw std::runtime_error("Select a PNG file");
+    wchar_t temporary[MAX_PATH]{};
+    if(!GetTempFileNameW(path.parent_path().c_str(),L"PT",0,temporary))
+        throw std::runtime_error("Cannot create PNG output");
+    std::ofstream out(std::filesystem::path(temporary),std::ios::binary|std::ios::trunc);
+    out.write(reinterpret_cast<const char *>(bytes.data()),count);out.close();
+    if(!out||!MoveFileExW(temporary,path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+        DeleteFileW(temporary);throw std::runtime_error("Cannot write PNG output");
+    }
+    return true;
+}
 void DesktopApplication::open_campus(bool background){
     const auto context=core_->campus_portal_context();
     if(!context.value("enabled",false))throw std::runtime_error("Enable campus monitoring and save the portal URL first");
@@ -264,6 +312,11 @@ void DesktopApplication::command(Json request) {
         return;
     validate_request(request);
     const auto kind=request["type"].get<std::string>();
+    if(kind=="save_summary_png"){
+        const bool saved=save_summary_png(request["params"]["png"].get_ref<const std::string &>());
+        web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"saved",saved}}}});
+        return;
+    }
     if(kind.starts_with("cloud_")){
         try{if(!cloud_)throw std::runtime_error("CLOUD_UNAVAILABLE");
             if(kind=="cloud_configure"&&!web_->secure_forms())throw std::runtime_error("CLOUD_WEBVIEW_RUNTIME_REQUIRED");
@@ -638,6 +691,14 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 }
                 ++ready_count_;
                 if (ready_count_ >= cycles_) {
+                    std::ifstream png(test_summary_png_, std::ios::binary);
+                    char signature[8]{};
+                    if(!png.read(signature,sizeof(signature))||std::string_view(signature,sizeof(signature))!="\x89PNG\r\n\x1a\n"){
+                        preview_ok_=false;
+                        diagnostic("SELFTEST FAIL: summary PNG download missing or invalid");
+                        quit();
+                        return 0;
+                    }
                     diagnostic(
                         "SELFTEST PASS: pages, JSON bridge, repeated close/browser exit/reopen cycles=" +
                         std::to_string(ready_count_));
@@ -861,6 +922,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) {
     GetClientRect(window_, &bounds);
     diagnostic("Window client pixels=" + std::to_string(bounds.right) + "x" + std::to_string(bounds.bottom) +
                "; DPI=" + std::to_string(dpi) + "; custom window/tray icon resource=101");
+    if(selftest_)test_summary_png_=data_/"logs"/("selftest-summary-"+std::to_string(GetCurrentProcessId())+".png");
     web_ = std::make_unique<WebViewHost>(
         window_, data_, exe_ / "web",
         [this](Json request) {

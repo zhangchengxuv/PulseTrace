@@ -32,7 +32,9 @@ std::wstring quote_windows_argument(const std::wstring &argument) {
 }
 Json parse_message(const std::string &text,Json *request_id) {
     if(request_id)*request_id=nullptr;
-    if (text.size() > 65536)
+    if (text.size() > desktop_message_limit)
+        throw std::invalid_argument("Desktop message too large");
+    if (text.size() > 65536 && text.find("\"save_summary_png\"")==std::string::npos)
         throw std::invalid_argument("Message exceeds 64 KiB");
     std::vector<std::set<std::string>> objects;
     auto json = Json::parse(text, [&](int depth, Json::parse_event_t event, Json &value) {
@@ -49,6 +51,8 @@ Json parse_message(const std::string &text,Json *request_id) {
     // Correlate parameter-validation errors only after bounded, duplicate-free
     // JSON parsing and a valid envelope. Malformed/ambiguous IDs stay unknown.
     if(request_id&&valid_envelope(json))*request_id=json["request_id"];
+    if(text.size()>65536&&(!valid_envelope(json)||json["type"]!="save_summary_png"))
+        throw std::invalid_argument("Message exceeds 64 KiB");
     validate_request(json);
     return json;
 }
@@ -59,6 +63,12 @@ void validate_request(const Json &r) {
     const auto &p = r["params"];
     std::set<std::string> allowed;
     if (type == "retry_persistence" || type == "ping" || type == "get_status" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update" || type=="get_campus_status" || type=="open_campus_portal" || type=="campus_rescan" || type=="delete_campus_rule") {
+    } else if(type=="save_summary_png"){
+        allowed={"png"};
+        if(!p.contains("png")||!p["png"].is_string())throw std::invalid_argument("Invalid summary image");
+        const auto &image=p["png"].get_ref<const std::string &>();
+        if(image.size()<44||image.size()>summary_png_base64_limit||image.size()%4!=0||!image.starts_with("iVBORw0KGgo"))
+            throw std::invalid_argument("Invalid summary image");
     } else if(type=="campus_pick_field"){
         allowed={"field"};const std::set<std::string> fields(campus_field_names.begin(),campus_field_names.end());
         if(!p.contains("field")||!p["field"].is_string()||!fields.contains(p["field"].get<std::string>()))throw std::invalid_argument("Invalid campus field");
@@ -123,8 +133,9 @@ void validate_request(const Json &r) {
         allowed = {"enabled"};
         if (!p.contains("enabled") || !p["enabled"].is_boolean())
             throw std::invalid_argument("enabled must be boolean");
-    } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="export_app_usage" || type=="get_usage_icon" || type=="get_music" || type=="export_music") {
+    } else if (type == "get_statistics" || type == "export_csv" || type=="get_app_usage" || type=="get_active_duration" || type=="export_app_usage" || type=="get_usage_icon" || type=="get_music" || type=="export_music") {
         allowed = {"from", "to", "bucket"};
+        if(type=="get_active_duration")allowed.erase("bucket");
         if (type == "get_statistics" || type == "get_app_usage") {
             allowed.insert("time_zone");
             if (p.contains("time_zone") && p["time_zone"] != "local" && p["time_zone"] != "UTC")

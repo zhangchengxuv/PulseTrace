@@ -48,6 +48,8 @@ int main(){try{
  auto core_dir=directory/"core";std::filesystem::create_directories(core_dir);const auto minute=utc_now_ms()/60000;
  {DatabaseManager db(core_dir/"monitor.db");db.save_usage("fixture",Json::array({{{"minute",minute},{"key","test.exe"},{"name","Test"},{"path",""},{"foreground_ms",1000},{"active_ms",500}}}));}
  {CoreService core(core_dir);core.start();const Json range={{"from",minute},{"to",minute+1}};auto result=rpc(core,"get_app_usage",range);check(!rpc(core,"get_status")["monitoring"].get<bool>()&&result["rows"].size()==1,"native bridge/default pause/history");
+  check(rpc(core,"get_active_duration",range)==Json({{"active_ms",500}}),"active export returns only the numeric aggregate");
+  check(rpc(core,"get_active_duration",{{"from",minute+1},{"to",minute+2}})==Json({{"active_ms",nullptr}}),"empty active export distinguishes unobserved time from zero");
   rpc(core,"set_config",{{"usage_idle_seconds",90},{"usage_exclusions",Json::array({"test.exe"})},{"usage_icons",false}});
   const auto exported=rpc(core,"export_app_usage",range);check(std::filesystem::exists(core_dir/exported["file"].get<std::string>()),"usage CSV export");
   rpc(core,"set_monitoring",{{"enabled",true}});rpc(core,"set_monitoring",{{"enabled",false}});check(rpc(core,"get_app_usage",range)["rows"].size()==1,"pause/resume preserves history");core.stop();}

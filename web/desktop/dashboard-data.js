@@ -34,5 +34,19 @@ globalThis.PulseDashboard=(()=>{
   if(!a||!b||Math.abs(a-b)/Math.max(a,b)>.01)return null;
   const before=total(previous,'keyboard');return before>0?(total(current,'keyboard')-before)/before:null;
  }
- return {mouseKeys,total,series,inputs,distribution,protocol,protocolRows,comparison};
+ function peakInput(rows){
+  const minutes=new Map();
+  let covered=false,kpm=0,apm=0;
+  for(const {minute,module,metric,value} of rows){
+   if(module==='coverage'&&metric==='observed_ms'&&value>0)covered=true;
+   const keyboard=module==='keyboard';
+   if(!keyboard&&!(module==='mouse'&&mouseKeys.includes(metric)))continue;
+   if(!minutes.has(minute))minutes.set(minute,{keys:0,actions:0});
+   const bin=minutes.get(minute),count=Number(value);
+   if(keyboard)bin.keys+=count;
+   bin.actions+=count;kpm=Math.max(kpm,bin.keys);apm=Math.max(apm,bin.actions);
+  }
+  return covered||minutes.size?{kpm,apm}:null;
+ }
+ return {mouseKeys,total,series,inputs,distribution,protocol,protocolRows,comparison,peakInput};
 })();
