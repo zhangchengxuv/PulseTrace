@@ -6,42 +6,41 @@ A local keyboard, mouse, application usage and network activity monitor for Wind
 
 ## Features
 
-- **Keyboard**: aggregate key statistics, ANSI 104 layout and the continuous Arctic heatmap.
-- **Mouse**: a five-button diagram and ranking; Mouse4 Back, Mouse5 Forward; temporal double clicks, wheel events and deltas tracked separately.
-- **App Usage**: foreground dwell and active time, rankings, hourly/daily trends, exclusions and CSV export.
-- **Music**: optional QQ Music / NetEase SMTC playback duration, qualified plays, song/artist rankings and trends; disabled by default. [Support limits](docs/music.md).
-- **Network**: egress upload/download, physical-interface IPv4/IPv6 observations, monthly daily-traffic calendars, interfaces and connection history.
-- **Campus portal**: optional generic portal monitoring with isolated WebView2 sign-in, DOM field recognition/confirmation and balance/allowance snapshots. Disabled by default.
-- **Simpler pages**: Network no longer displays application traffic rankings or queries them on refresh; existing history is retained. Keyboard rankings collapse by default and preserve expansion state.
-- **Cloud backup**: grouped settings, Jianguoyun HTTPS WebDAV, DPAPI-protected credentials, encrypted archives and confirmed restore. [Backup guide and validation scope](docs/cloud-backup.md).
-- **Live network speed**: displayed on Dashboard and Network; taskbar speed has been removed while tray background operation remains available.
-- **History and settings**: All Data by default, minute/hour/day and custom ranges, SQLite, monthly archives, backups and export; Chinese/English, Deep Ocean / Pearl Mist, tray operation and dual-source update checks.
+- **Keyboard and mouse** · ANSI 104 and TKL heatmaps, light Arctic, linear/log scales, ten-finger load, correction ratio, wheel distance, lifetime estimates and peak KPM/APM.
+- **Activity history** · A 7×24 rhythm matrix, five-metric annual grid, Dashboard period comparisons and local achievements. Seven time shortcuts, custom ranges and local/UTC buckets.
+- **App Usage** · Foreground dwell, active time, rankings, hourly and daily trends, exclusions and CSV export.
+- **Music and BGM Buff** · Optional QQ Music and NetEase SMTC statistics. View playback rankings, typing rates, foreground app associations and single-day track markers when enabled. [Support limits](docs/music.md)
+- **Network and campus portal** · Three bidirectional cards, IPv4/IPv6 trends, monthly calendars and connection history. Optional campus monitoring and Windows alerts for low balance or free data are off by default. [Campus portal guide](docs/campus-portal.md)
+- **Themes and sharing** · Deep Ocean and Pearl Mist can follow Windows. Export light or dark Dashboard summary PNGs with selectable contents. Music is unchecked by default.
+- **Zen Pulse** · Dark dual traces for live input and network activity, with fullscreen on the current monitor. Animation stops when hidden or minimized.
+- **Data and Windows integration** · Local SQLite, monthly archives, backup and CSV export, Chinese/English, tray operation, dual-source update checks and Run or logon-task startup. Encrypted WebDAV backup is opt-in. [Cloud backup guide](docs/cloud-backup.md)
 
-Collection starts paused. Input text, window titles and mouse trajectories are not recorded. Active time uses an idle threshold; IPv4/IPv6 and rankings depend on permissions, sampling and quality, and do not represent full-system traffic or campus billing. Campus monitoring is disabled by default, and unconfirmed portal fields remain unknown. Unsigned update packages require manual installation after verification. [Measurement limits](docs/traffic-rankings.md) · [App Usage](docs/app-usage.md) · [Campus portal](docs/campus-portal.md)
+Collection starts paused. Input text, window titles and mouse trajectories are not recorded. Active time uses an idle threshold. IPv4/IPv6 observations and rankings depend on permissions, sampling and data quality. Unsigned update packages require manual installation after verification. [Measurement limits](docs/traffic-rankings.md) · [App Usage](docs/app-usage.md)
 
 ## Screenshots
 
-Actual **v0.7.4 x64 Release** screenshots, using isolated empty data with collection paused. Pages use 1600×900 DIP (2000×1125 pixels at 125% DPI). The campus **Demo** uses synthetic in-memory readings, with no personal account or statistics. v0.8.0 includes simplified copy and an updated mouse diagram; these captures remain from v0.7.4.
+These native WebView2 screenshots are from the **v0.9.0 preparation** build, based on commit `b386c96` in Windows x64 Release configuration. Collection was paused. The screens use synthetic records and demonstration waveforms. The viewport is 1600×900 DIP (2000×1125 pixels at 125% DPI).
 
-| Dashboard | Network |
+| Dark Dashboard | Light keyboard heatmap |
 | --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Network](docs/screenshots/network.png) |
-| **ANSI 104 keyboard heatmap** | **Campus portal · Demo** |
-| ![Keyboard heatmap](docs/screenshots/keyboard.png) | ![Campus portal Demo](docs/screenshots/campus-demo.png) |
+| ![Dark Dashboard and period comparisons](docs/screenshots/dashboard.png) | ![Light ANSI 104 heatmap](docs/screenshots/keyboard.png) |
+| **Ten-finger load** | **Activity rhythm and annual grid** |
+| ![Light ten-finger load chart](docs/screenshots/finger-load.png) | ![History rhythm matrix and annual grid](docs/screenshots/activity-history.png) |
+
+**Zen Pulse**
+
+![Blue input and violet network traces](docs/screenshots/zen-pulse.png)
 
 <details>
-<summary>Mouse and App Usage</summary>
+<summary>Historical screenshots · v0.7.4 and the former taskbar widget</summary>
 
-| Mouse | App Usage |
+| Network | Campus portal (synthetic Demo) |
 | --- | --- |
+| ![Earlier Network page](docs/screenshots/network.png) | ![Campus portal Demo](docs/screenshots/campus-demo.png) |
+| **Mouse** | **App Usage** |
 | ![Mouse](docs/screenshots/mouse.png) | ![App Usage](docs/screenshots/usage.png) |
 
-</details>
-
-<details>
-<summary>Historical taskbar widget (removed in v0.7.1)</summary>
-
-![Historical taskbar widget, paused](docs/screenshots/taskbar.png)
+![Former taskbar widget (removed in v0.7.1)](docs/screenshots/taskbar.png)
 
 </details>
 
@@ -57,7 +56,7 @@ Measured main `d414ecf`: Windows 11 26300, Ryzen 5 5600 (12 logical processors),
 
 All rows include the native helper; the taskbar helper alone used **2.81 MiB Private Bytes / 17.55 MiB Working Set**. Private Bytes measures private committed memory; Working Set measures resident pages, and summing processes double-counts shared pages. These short runs establish neither long-term limits nor performance improvements.
 
-Current program files listed by the installer total **11.07 MiB**, excluding the uninstaller, system Runtime and `data`; the current installed size including the uninstaller remains untested. After 45 seconds, data files totaled approximately **0.12 MiB** for background/taskbar and **10.73 MiB** with the window open, including WebView2 cache. Measurement reports are excluded; file sizes are not disk writes. [Methods and results](docs/performance.md)
+Program files listed by the installer used in that measurement total **11.07 MiB**, excluding the uninstaller, system Runtime and `data`; the installed size including the uninstaller was not measured. After 45 seconds, data files totaled approximately **0.12 MiB** for background/taskbar and **10.73 MiB** with the window open, including WebView2 cache. Measurement reports are excluded; file sizes are not disk writes. [Methods and results](docs/performance.md)
 
 ## Download and Install
 
@@ -68,7 +67,7 @@ Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-Version **v0.8.0** adds Music statistics, rankings, trends and CSV, preserving existing data through schema 9 migration. QQ reads work locally; real NetEase compatibility remains unverified. See [release notes](docs/releases/v0.8.0.md). [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+**v0.9.0 is pending release.** It adds input insights, activity rhythms, BGM Buff and Zen Pulse. Upgrading from v0.8.0 keeps SQLite schema 9. The download links above point to the published v0.8.0 packages. [v0.9.0 release notes](docs/releases/v0.9.0.md) · [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
