@@ -511,6 +511,7 @@
   "ranking.attribution_mihomo_metadata_host": "Mihomo connection-reported domain; no CDN regrouping",
   "ranking.attribution_capacity_overflow": "Capacity overflow bucket",
   "ranking.unknown_family": "Unknown IP family",
+  "theme.system": "System",
   "theme.pearl": "Pearl Mist",
   "theme.ocean": "Deep Ocean",
   "usage.title": "App Usage",
