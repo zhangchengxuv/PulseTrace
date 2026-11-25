@@ -216,7 +216,8 @@ async function validateStaticInteractions(){
   check(document.activeElement===select&&select.value==='B'&&!select.disabled,'select operation');
  }finally{probe.remove();}
  if(page!=='settings'&&rangeFields){
-  check(rangePreset==='all'&&range.from===0&&rangeFields.preset.value==='all','default all-data range');
+  check(rangePreset==='all'&&range.from===0&&document.querySelector('[data-range-preset=all]').getAttribute('aria-pressed')==='true','default all-data range');
+  check(document.querySelectorAll('#range-host .range select').length===2&&rangeFields.shortcuts.length===7,'shortcut presets and two selectors');
   rangeFields.from.click();const picker=PulseDatePicker.current;
   check(picker?.dialog.open,'date button click');picker.hour.focus();picker.hour.select();
   check(document.activeElement===picker.hour&&getComputedStyle(picker.hour).userSelect==='text','date editor');

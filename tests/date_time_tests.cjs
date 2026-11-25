@@ -18,4 +18,32 @@ process.env.TZ='Asia/Kathmandu';
 check(PulseDate.hourStart(minute('2026-01-01T12:30:00Z'))===minute('2026-01-01T12:15:00Z'),'quarter-hour offset');
 process.env.TZ='Australia/Lord_Howe';
 check(PulseDate.hourStart(minute('2026-10-03T15:45:00Z'))===minute('2026-10-03T15:30:00Z'),'half-hour daylight transition');
+{
+ const vm=require('node:vm'),fs=require('node:fs');
+ const now=minute('2026-11-25T14:00:00Z'),calls=[];
+ const node=(tag,attrs,...children)=>({tag,attrs,children:children.flat(),
+  setAttribute(name,value){attrs[name]=value;},addEventListener(){}});
+ const context={
+  el:node,tr:key=>key,PulseDate,Date:{now:()=>now*60000},PulseRange:{bucket:()=>60},
+  PulseDatePicker:{Picker:class{constructor(button,value,commit){button.commit=commit;}}},
+  historyFirst:now-8640,range:{from:0,to:now+1,bucket:60,time_zone:'UTC'},filterExpanded:true,
+  error(failure){throw failure;},viewGeneration:0,renderKey:'initial',
+  refresh(force){calls.push({force,...context.range});}
+ };
+ vm.createContext(context);
+ vm.runInContext(fs.readFileSync(require.resolve('../web/desktop/range-controls.js'),'utf8'),context);
+ const bar=context.rangeControls().children[1];
+ const shortcuts=bar.children[0].children;
+ const preset=id=>shortcuts.find(button=>button.attrs['data-range-preset']===id);
+ check(bar.children.filter(child=>child.tag==='select').length===2&&shortcuts.length===7,'only granularity and zone selectors plus existing preset shortcuts');
+ check(preset('all').attrs['aria-pressed']==='true','all-data selection starts pressed');
+ preset('60').attrs.onclick();
+ check(calls.length===1&&calls[0].force&&calls[0].to-calls[0].from===60&&preset('60').attrs['aria-pressed']==='true','one hour shortcut applies immediately');
+ preset('week').attrs.onclick();
+ check(context.range.from===PulseDate.calendarStart(now,'week','UTC'),'week shortcut retains its civil start');
+ bar.children[1].commit(now-40);
+ check(calls.length===2&&context.range.from!==now-40&&shortcuts.every(button=>button.attrs['aria-pressed']==='false'),'manual date changes stay in the draft');
+ bar.children.at(-1).attrs.onclick();
+ check(calls.length===3&&context.range.from===now-40,'query applies manual date range');
+}
 console.log(n+' calendar/time checks passed');
