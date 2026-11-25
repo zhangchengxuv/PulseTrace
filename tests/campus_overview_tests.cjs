@@ -25,6 +25,13 @@ assert.equal(m.values.funded,54.9*G);assert.ok(Math.abs(m.values.total/G-(120-30
 assert.deepEqual(Array.from(m.segments,s=>s.key),['used','free']);assert.equal(m.sum,120*G,'denominator is free quota, not remaining capacity');
 const dashboard=run('campusDashboardCard()'),network=run('campusNetworkPanel()');assert.equal(dashboard.textContent,network.textContent);assert.ok(dashboard.textContent.includes('29.69 GB'));assert.ok(dashboard.textContent.includes('30399.45 MB'));
 hosts=[dashboard];const replacements=dashboard.replacements;run('PulseCampus.renderLive()');assert.equal(dashboard.replacements,replacements);
+run('campusData.alerts={low_free:true,low_balance:true};PulseCampus.renderLive()');
+assert.equal(dashboard.dataset.alert,'false','alerts are opt-in');
+run('state.config.campus_alerts={free_enabled:true,balance_enabled:false};PulseCampus.renderLive()');
+assert.equal(dashboard.dataset.alert,'true');assert.equal(dashboard.querySelector('.campus-alert').textContent,'campus.alert_low_free');
+run('campusLastEventType="campus_auth_required";PulseCampus.renderLive()');
+assert.equal(dashboard.dataset.alert,'false','retained values do not masquerade as current alerts');
+run('delete state.config.campus_alerts');reset();run('PulseCampus.renderLive()');
 const details=dashboard.querySelector('.campus-overview-details');assert.equal(details.open,false,'details start collapsed');
 assert.ok(details.textContent.includes('30399.45 MB'),'raw portal reading remains available in details');
 assert.ok(details.textContent.includes('campus.card.total_basis'),'formula remains available in details');

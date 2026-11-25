@@ -820,5 +820,18 @@
   "keyboard.scale": "热力色阶",
   "keyboard.linear": "线性",
   "keyboard.log": "对数",
-  "keyboard.arctic": "Arctic · 自定义色带"
+  "keyboard.arctic": "Arctic · 自定义色带",
+  "network.interface_total": "接口总流量",
+  "campus.alert_title": "PulseTrace · 校园网提醒",
+  "campus.alert_settings": "低余额和低流量提醒",
+  "campus.alert_enable_free": "提醒免费流量不足",
+  "campus.alert_enable_balance": "提醒余额不足",
+  "campus.alert_free_gb": "免费流量阈值（GB）",
+  "campus.alert_balance_cny": "余额阈值（元）",
+  "campus.alert_save": "保存提醒设置",
+  "campus.alert_hint": "提醒基于已确认的校园网读数。每项阈值在同一账期提醒一次；账期未知时每 24 小时最多一次。",
+  "campus.alert_invalid": "请将两个阈值都填写在 0 到 1,000,000 之间。",
+  "campus.alert_low_free": "校园网免费剩余流量低于设定阈值。",
+  "campus.alert_low_balance": "校园网账户余额低于设定阈值。",
+  "campus.alert_both": "校园网免费剩余流量和账户余额均低于设定阈值。"
 }

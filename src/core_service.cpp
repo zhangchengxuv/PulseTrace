@@ -39,6 +39,7 @@ void validate_config(const Json &c) {
     if(!c.at("taskbar_monitor").is_number_integer()||c.at("taskbar_monitor")<0||c.at("taskbar_monitor")>32)throw std::invalid_argument("Invalid taskbar monitor");
     for(const char *key:{"close_to_tray","capture_on_launch","check_updates_on_start"})if(!c.at(key).is_boolean())throw std::invalid_argument("Expected boolean setting");
     if(!c.at("campus_enabled").is_boolean())throw std::invalid_argument("Expected boolean campus setting");
+    validate_campus_alert_settings(c.at("campus_alerts"));
     if(!c.at("campus_traffic_radix").is_number_integer()||(c.at("campus_traffic_radix")!=1000&&c.at("campus_traffic_radix")!=1024))throw std::invalid_argument("Invalid campus traffic radix");
     if(!c.at("campus_linear_tariff").is_boolean())throw std::invalid_argument("Invalid campus tariff confirmation");
     if(c.at("campus_price_basis")!="school"&&c.at("campus_price_basis")!="legacy_bytes")throw std::invalid_argument("Invalid campus price basis");
@@ -82,6 +83,7 @@ CoreService::CoreService(std::filesystem::path data) : data_(std::filesystem::ab
     config_["campus_enabled"]=false;config_["campus_portal_url"]="";config_["campus_allowed_origins"]=Json::array();config_["campus_refresh_minutes"]=5;config_["campus_unit_price"]=0.0;config_["campus_price_unit"]="GiB";
     config_["campus_traffic_radix"]=1024;config_["campus_price_basis"]="school";config_["campus_linear_tariff"]=false;
     config_["campus_price_unit"]="GB";
+    config_["campus_alerts"]={{"free_enabled",false},{"balance_enabled",false},{"free_gb",5.0},{"balance_cny",10.0}};
     std::ifstream in(data_ / "config.json");
     bool migrate=false;
     if (in) {
@@ -389,11 +391,12 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         const auto url=config.value("campus_portal_url",std::string()),origin=campus_origin(url);
         Json latest=nullptr;
         if(connection&&!origin.empty())latest=connection->campus_latest(origin);
+        const auto rule=campus_rule_for(rules,origin);
         return {{"enabled",config.value("campus_enabled",false)},
                 {"configured",!url.empty()},{"portal_url",url},{"origin",origin},
                 {"refresh_minutes",config.value("campus_refresh_minutes",5)},
                 {"unit_price",config.value("campus_unit_price",0.0)},
-                {"rule",campus_rule_for(rules,origin)},{"latest",latest},
+                {"rule",rule},{"latest",latest},{"alerts",campus_thresholds(config,rule,latest,utc_now_ms()).flags()},
                 {"quality_basis","portal-confirmed mapping; values are not inferred from interface totals"},
                 {"rule_error",rule_error}};
     }
@@ -426,7 +429,8 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         return {{"deleted",true}};
     }
     if(type=="save_campus_snapshot"){
-        std::string configured;{std::lock_guard lock(mutex_);configured=config_.value("campus_portal_url",std::string());}
+        Json config;{std::lock_guard lock(mutex_);config=config_;}
+        const auto configured=config.value("campus_portal_url",std::string());
         const auto url=normalize_campus_portal_url(p.at("portal_url").get<std::string>());
         const auto origin=campus_origin(url),configured_origin=campus_origin(configured);
         if(origin.empty()||configured_origin.empty()||origin!=configured_origin)throw std::invalid_argument("Snapshot origin is not the configured campus portal");
@@ -481,14 +485,21 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             snapshot["measurement"]={{"raw_readings",readings},{"capture_radix",radix},{"status","captured"},{"basis","portal_convention"}};
         }else snapshot["measurement"]=campus_measurement(snapshot);
         database().save_campus_snapshot(snapshot);
+        CampusThresholds thresholds;
+        Json notice=Json::object();
         try{
             Json rules;{std::lock_guard lock(mutex_);rules=campus_rules_;}
             bool found=false;for(auto &rule:rules["portals"])if(rule.value("origin","")==origin){
-                rule["last_status"]=quality;rule["last_sync_ms"]=snapshot["observed_ms"];found=true;break;
+                rule["last_status"]=quality;rule["last_sync_ms"]=snapshot["observed_ms"];
+                const auto observed=snapshot.at("observed_ms").get<std::int64_t>();
+                thresholds=campus_thresholds(config,rule,snapshot,observed);
+                if(thresholds.low_free||thresholds.low_balance)
+                    notice=campus_due_alerts(thresholds,rule["alert_receipts"],observed);
+                found=true;break;
             }
             if(found){save_campus_rules(data_,rules);std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_updated_ms"]=utc_now_ms();}
-        }catch(const std::exception &e){std::lock_guard lock(mutex_);state_["campus_rule_error"]=e.what();}
-        return {{"saved",true},{"snapshot",snapshot}};
+        }catch(const std::exception &e){notice=Json::object();std::lock_guard lock(mutex_);state_["campus_rule_error"]=e.what();}
+        return {{"saved",true},{"snapshot",snapshot},{"alerts",thresholds.flags()},{"notice",notice}};
     }
     if(type=="get_history_bounds")return database().history_bounds();
     if(type=="get_music"||type=="export_music"){

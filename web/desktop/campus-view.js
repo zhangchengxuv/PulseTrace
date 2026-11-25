@@ -177,7 +177,12 @@ function campusOverviewModel(){
   [{key:'used',value:Math.min(consumed,quota)},{key:'free',value:free}].filter(s=>s.value>0):[];
  const sum=segments.reduce((sum,item)=>sum+item.value,0);
  if(!Number.isFinite(sum))segments.length=0;
+ const current=!['disabled','auth','error','stale','empty'].includes(status);
+ const flags=campusData?.alerts,settings=cfg.campus_alerts;
+ const lowFree=current&&settings?.free_enabled===true&&flags?.low_free===true;
+ const lowBalance=current&&settings?.balance_enabled===true&&flags?.low_balance===true;
  return {values,status,percent,segments,sum,freeUsed:consumed,radix:campusRadix(),raw:campusReadings(),usedSource:c.sources.used_bytes,units:campusData?.latest?.details?.web_units||{},freeSource:raw('free_remaining_bytes')?c.sources.free_remaining_bytes:'calculated',balanceSource:c.sources.balance,
+  lowFree,lowBalance,
   syncing:runtime==='campus_syncing',observed:campusData?.latest?.observed_ms||null,
   source:campusData?.latest?.portal_url||campusData?.portal_url||cfg.campus_portal_url||''};
 }
@@ -189,12 +194,13 @@ function campusOverviewContent(host,m){
  const header=el('header',{class:'campus-overview-header'},el('div',{class:'campus-overview-heading'},metricIcon('network'),el('h3',{},tr('campus.title')),
   el('span',{class:'campus-sync-state',role:'status',title:tr(statusKey)},tr(m.syncing&&m.status!=='disabled'?'campus.syncing':m.status==='billing'?'campus.accounting_pending':statusKey))),
   el('span',{class:'campus-sync-time'},m.observed&&m.status!=='disabled'?tr('campus.card.synced',{time:new Date(m.observed).toLocaleString(PulseI18n.locale)}):tr('campus.never_synced')));
- host.dataset.status=m.status;host.replaceChildren(header);
+ host.dataset.status=m.status;host.dataset.alert=String(m.lowFree||m.lowBalance);host.replaceChildren(header);
  if(m.status==='disabled'){
   host.append(el('div',{class:'campus-disabled'},el('p',{},tr('campus.card.disabled_hint')),
    el('button',{class:'secondary',onclick:()=>navigate('settings')},tr('campus.card.configure'))));return;
  }
- const metric=(key,title,kind,source)=>el('div',{class:'campus-metric campus-metric-'+key,title:tr(source)},
+ if(m.lowFree||m.lowBalance)host.append(el('p',{class:'campus-alert',role:'status'},tr(m.lowFree&&m.lowBalance?'campus.alert_both':m.lowFree?'campus.alert_low_free':'campus.alert_low_balance')));
+ const metric=(key,title,kind,source)=>el('div',{class:'campus-metric campus-metric-'+key,title:tr(source),'data-low':String(key==='free'&&m.lowFree||key==='balance'&&m.lowBalance)},
   el('div',{class:'campus-metric-label'},metricIcon(kind),el('span',{},tr(title))),
   el('strong',{'data-campus-value':key,class:m.values[key]==null?'campus-value-missing':''},value(key,key==='balance')),
   key==='total'&&m.values[key]!=null?el('small',{},tr('campus.card.estimate')):null);
@@ -275,6 +281,22 @@ function renderCampusSettings(host){
  const configPayload=()=>({campus_enabled:enabled.checked,campus_portal_url:url.value.trim(),campus_allowed_origins:origins.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean),campus_refresh_minutes:Number(refresh.value),campus_traffic_radix:Number(radix.value),campus_linear_tariff:linear.checked,...(priceEdited?{campus_unit_price:Number(price.value),campus_price_unit:'GB',campus_price_basis:'school'}:{})});
  let saves=Promise.resolve();
  const persist=task=>{saves=saves.catch(()=>{}).then(async()=>{feedback.textContent=tr('campus.saving');try{await task();const next=await rpc('get_campus_status');if(campusData?.origin!==next.origin){campusFieldState={};campusCandidates={};campusStateOrigin='';}campusData=next;feedback.textContent=tr('campus.saved');PulseCampus.renderLive();}catch(e){feedback.textContent=String(e.message||e);throw e;}});return saves;};
+ const thresholds=cfg.campus_alerts||{};
+ const lowFree=input('checkbox','',{checked:thresholds.free_enabled===true});
+ const lowBalance=input('checkbox','',{checked:thresholds.balance_enabled===true});
+ const minimum={min:0,max:1000000,step:'any',required:''};
+ const freeGB=input('number',thresholds.free_gb??5,minimum),balanceCNY=input('number',thresholds.balance_cny??10,minimum);
+ const saveAlerts=()=>{
+  if(!freeGB.checkValidity()||!balanceCNY.checkValidity()){feedback.textContent=tr('campus.alert_invalid');return;}
+  const campus_alerts={free_enabled:lowFree.checked,balance_enabled:lowBalance.checked,free_gb:Number(freeGB.value),balance_cny:Number(balanceCNY.value)};
+  return persist(async()=>{await rpc('set_config',{campus_alerts});state=await rpc('get_status');}).catch(()=>{});
+ };
+ const alerts=el('fieldset',{class:'campus-alert-settings'},el('legend',{},tr('campus.alert_settings')),
+  el('div',{class:'settings-grid'},
+   el('label',{class:'checkbox'},lowFree,tr('campus.alert_enable_free')),label('campus.alert_free_gb',freeGB),
+   el('label',{class:'checkbox'},lowBalance,tr('campus.alert_enable_balance')),label('campus.alert_balance_cny',balanceCNY)),
+  el('p',{class:'muted'},tr('campus.alert_hint')),
+  el('button',{type:'button',class:'secondary',onclick:saveAlerts},tr('campus.alert_save')));
  const saveBasic=()=>{const payload=configPayload();return persist(async()=>{if(!url.checkValidity()||!refresh.checkValidity()||priceEdited&&!price.checkValidity())throw Error(tr('campus.invalid_settings'));await rpc('set_config',payload);state=await rpc('get_status');});};
  const saveFields=(allowEmpty=false)=>{const fields=structuredClone(campusFieldState);
   // Billing edits must not implicitly confirm new page candidates.
@@ -371,7 +393,7 @@ function renderCampusSettings(host){
  extension.onchange=()=>{if(campusFieldKind[extension.value]){extended.add(extension.value);drawRules();extension.value='';}};
  const advanced=el('details',{class:'campus-section'},el('summary',{},tr('campus.advanced')),label('campus.allowed',origins,el('small',{},tr('campus.allowed_hint'))),rulesHost,el('p',{class:'muted'},tr('campus.privacy')),el('div',{class:'actions'},el('button',{class:'secondary',onclick:async()=>{try{await rpc('campus_rescan');feedback.textContent=tr('campus.rescanning');}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.rescan')),el('button',{class:'danger',onclick:async()=>{try{await rpc('delete_campus_rule');campusFieldState={};campusCandidates={};campusData=await rpc('get_campus_status');drawRules();PulseCampus.renderLive();}catch(e){feedback.textContent=String(e.message||e);}}},tr('campus.delete_rule'))));
  advanced.append(label('campus.extend_field',extension));
- basic.append(el('p',{class:'muted'},tr('campus.background_hint')));host.append(basic,billing,computed,advanced,feedback);
+ basic.append(el('p',{class:'muted'},tr('campus.background_hint')),alerts);host.append(basic,billing,computed,advanced,feedback);
 }
 const PulseCampus={
  async refresh(){try{const next=await rpc('get_campus_status');if(campusData?.origin!==next.origin){campusFieldState={};campusCandidates={};campusStateOrigin='';campusLastEventType='';}campusData=next;if(next.runtime_status){campusEventStatus='';campusLastEventType=next.runtime_status;}}catch(e){campusData={...(campusData||{}),error:String(e.message||e)};}this.renderLive();return campusData;},
@@ -390,7 +412,7 @@ const PulseCampus={
   else if(event.type==='campus_syncing')campusEventStatus=tr('campus.syncing');
   else if(event.type==='campus_auth_required')campusEventStatus=tr('campus.auth_required');
   else if(event.type==='campus_rule_stale')campusEventStatus='stale';
-  else if(event.type==='snapshot_saved'&&event.snapshot){campusData=campusData||{};campusData.latest=event.snapshot;campusEventStatus='confirmed';}
+  else if(event.type==='snapshot_saved'&&event.snapshot){campusData=campusData||{};campusData.latest=event.snapshot;campusData.alerts=event.alerts;campusEventStatus='confirmed';}
   else if(event.type==='snapshot_failed'||event.type==='campus_error')campusEventStatus=event.error||event.message||tr('campus.sync_failed');
   if(page==='settings'){document.querySelector('.campus-candidates')?.redraw?.();}
   this.renderLive();

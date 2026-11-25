@@ -1,6 +1,30 @@
-﻿:root{--border:var(--line)}.network-content{display:grid;gap:16px;align-content:start}.network-content>.panel{margin:0}.network-content .network-scope{margin:0;color:var(--muted);font-size:12px}.network-overview,.network-family-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.network-overview .card,.network-family-grid .card{min-height:120px;margin:0;min-width:0;height:auto}.network-overview .card strong{font-size:26px;color:var(--accent)}.network-family-grid .card strong{font-size:22px}.network-ip-share{display:flex;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px}.network-share-track{display:flex;width:180px;height:8px;border-radius:6px;overflow:hidden}.network-share-track i:first-child{background:var(--protocol-ipv4)}.network-share-track i:last-child{background:var(--protocol-ipv6)}.network-quality{color:var(--muted)}.network-live{display:flex;gap:22px;flex-wrap:wrap;font-size:20px;font-weight:600}.network-live small{color:var(--muted);font-size:13px;font-weight:400}.network-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.network-trends>.panel{margin:0;min-width:0}.data-disclosure{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-card);padding:18px 22px;min-width:0}.data-disclosure>summary{cursor:pointer;font-weight:600;user-select:none}.data-disclosure>summary small{display:inline-block;font-size:12px;color:var(--muted);margin-left:10px}.data-disclosure[open]>summary{margin-bottom:18px}.data-disclosure>.panel{margin:0;padding:0;border:0;box-shadow:none}.data-disclosure .actions{margin-top:12px}.network-archive .monthly-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.network-archive .monthly-cards>.card:nth-child(-n+2){grid-column:span 2}.network-content .traffic-calendar-body{padding-block:14px}.network-content .ranking-extra{margin-top:14px}.network-content .ranking-extra>summary{font-size:12px}@container(max-width:1000px){.network-overview,.network-family-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.network-trends{grid-template-columns:minmax(0,1fr)}}@media(max-width:650px){.network-overview,.network-family-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.network-overview .card,.network-family-grid .card{padding:14px;min-height:110px}.network-overview .card strong,.network-family-grid .card strong{font-size:20px}.network-archive .monthly-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.network-archive .monthly-cards>.card:nth-child(-n+2){grid-column:auto}.data-disclosure{padding:16px}}
-
-.network-content [data-series=primary]{--metric-series:var(--series-primary)}
+:root{--border:var(--line)}
+.network-content{display:grid;gap:12px;align-content:start}
+.network-content>.panel,.network-content>.campus-overview{margin:0}
+.network-heading,.network-ip-share{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 14px}
+.network-content .network-scope{margin:0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.network-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.network-content [data-series=primary]{--metric-series:var(--series-primary-text)}
 .network-content [data-series=comparison]{--metric-series:var(--series-comparison)}
-.network-content .card[data-series] strong,.network-live [data-series]{color:var(--metric-series)}
-.network-live [data-series=primary]{color:var(--series-primary-text)}
+.network-overview .network-transfer{min-width:0;min-height:0;height:auto;margin:0;padding:12px 14px}
+.network-transfer-heading{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding-bottom:7px}
+.network-transfer-heading>span{font-weight:600;color:var(--metric-series,var(--text))}
+.network-transfer-heading>strong{font-size:24px;line-height:1.2;margin:0;overflow-wrap:anywhere}
+.network-directions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.network-directions>div{display:grid;gap:1px;min-width:0}
+.network-directions span{color:var(--metric-series);font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.network-directions b{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.network-directions small{color:var(--muted);margin:0;overflow-wrap:anywhere}
+.network-direction-track,.network-share-track{display:flex;height:6px;border-radius:6px;overflow:hidden;background:var(--track)}
+.network-direction-track{margin-top:9px}
+.network-share-track{width:clamp(55px,13vw,180px)}
+.network-direction-track i:first-child,.network-share-track i:first-child{background:var(--series-primary)}
+.network-direction-track i:last-child,.network-share-track i:last-child{background:var(--series-comparison)}
+.network-ip-share{justify-content:flex-start;font-size:12px}
+.network-ip-share>span{color:var(--metric-series)}
+.network-quality{color:var(--muted)}
+.network-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.network-trends>.panel{margin:0;min-width:0}
+.data-disclosure{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-card);padding:18px 22px;min-width:0}.data-disclosure>summary{cursor:pointer;font-weight:600;user-select:none}.data-disclosure>summary small{display:inline-block;font-size:12px;color:var(--muted);margin-left:10px}.data-disclosure[open]>summary{margin-bottom:18px}.data-disclosure>.panel{margin:0;padding:0;border:0;box-shadow:none}.data-disclosure .actions{margin-top:12px}.network-archive .monthly-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.network-archive .monthly-cards>.card:nth-child(-n+2){grid-column:span 2}.network-content .traffic-calendar-body{padding-block:14px}.network-content .ranking-extra{margin-top:14px}.network-content .ranking-extra>summary{font-size:12px}@container(max-width:1000px){.network-trends{grid-template-columns:minmax(0,1fr)}}
+@container(max-width:680px){.network-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.network-transfer:first-child{grid-column:1/-1}}
+@media(max-width:650px){.network-overview .network-transfer{padding:9px 10px}.network-transfer-heading>strong{font-size:18px}.network-archive .monthly-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.network-archive .monthly-cards>.card:nth-child(-n+2){grid-column:auto}.data-disclosure{padding:16px}}

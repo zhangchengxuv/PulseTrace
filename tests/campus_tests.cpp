@@ -46,6 +46,59 @@ void storage(const std::filesystem::path &root){
     check(latest["balance"]==12.5&&latest["remaining_bytes"]==2048,"confirmed campus snapshot round trip");
     check(db.campus_latest("https://other.example").is_null(),"campus snapshots remain portal-specific");
 }
+void alerts(const std::filesystem::path &root){
+    const auto dir=root/"alerts";
+    std::filesystem::create_directories(dir);
+    CoreService service(dir);service.start();
+    const auto defaults=rpc(service,"get_status")["config"]["campus_alerts"];
+    check(defaults==Json({{"free_enabled",false},{"balance_enabled",false},{"free_gb",5},{"balance_cny",10}}),
+          "campus alerts default off with thresholds");
+    auto settings=defaults;
+    settings["free_enabled"]=true;settings["balance_enabled"]=true;
+    rpc(service,"set_config",{{"campus_enabled",true},{"campus_portal_url","https://campus.example/summary"},
+                              {"campus_alerts",settings}});
+    auto invalid=settings;invalid["free_gb"]=-1;
+    bool rejected=false;try{rpc(service,"set_config",{{"campus_alerts",invalid}});}catch(...){rejected=true;}
+    check(rejected,"negative campus threshold rejected");
+    const auto mapped=[](const char *selector,const char *kind,const char *unit){
+        return Json{{"mode","selector"},{"selector",selector},{"kind",kind},{"unit",unit},{"confidence",1}};
+    };
+    const Json fields={{"balance",mapped("#balance","currency","CNY")},
+                       {"free_remaining_bytes",mapped("#free","bytes","GB")},
+                       {"billing_cycle",{{"mode","manual"},{"kind","text"},{"unit","text"},
+                                          {"value","2020-01-01/monthly"},{"period","monthly"},{"start_date","2020-01-01"}}}};
+    rpc(service,"save_campus_mapping",{{"fields",fields}});
+    Json reading={{"portal_url","https://campus.example/summary"},{"quality","confirmed"},{"confidence",1},
+                   {"balance",9.5},{"free_remaining_bytes",1},{"traffic_radix",1024},
+                   {"mapped_fields",Json::array({"balance","free_remaining_bytes"})},
+                   {"source_units",{{"free_remaining_bytes","GB"}}},
+                   {"raw_readings",{{"free_remaining_bytes",{{"value",4.5},{"unit","GB"}}}}}};
+    const auto first=snapshot_rpc(service,reading);
+    check(first["notice"].size()==2&&first["alerts"]["low_free"]==true&&first["alerts"]["low_balance"]==true,
+          "confirmed low readings trigger both alert categories");
+    check(snapshot_rpc(service,reading)["notice"].empty(),"same-period snapshot does not repeat notification");
+    check(rpc(service,"get_campus_status")["alerts"]==first["alerts"],"card retains warning during cooldown");
+    const auto receipt=load_campus_rules(dir)["portals"][0]["alert_receipts"];
+    check(receipt.size()==2&&receipt["low_free"]["cycle"].get<std::string>().ends_with("/monthly"),
+          "deduplication receipt persists with billing period");
+    auto restored=receipt;
+    const auto now=utc_now_ms();
+    check(campus_due_alerts({true,true,receipt["low_free"]["cycle"]},restored,now).empty(),
+          "stored receipt suppresses repeats after reload");
+    check(campus_due_alerts({true,true,"next-period"},restored,now).size()==2,"new billing period rearms notifications");
+    check(campus_due_alerts({true,true,""},restored,now+86399999).empty()&&
+          campus_due_alerts({true,true,""},restored,now+86400000).size()==2,"unknown period uses 24-hour cooldown");
+    reading["balance"]=10;
+    reading["raw_readings"]["free_remaining_bytes"]["value"]=5;
+    check(snapshot_rpc(service,reading)["alerts"]==CampusThresholds{}.flags(),
+          "equal threshold readings are not low");
+    auto rule=load_campus_rules(dir)["portals"][0];
+    auto snapshot=first["snapshot"];
+    snapshot["quality"]="low_confidence";
+    check(campus_thresholds(rpc(service,"get_status")["config"],rule,snapshot,now).flags()==CampusThresholds{}.flags(),
+          "unconfirmed snapshots do not trigger alerts");
+    service.stop();
+}
 void migration(const std::filesystem::path &root){
     const auto file=root/"v6.db";{DatabaseManager db(file);db.save("legacy",Json::array({{{"minute",1},{"module","keyboard"},{"metric","30"},{"value",7}}}));}
     sqlite3 *raw{};const auto name=file.u8string();check(sqlite3_open(reinterpret_cast<const char*>(name.c_str()),&raw)==SQLITE_OK,"open v6 fixture");
@@ -183,6 +236,6 @@ void core(const std::filesystem::path &root){
 }
 int main(){try{
     const auto root=std::filesystem::absolute("data/tests/campus-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));
-    std::filesystem::create_directories(root);storage(root);migration(root);measurements(root);mapping_roundtrip(root);core(root);
+    std::filesystem::create_directories(root);storage(root);migration(root);measurements(root);mapping_roundtrip(root);core(root);alerts(root);
     std::cout<<checks<<" campus portal storage, migration and bridge checks passed\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

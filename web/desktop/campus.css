@@ -25,6 +25,11 @@ html[data-theme=light] .campus-overview{--campus-used:#2879af;--campus-free:#087
 .campus-metric{--metric-tint:var(--campus-free);min-width:0;padding:16px 12px;border:1px solid color-mix(in srgb,var(--metric-tint) 24%,var(--line));border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--metric-tint) 6%,var(--panel)),var(--panel))}
 .campus-metric-balance{--metric-tint:var(--series-primary-text)}
 .campus-metric-total{--metric-tint:var(--campus-funded)}
+.campus-metric[data-low=true]{--metric-tint:var(--warning)}
+.campus-overview[data-alert=true]{border-color:var(--warning)}
+.campus-alert{margin:0 0 14px;padding:8px 10px;border-radius:var(--radius-badge);font-size:12px;color:var(--warning);background:color-mix(in srgb,var(--warning) 8%,var(--panel))}
+.campus-alert-settings{min-width:0;margin:14px 0 0;padding:12px;border:1px solid var(--line);border-radius:var(--radius-input)}
+.campus-alert-settings legend{padding:0 6px;font-weight:600}
 .campus-metric-label{display:flex;align-items:center;gap:7px;font-size:11px;line-height:1.6;color:var(--muted)}
 .campus-metric-label svg{color:var(--metric-tint);width:18px;height:18px}
 .campus-metric>strong{display:block;font-size:clamp(21px,2.35vw,29px);font-weight:650;letter-spacing:-.5px;line-height:1.4;font-variant-numeric:tabular-nums;color:var(--metric-tint);margin:10px 0 0;overflow-wrap:anywhere}

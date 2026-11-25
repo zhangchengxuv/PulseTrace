@@ -495,5 +495,18 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"keyboard.scale",L"热力色阶",L"Heatmap scale"},
 {"keyboard.linear",L"线性",L"Linear"},
 {"keyboard.log",L"对数",L"Log"},
-{"keyboard.arctic",L"Arctic · 自定义色带",L"Arctic · Custom Colormap"}
+{"keyboard.arctic",L"Arctic · 自定义色带",L"Arctic · Custom Colormap"},
+{"network.interface_total",L"接口总流量",L"Interface traffic"},
+{"campus.alert_title",L"PulseTrace · 校园网提醒",L"PulseTrace · Campus alert"},
+{"campus.alert_settings",L"低余额和低流量提醒",L"Low balance and data alerts"},
+{"campus.alert_enable_free",L"提醒免费流量不足",L"Alert when free data is low"},
+{"campus.alert_enable_balance",L"提醒余额不足",L"Alert when the balance is low"},
+{"campus.alert_free_gb",L"免费流量阈值（GB）",L"Free data threshold (GB)"},
+{"campus.alert_balance_cny",L"余额阈值（元）",L"Balance threshold (CNY)"},
+{"campus.alert_save",L"保存提醒设置",L"Save alert settings"},
+{"campus.alert_hint",L"提醒基于已确认的校园网读数。每项阈值在同一账期提醒一次；账期未知时每 24 小时最多一次。",L"Alerts use confirmed campus readings. Each threshold sends one notification per billing period, or one every 24 hours when the period is unknown."},
+{"campus.alert_invalid",L"请将两个阈值都填写在 0 到 1,000,000 之间。",L"Enter both thresholds between 0 and 1,000,000."},
+{"campus.alert_low_free",L"校园网免费剩余流量低于设定阈值。",L"Free campus data is below your threshold."},
+{"campus.alert_low_balance",L"校园网账户余额低于设定阈值。",L"Your campus account balance is below your threshold."},
+{"campus.alert_both",L"校园网免费剩余流量和账户余额均低于设定阈值。",L"Free campus data and account balance are below your thresholds."}
 };}

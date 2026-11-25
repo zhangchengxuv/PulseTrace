@@ -820,5 +820,18 @@
   "keyboard.scale": "Heatmap scale",
   "keyboard.linear": "Linear",
   "keyboard.log": "Log",
-  "keyboard.arctic": "Arctic · Custom Colormap"
+  "keyboard.arctic": "Arctic · Custom Colormap",
+  "network.interface_total": "Interface traffic",
+  "campus.alert_title": "PulseTrace · Campus alert",
+  "campus.alert_settings": "Low balance and data alerts",
+  "campus.alert_enable_free": "Alert when free data is low",
+  "campus.alert_enable_balance": "Alert when the balance is low",
+  "campus.alert_free_gb": "Free data threshold (GB)",
+  "campus.alert_balance_cny": "Balance threshold (CNY)",
+  "campus.alert_save": "Save alert settings",
+  "campus.alert_hint": "Alerts use confirmed campus readings. Each threshold sends one notification per billing period, or one every 24 hours when the period is unknown.",
+  "campus.alert_invalid": "Enter both thresholds between 0 and 1,000,000.",
+  "campus.alert_low_free": "Free campus data is below your threshold.",
+  "campus.alert_low_balance": "Your campus account balance is below your threshold.",
+  "campus.alert_both": "Free campus data and account balance are below your thresholds."
 }

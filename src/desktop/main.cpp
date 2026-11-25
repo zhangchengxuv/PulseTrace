@@ -73,6 +73,7 @@ class DesktopApplication {
     void quit();
     void command(Json request);
     void campus_event(Json event);
+    void notify_campus(const Json &event);
     void open_campus(bool background=false);
     void diagnostic(const std::string &text);
     void save_window();
@@ -189,7 +190,12 @@ void DesktopApplication::campus_event(Json event){
             core_->save_campus_snapshot(event["snapshot"],[hwnd,generation](Json response){
                 Json payload={{"type","campus_event"},{"ok",response.value("ok",false)},
                               {"data",{{"type",response.value("ok",false)?"snapshot_saved":"snapshot_failed"}}}};
-                if(response.value("ok",false))payload["data"]["snapshot"]=response["data"]["snapshot"];
+                if(response.value("ok",false)){
+                    payload["data"]["snapshot"]=response["data"]["snapshot"];
+                    payload["data"]["portal_origin"]=response["data"]["snapshot"]["portal_origin"];
+                    payload["data"]["alerts"]=response["data"]["alerts"];
+                    payload["data"]["notice"]=response["data"]["notice"];
+                }
                 else payload["data"]["error"]=response["error"]["message"];
                 auto *message=new Response{generation,std::move(payload)};
                 if(!PostMessageW(hwnd,response_message,0,reinterpret_cast<LPARAM>(message)))delete message;
@@ -200,6 +206,26 @@ void DesktopApplication::campus_event(Json event){
         return;
     }
     web_->post({{"type","campus_event"},{"ok",true},{"data",std::move(event)}});
+}
+void DesktopApplication::notify_campus(const Json &event){
+    if(selftest_||exiting_||event.value("type","")!="snapshot_saved")return;
+    const auto notice=event.value("notice",Json::object());
+    if(notice.empty())return;
+    const auto context=core_->campus_portal_context();
+    if(!context.value("enabled",false)||context["origin"]!=event["portal_origin"])return;
+    const auto settings=core_->status()["config"].value("campus_alerts",Json::object());
+    const bool free=notice.value("low_free",false)&&settings.value("free_enabled",false);
+    const bool balance=notice.value("low_balance",false)&&settings.value("balance_enabled",false);
+    if(!free&&!balance)return;
+    if(!tray_added_)tray();
+    if(!tray_added_)return;
+    auto notification=nid_;
+    notification.uFlags=NIF_INFO;
+    notification.dwInfoFlags=NIIF_WARNING|NIIF_RESPECT_QUIET_TIME;
+    wcsncpy_s(notification.szInfoTitle,ui_text("campus.alert_title"),_TRUNCATE);
+    wcsncpy_s(notification.szInfo,ui_text(free&&balance?"campus.alert_both":
+        free?"campus.alert_low_free":"campus.alert_low_balance"),_TRUNCATE);
+    Shell_NotifyIconW(NIM_MODIFY,&notification);
 }
 void DesktopApplication::open_campus(bool background){
     const auto context=core_->campus_portal_context();
@@ -463,7 +489,12 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case response_message: {
         std::unique_ptr<Response> response(reinterpret_cast<Response *>(l));
-        if(response->json.value("type",std::string())=="campus_event"&&response->json.contains("data"))campus_runtime_status_=response->json["data"].value("type",std::string());
+        if(response->json.value("type",std::string())=="campus_event"&&response->json.contains("data")){
+            const auto &event=response->json["data"];
+            if(event.contains("portal_origin")&&event["portal_origin"]!=core_->campus_portal_context()["origin"])return 0;
+            campus_runtime_status_=event.value("type",std::string());
+            notify_campus(event);
+        }
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("latest")&&response->json["data"].contains("rule"))response->json["data"]["runtime_status"]=campus_runtime_status_;
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("language")){set_ui_language(response->json["data"].value("language","system"));}
         if(response->json.value("ok",false)&&response->json.contains("data")&&response->json["data"].is_object()&&response->json["data"].contains("config")){

@@ -1,4 +1,10 @@
 'use strict';
+function validateNetworkSummary(host){
+ if(host.querySelectorAll('.network-transfer').length!==3)throw Error('Network summary must contain three transfer cards');
+ const trend=host.querySelector('.network-trends');
+ if(innerWidth>=1500&&innerHeight>=830&&trend.getBoundingClientRect().top+scrollY+130>innerHeight)
+  throw Error('Network trends are outside the first viewport');
+}
 function validateKeyboardLayouts(host,theme){
  const layout=host.querySelector('.heat-toolbar select'),previous=layout.value;
  const scale=host.querySelectorAll('.heat-toolbar select')[1],previousScale=scale.value;
