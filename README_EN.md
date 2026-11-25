@@ -19,7 +19,7 @@ Collection starts paused. Input text, window titles and mouse trajectories are n
 
 ## Screenshots
 
-These native WebView2 screenshots are from the **v0.9.0 preparation** build, based on commit `b386c96` in Windows x64 Release configuration. Collection was paused. The screens use synthetic records and demonstration waveforms. The viewport is 1600×900 DIP (2000×1125 pixels at 125% DPI).
+These native WebView2 screenshots are from the **v0.9.0 preparation** cycle, captured from Windows x64 Release builds. Collection was paused. The screens use synthetic records and demonstration waveforms. The viewport is 1600×900 DIP (2000×1125 pixels at 125% DPI).
 
 | Dark Dashboard | Light keyboard heatmap |
 | --- | --- |

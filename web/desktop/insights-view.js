@@ -4,6 +4,8 @@ const insightNumber=(value,maximumFractionDigits=1)=>value.toLocaleString(PulseI
 const insightPercent=(value,maximumFractionDigits=1)=>value==null?'—':
  value.toLocaleString(PulseI18n.locale,{style:'percent',maximumFractionDigits});
 const insightProgress=(value,max,label)=>el('progress',{class:'insight-progress',max,value:Math.min(max,Math.max(0,value??0)),'aria-label':label});
+const insightYears=years=>years==null?'—':
+ years>99?insightText('years_over_limit'):insightText('years',{value:insightNumber(years)});
 
 function insightWear(device,records,selection,items){
  const rated=PulseInsights.rating(device),days=PulseInsights.observedDays(records,selection,device);
@@ -11,10 +13,9 @@ function insightWear(device,records,selection,items){
   el('div',{class:'insight-stats'},items.map(({name,count})=>{
    const {share,years}=PulseInsights.wear(count,rated,days);
    const used=insightPercent(share,share>0&&share<.001?7:1);
-   const yearsLabel=years==null?'—':insightText('years',{value:insightNumber(years)});
    return el('div',{class:'insight-stat'},el('strong',{},name),
     el('span',{class:'insight-emphasis'},insightText('wear_used',{value:used})),
-    el('small',{},insightText('wear_left',{value:yearsLabel})),
+    el('small',{},insightText('wear_left',{value:insightYears(years)})),
     insightProgress(share,1,insightText('wear_used',{value:used})));
   })),el('p',{class:'muted insight-note'},insightText('wear_note')));
 }
@@ -105,7 +106,8 @@ function renderInsightSettings(){
   try{PulseInsights.saveRatings(ratings);status.textContent=insightText('rating_saved');}
   catch{status.textContent=insightText('rating_failed');}
  }},tr('ui.a3030bf8f16d'));
- return panel(insightText('rating_title'),el('div',{class:'settings-grid'},fields),el('div',{class:'actions'},save,status));
+ return panel(insightText('rating_title'),el('div',{class:'settings-grid'},fields,
+  el('div',{class:'actions settings-form-actions'},save,status)));
 }
 
 let achievementMusic=null;

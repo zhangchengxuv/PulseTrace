@@ -83,13 +83,29 @@ function validateInsights(name,host){
   const tokens=getComputedStyle(document.documentElement);
   check(hands.every(hand=>getComputedStyle(hand).getPropertyValue('--insight-series').trim()===
    tokens.getPropertyValue(hand.dataset.side==='left'?'--series-primary':'--series-comparison').trim()),'series tokens');
+  const unit=PulseI18n.locale==='zh-CN'?'年':'yr';
+  check(insightYears(99)==='99 '+unit&&insightYears(99.1)==='> 99 '+unit&&
+   insightYears(null)==='—','hardware estimate display limit');
  }
  if(name==='mouse')check(host.querySelectorAll('.insight-stat').length===2,'individual mouse switch estimates');
  if(name==='settings'){
   const inputs=[...host.querySelectorAll('[data-insight-rating] input')];
   check(inputs.length===2&&inputs.every(input=>PulseInsights.validRating(Number(input.value))),'editable hardware ratings');
+  const actions=[...host.querySelectorAll('[data-settings-group=general] .settings-form-actions')];
+  check(actions.length===3&&actions.every(action=>action.parentElement.classList.contains('settings-grid')&&
+   action.querySelector('button.secondary')),'general settings use the same save-button style and grid spacing');
  }
  if(name==='dashboard'){
+  const ring=dashboardIpRing(1);
+  host.querySelector('.kpi-protocol .kpi-body').append(ring);
+  const inner=ring.firstElementChild,circle=inner.getBoundingClientRect();
+  const x=circle.left+circle.width/2,y=circle.top+circle.height/2;
+  for(const text of inner.children){
+   const box=text.getBoundingClientRect();
+   const distance=Math.hypot(Math.max(x-box.left,box.right-x),Math.max(y-box.top,box.bottom-y));
+   check(distance<circle.width/2,'protocol label does not touch the ring');
+  }
+  ring.remove();
   const details=host.querySelector('.insight-achievements'),initial=details?.open;
   check(details&&(!initial?details.querySelectorAll('.insight-achievement').length===0:true),'lazy folded achievements');
   details.open=true;

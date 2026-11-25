@@ -34,8 +34,8 @@ function renderAutostart(host,group){
   catch{}
  };
  show(state);
- host.prepend(el('div',{class:'startup-settings'},el('label',{},el('strong',{},tr('startup.label')),mode),
-  notice,el('div',{class:'actions'},save,feedback)));
+ host.prepend(el('div',{class:'startup-settings settings-grid'},el('label',{},el('strong',{},tr('startup.label')),mode),
+  notice,el('div',{class:'actions settings-form-actions'},save,feedback)));
 }
 function settings(c){
  const groups={};for(const key of ['general','monitoring','campus','cloud','data','updates','about'])groups[key]=el('section',{class:'settings-section','data-settings-group':key},el('h3',{class:'settings-group-title'},tr('settings.'+key)));
@@ -44,7 +44,7 @@ function settings(c){
  const days=el('input',{type:'number',min:1,max:365,value:cfg.retention_days}),flush=el('input',{type:'number',min:5,max:300,value:cfg.flush_seconds}),close=el('input',{type:'checkbox',checked:cfg.close_to_tray}),launch=el('input',{type:'checkbox',checked:cfg.capture_on_launch}),interfaces=el('select',{},el('option',{value:''},tr('ui.521946c0dadc')),...(state.network?.interfaces||[]).map(x=>el('option',{value:x.id},x.name+' · '+(x.physical?tr('ui.a454f17872a1'):tr('ui.9d82dd6c9d3d')))));interfaces.value=cfg.network_interface;
  for(const [label,input,hint]of [[tr('ui.788db1cfec2a'),theme,''],[tr('ui.8ba608b918ca'),days,tr('ui.5bb16b6cceb4')],[tr('ui.a489cf59a386'),flush,tr('ui.4e153ea893d5')],[tr('ui.5c6ea5630efd'),interfaces,tr('ui.1433494c6131')],[tr('ui.7499682dc5a7'),close,tr('ui.30fd563a59bf')],[tr('ui.8967fa24d345'),launch,tr('ui.0ab592475486')]])(input===theme||input===close||input===launch?general:monitor).append(input.type==='checkbox'?el('label',{class:'checkbox',title:hint},input,el('strong',{},label)):el('label',{title:hint},el('strong',{},label),input,input===days||input===flush?el('small',{},hint):null));
  const feedbackNodes=Array.from({length:3},()=>el('p',{class:'muted',role:'status'})),feedback=text=>feedbackNodes.forEach(n=>n.textContent=text),save=async group=>{try{if(group!=='general'&&(!days.checkValidity()||!flush.checkValidity()))throw Error(tr('settings.invalid'));await rpc('set_config',group==='general'?{theme:theme.value,close_to_tray:close.checked,capture_on_launch:launch.checked}:{retention_days:Number(days.value),flush_seconds:Number(flush.value),network_interface:interfaces.value});applyTheme(theme.value);feedback(tr('ui.1bd91a7d0c53'));state=await rpc('get_status');}catch(e){error(e);}};
- const generalActions=el('div',{class:'actions settings-form-actions'},el('button',{onclick:()=>save('general')},tr('ui.a3030bf8f16d')),feedbackNodes[0]);general.append(generalActions);monitor.append(el('div',{class:'actions settings-form-actions'},el('button',{onclick:()=>save('monitoring')},tr('ui.a3030bf8f16d')),feedbackNodes[1]));
+ const generalActions=el('div',{class:'actions settings-form-actions'},el('button',{type:'button',class:'secondary',onclick:()=>save('general')},tr('ui.a3030bf8f16d')),feedbackNodes[0]);general.append(generalActions);monitor.append(el('div',{class:'actions settings-form-actions'},el('button',{onclick:()=>save('monitoring')},tr('ui.a3030bf8f16d')),feedbackNodes[1]));
  renderLanguageSettings(general,true);general.prepend(general.lastElementChild);general.append(generalActions);groups.general.append(panel(tr('ui.57907a69fc5a'),general));
  renderAutostart(general,groups.general);
  groups.general.append(renderInsightSettings());

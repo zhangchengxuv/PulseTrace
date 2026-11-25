@@ -36,6 +36,13 @@ function inputActivityChart(){
   for(let i=0;i<4;i++){const minute=first+(last-first)*i/3,x=left+(minute-first)*(right-left)/span;ctx.fillStyle=style.getPropertyValue('--muted');ctx.textAlign=i===3?'right':'left';ctx.fillText(axisLabel(minute),i===3?right:x,h-9);}
  });return host;
 }
+function dashboardIpRing(share){
+ const percent=share*100;
+ const ring=el('div',{class:'ip-ring',role:'img','aria-label':tr("ui.1fb26aceb606")+percent.toFixed(1)+'%'},
+  el('div',{},el('b',{},percent.toFixed(0)+'%'),el('small',{},tr("ui.869d94bf30fb"))));
+ ring.style.setProperty('--ip-share',percent+'%');
+ return ring;
+}
 function renderDashboard(c){
  rememberRates();const d=PulseDashboard,n=state.network||{},clicks=d.total(rows,'mouse',d.mouseKeys),up=d.total(rows,'mouse',['wheel_up_events']),down=d.total(rows,'mouse',['wheel_down_events']),wheel=up+down,coverage=d.total(rows,'coverage',['observed_ms']),ip=d.protocol(protocolSelection());
  const mouseValues=[d.total(rows,'mouse',['left']),d.total(rows,'mouse',['right']),d.total(rows,'mouse',['middle','mouse4','mouse5'])],ratios=d.distribution(mouseValues),wheelRatio=d.distribution([up,down]);
@@ -53,7 +60,7 @@ function renderDashboard(c){
  const rateHistory=state.monitoring&&!state.network_error?liveRates:[];const rateSeries=rateHistory.map(r=>[r.t,r.up]),rateDown=rateHistory.map(r=>[r.t,r.down]),rateSpark=sparkline([{points:rateSeries,step:4.5,color:'--chart-upload'},{points:rateDown,step:4.5,color:'--chart-download',dash:[4,3]}]);
  const rateValue=el('div',{class:'network-values'},el('span',{},el('em',{},'↑'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.upload_bps||0)+'/s':tr("ui.eb0c326b60ae")),el('span',{},el('em',{},'↓'),state.network_error?tr("ui.6aa27f14bff1"):state.monitoring?bytes(n.download_bps||0)+'/s':tr("ui.eb0c326b60ae")));
  const ipValues=el('div',{class:'ip-values'},el('span',{},el('i',{class:'ipv4-dot'}),'IPv4 ',el('b',{},ip.has?bytes(ip.bytes[0]):'—')),el('span',{},el('i',{class:'ipv6-dot'}),'IPv6 ',el('b',{},ip.has?bytes(ip.bytes[1]):'—')));
- let ring=null;if(ip.ratio){ring=el('div',{class:'ip-ring',role:'img','aria-label':tr("ui.1fb26aceb606")+(ip.ratio[0]*100).toFixed(1)+'%'},el('div',{},el('b',{},(ip.ratio[0]*100).toFixed(0)+'%'),el('small',{},tr("ui.869d94bf30fb"))));ring.style.setProperty('--ip-share',ip.ratio[0]*100+'%');}
+ const ring=ip.ratio?dashboardIpRing(ip.ratio[0]):null;
  c.append(el('div',{class:'kpi-grid'},
   kpi('keyboard',tr("ui.dd544c02ab73"),fmt(d.total(rows,'keyboard')),keyboardSpark,changeLabel('keyboard',tr("ui.702023aefc26"))),kpi('mouse',tr("ui.361881b8b343"),fmt(clicks),mouseSide,changeLabel('mouse',tr("ui.702023aefc26"))),kpi('wheel',tr("ui.5faa29113975"),fmt(wheel),wheelSide,changeLabel('wheel',tr("ui.8461f0798e3d"))),
   kpi('time',tr("ui.814c88c96658"),duration(coverage),el('div',{class:'time-glyph'},metricIcon('time')),changeLabel('coverage',tr("ui.5c4d2a0e0434"))),kpi('network',tr("ui.729a1642fc28"),rateValue,rateSpark,changeLabel('network',tr("ui.cba5020e0dad"))),kpi('protocol',tr("ui.33c6ae5483a0"),ipValues,ring,el('span',{class:'quality-badge'},ip.quality)),PulseCampus.dashboardCard()));

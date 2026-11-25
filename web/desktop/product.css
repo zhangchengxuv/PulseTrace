@@ -25,6 +25,6 @@ progress{width:min(100%,420px);height:8px;accent-color:var(--accent)}
 .range-shortcuts button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 
 .startup-settings{grid-column:1/-1;min-width:0;padding:0 0 12px;border-bottom:1px solid var(--line)}
-.startup-settings .startup-status{margin:7px 0;font-size:12px}
+.startup-settings>label{grid-column:1/-1}
+.startup-settings .startup-status{margin:0;font-size:12px}
 .startup-settings .startup-status:empty{display:none}
-.startup-settings .actions{margin-top:8px}
