@@ -964,5 +964,15 @@
   "bgm.inspect": "查看播放时段",
   "bgm.no_input": "这个时段没有键盘观测记录。",
   "bgm.no_track": "没有播放记录",
-  "bgm.track_at": "{time} · {track}"
+  "bgm.track_at": "{time} · {track}",
+  "zen.title": "脉冲模式",
+  "zen.fullscreen": "进入全屏",
+  "zen.restore": "退出全屏",
+  "zen.exit": "退出脉冲模式（Esc）",
+  "zen.fullscreen_error": "无法切换全屏。",
+  "zen.waveforms": "实时键鼠与网络双轨波形",
+  "zen.input": "键鼠输入",
+  "zen.network": "网络速率",
+  "zen.keys": "今日按键",
+  "zen.clicks": "今日点击"
 }

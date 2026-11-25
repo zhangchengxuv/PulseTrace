@@ -21,6 +21,7 @@ class CoreService final : public InputCallbacks {
     void start();
     void stop();
     Json status() const;
+    Json zen_sample() const;
     Json campus_portal_context() const;
     bool prepare_stop();
     void cancel_stop() noexcept;

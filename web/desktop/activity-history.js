@@ -104,7 +104,7 @@ function createActivityHistory(){
  const wall=panel(activityText('wall'),el('div',{class:'activity-options'},year,metric),
   el('p',{class:'muted'},activityText('wall_basis')),yearHost);
  const root=el('div',{class:'activity-history'},rhythm,wall);
- const live=()=>page==='history'&&root.isConnected&&!document.hidden&&nativeVisible;
+ const live=()=>page==='history'&&root.isConnected&&!document.hidden&&nativeVisible&&!globalThis.PulseZen?.active;
 
  function load(host,draw){
   let key='',drawKey='',revision=0,pending,historyKey='',historyReading;

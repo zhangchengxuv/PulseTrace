@@ -54,3 +54,49 @@ html[data-transparency=off] .dashboard-toolbar,html[data-transparency=off] .dash
 html[data-motion=reduced] *,html[data-motion=reduced] *:before,html[data-motion=reduced] *:after{transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){.dashboard-toolbar,.dashboard-toolbar.scrolled,.panel,.kpi,.card{background:Canvas;box-shadow:none;backdrop-filter:none;border-color:CanvasText}.kpi-head svg{stroke:CanvasText}.ip-ring{background:CanvasText}.ip-ring>div{background:Canvas}.stack-track,.ratio-track{border:1px solid CanvasText}}
+/* Zen Pulse always uses the Deep Ocean series on its own dark surface. */
+.zen-icon-btn {
+ display:inline-grid;place-items:center;width:34px;height:34px;padding:0;
+ background:transparent;border:1px solid transparent;color:var(--muted);flex:none;
+}
+.actions .zen-icon-btn {padding:0}
+.zen-icon-btn svg {width:18px;height:18px}
+.zen-icon-btn:hover {background:var(--hover);color:var(--text);filter:none}
+.zen-open {overflow:hidden}
+.zen-open>aside,.zen-open>main {display:none}
+.zen-stage {
+ --series-primary:var(--deep-ocean-primary);--series-comparison:var(--deep-ocean-comparison);
+ --text:#aec2d6;--muted:#879cb0;--hover:#142637;--accent:var(--series-primary);
+ position:fixed;inset:0;z-index:12;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+ padding:clamp(20px,4vmin,48px);gap:clamp(12px,2.3vmin,32px);box-sizing:border-box;
+ color:var(--text);color-scheme:dark;
+ background:radial-gradient(ellipse at 46% 45%,#0d1e30 0%,#07121f 51%,#050c15 100%);
+}
+.zen-top,.zen-footer {display:flex;justify-content:space-between;gap:16px;min-width:0}
+.zen-top h2 {font-size:14px;line-height:34px;letter-spacing:.06em;color:var(--muted)}
+.zen-top [role=alert] {margin:0;color:#ffb2bf;font-size:12px}
+.zen-actions {display:flex;gap:5px}
+.zen-icon-btn[aria-pressed=true] {border-color:#25415a;color:var(--text)}
+.zen-plot {
+ position:relative;min-width:0;min-height:0;overflow:hidden;
+ border-block:1px solid #9ac2e015;
+ background-image:linear-gradient(#8bb6d50c 1px,transparent 1px),
+  linear-gradient(90deg,#8bb6d50c 1px,transparent 1px);
+ background-size:clamp(22px,4.7vmin,48px) clamp(22px,4.7vmin,48px);
+}
+#zen-canvas {position:absolute;inset:0;display:block;width:100%;height:100%}
+.zen-lane {position:absolute;left:8px;pointer-events:none;font-size:11px;letter-spacing:.04em;color:var(--muted)}
+.zen-input {top:calc(32% - 1.7em)}
+.zen-network {top:calc(68% - 1.7em)}
+.zen-footer {align-items:end}
+.zen-footer time {font-size:clamp(20px,5vmin,43px);line-height:1;letter-spacing:.04em;font-weight:450;color:var(--text)}
+.zen-stats {min-width:0;text-align:right;font-size:12px;color:var(--muted)}
+.zen-stats dl {display:flex;justify-content:end;gap:clamp(8px,3vmin,28px);margin:0}
+.zen-stats dt,.zen-stats dd {display:inline;margin:0}
+.zen-stats dd {margin-inline-start:6px;color:var(--text);font-weight:600}
+.zen-stats p {max-width:42vw;margin:5px 0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:540px){
+ .zen-footer {align-items:start;flex-direction:column;gap:7px}
+ .zen-stats {text-align:left}
+ .zen-stats p {max-width:79vw;margin-inline:0}
+}

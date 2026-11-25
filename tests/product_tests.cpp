@@ -125,6 +125,10 @@ int main() {
                     "activity projection never accepts a metadata field");
             rejects([&]{parse_message(R"({"type":"get_activity","request_id":1,"params":{"from":0,"to":900000,"time_zone":"UTC","view":"rhythm"}})");},
                     "activity bridge bounds the indexed minute scan");
+            require(parse_message(R"({"type":"get_zen_day","request_id":1,"params":{}})")["type"]=="get_zen_day",
+                    "pulse mode reads its own local-day snapshot");
+            rejects([&]{parse_message(R"({"type":"set_zen_fullscreen","request_id":1,"params":{"enabled":"true"}})");},
+                    "pulse fullscreen accepts a boolean state");
             for (int bucket : {60, 1440}) {
                 StatisticsBuckets local(bucket, true);
                 const auto rows = db.query(59, 60, bucket, "", 0, true);
@@ -310,6 +314,34 @@ int main() {
                     require(record["minute"]==local.start(minute)&&record["ipv4_up"]==10,"protocol samples retain the exact local bucket start");
             }
             identity_core.stop();
+        }
+        {
+            const auto fixture = dir / "zen";
+            std::filesystem::create_directories(fixture);
+            const auto minute = utc_now_ms() / 60000;
+            StatisticsBuckets days(1440, true);
+            const auto day = days.start(minute);
+            {
+                DatabaseManager db(fixture / "monitor.db");
+                db.save("previous-session", Json::array({
+                    {{"minute", day - 1}, {"module", "keyboard"}, {"metric", "30"}, {"value", 90}},
+                    {{"minute", day}, {"module", "keyboard"}, {"metric", "30"}, {"value", 16}},
+                    {{"minute", day}, {"module", "repeat"}, {"metric", "30"}, {"value", 200}},
+                    {{"minute", day}, {"module", "mouse"}, {"metric", "left"}, {"value", 3}},
+                    {{"minute", day}, {"module", "mouse"}, {"metric", "double/left"}, {"value", 1}},
+                    {{"minute", day}, {"module", "mouse"}, {"metric", "right"}, {"value", 2}}
+                }));
+            }
+            CoreService core(fixture);
+            core.start();
+            const auto pulse = core.zen_sample();
+            require(!pulse["active"].get<bool>() && pulse["network_bps"] == 0 && pulse["track"].is_null() &&
+                    pulse.size() == 8, "pulse sample only contains aggregate counters, rates and an optional track");
+            const auto today = rpc(core, "get_zen_day");
+            require(today["day"] == day && today["session"] == pulse["session"] &&
+                    today["day_keys"] == 16 && today["day_clicks"] == 5,
+                    "pulse totals use the local civil day and count physical actions once");
+            core.stop();
         }
         {
             const auto fixture = dir / "activity";

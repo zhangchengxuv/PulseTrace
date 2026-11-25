@@ -310,6 +310,33 @@ Json CoreService::status() const {
     result["config"] = config_;
     return result;
 }
+Json CoreService::zen_sample() const {
+    Json sample;
+    bool music = false;
+    {
+        std::lock_guard lock(mutex_);
+        const bool active = capture_enabled() && !worker_done_;
+        double rate = 0;
+        const auto network = state_.find("network");
+        if (active && network != state_.end() && network->is_object() &&
+            state_.value("network_error", "").empty())
+            rate = network->value("upload_bps", 0.0) + network->value("download_bps", 0.0);
+        sample = {{"time_ms", utc_now_ms()}, {"input_ms", state_.value("heartbeat_ms", std::int64_t(0))},
+                  {"session", state_.at("session")}, {"active", active}, {"network_bps", rate},
+                  {"keys", state_.value("keyboard_presses_session", std::uint64_t(0))},
+                  {"clicks", state_.value("mouse_clicks_session", std::uint64_t(0))}, {"track", nullptr}};
+        music = active && config_.value("music_enabled", false);
+    }
+    if (music) {
+        const auto status = music_->status();
+        for (const auto &item : status.at("sessions"))
+            if (item.value("playing", false) && !item.value("title", "").empty()) {
+                sample["track"] = {{"title", item.at("title")}, {"artist", item.value("artist", "")}};
+                break;
+            }
+    }
+    return sample;
+}
 Json CoreService::campus_portal_context() const {
     std::lock_guard lock(mutex_);
     const auto url=config_.value("campus_portal_url",std::string());
@@ -500,6 +527,29 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
             if(found){save_campus_rules(data_,rules);std::lock_guard lock(mutex_);campus_rules_=rules;state_["campus_rule_updated_ms"]=utc_now_ms();}
         }catch(const std::exception &e){notice=Json::object();std::lock_guard lock(mutex_);state_["campus_rule_error"]=e.what();}
         return {{"saved",true},{"snapshot",snapshot},{"alerts",thresholds.flags()},{"notice",notice}};
+    }
+    if (type == "get_zen_day") {
+        const auto now = utc_now_ms() / 60000;
+        const auto day = StatisticsBuckets(1440, true).start(now);
+        const auto floor = now - 119;
+        auto total = database().activity_counts(day, now + 1, 0, false, session_, floor).at(0);
+        Json result;
+        Json live;
+        {
+            std::lock_guard lock(mutex_);
+            live = input_rows_;
+            result = {{"day", day}, {"session", state_.at("session")},
+                      {"keys", state_.value("keyboard_presses_session", std::uint64_t(0))},
+                      {"clicks", state_.value("mouse_clicks_session", std::uint64_t(0))}};
+        }
+        for (const auto &r : live) {
+            const auto minute = r.at("minute").get<std::int64_t>();
+            if (minute >= floor && minute >= day && minute <= now)
+                total.add(r.at("module"), r.at("metric"), r.at("value").get<std::int64_t>());
+        }
+        result["day_keys"] = total.keyboard.value_or(0);
+        result["day_clicks"] = total.mouse.value_or(0);
+        return result;
     }
     if(type=="get_history_bounds")return database().history_bounds();
     if (type == "get_music_insights") {

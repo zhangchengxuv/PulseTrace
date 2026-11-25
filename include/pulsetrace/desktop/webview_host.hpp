@@ -89,9 +89,11 @@ class WebViewHost {
     void close();
     void release_closed_environment();
     void resize();
+    void set_fullscreen_layout(bool fullscreen);
+    bool set_test_zoom(double zoom);
     void set_visible(bool visible);
     void set_background(COLORREF color);
-    void verify_hidden_ui(std::function<void(bool)> complete);
+    void verify_hidden_ui(std::function<void(bool)> complete, bool zen = false);
     void post(const Json &json);
     void capture_preview(const std::filesystem::path &file, std::function<void(bool)> complete);
     bool crash_browser_for_test();
@@ -117,6 +119,7 @@ class WebViewHost {
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     std::uint64_t generation_{};
     bool creating_{}, ready_{}, closing_{}, browser_exited_{true}, secure_forms_{};
+    bool fullscreen_layout_{};
     UINT32 browser_pid_{};
     COLORREF background_{RGB(7,19,33)};
 };

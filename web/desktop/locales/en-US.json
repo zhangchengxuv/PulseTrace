@@ -964,5 +964,15 @@
   "bgm.inspect": "Inspect playback time",
   "bgm.no_input": "No keyboard observations in this range.",
   "bgm.no_track": "No recorded playback",
-  "bgm.track_at": "{time} · {track}"
+  "bgm.track_at": "{time} · {track}",
+  "zen.title": "Zen Pulse",
+  "zen.fullscreen": "Enter fullscreen",
+  "zen.restore": "Leave fullscreen",
+  "zen.exit": "Exit Zen Pulse (Esc)",
+  "zen.fullscreen_error": "Could not switch fullscreen.",
+  "zen.waveforms": "Live keyboard, mouse, and network waveforms",
+  "zen.input": "Keyboard and mouse",
+  "zen.network": "Network speed",
+  "zen.keys": "Keys today",
+  "zen.clicks": "Clicks today"
 }

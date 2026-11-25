@@ -81,6 +81,8 @@ class DesktopApplication {
     bool save_summary_png(const std::string &encoded);
     void diagnostic(const std::string &text);
     void save_window();
+    bool set_zen_fullscreen(bool enabled);
+    void publish_zen_sample();
     Json appearance() const{return {{"transparency",caption_.transparency()},{"reduced_motion",caption_.reduced_motion()},{"active",caption_.active()},{"dark",caption_.dark()}};}
     HWND window_{};
     HINSTANCE instance_{};
@@ -98,6 +100,10 @@ class DesktopApplication {
     HANDLE instance_mutex_{},data_lock_{INVALID_HANDLE_VALUE};
     std::atomic<bool> ending_session_{false};
     bool maximized_{};
+    bool zen_streaming_{}, zen_fullscreen_{};
+    WINDOWPLACEMENT zen_placement_{};
+    LONG_PTR zen_style_{};
+    Json zen_minimize_request_;
     bool expect_failure_{}, failure_observed_{}, shutdown_verified_{true}, crash_test_{}, crash_done_{};
     bool tray_added_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
         preview_done_{}, preview_ok_{}, frame_captured_{};
@@ -131,7 +137,9 @@ void DesktopApplication::save_window() {
         return;
     WINDOWPLACEMENT placement{};
     placement.length = sizeof(placement);
-    if (GetWindowPlacement(window_, &placement)) {
+    if (zen_fullscreen_ || GetWindowPlacement(window_, &placement)) {
+        if (zen_fullscreen_)
+            placement = zen_placement_;
         const auto &r = placement.rcNormalPosition;
         std::ofstream out(data_ / "window.json");
         out << Json{{"left", r.left},
@@ -140,6 +148,48 @@ void DesktopApplication::save_window() {
                     {"height", r.bottom - r.top},
                     {"maximized", maximized_}};
     }
+}
+bool DesktopApplication::set_zen_fullscreen(bool enabled) {
+    if (enabled == zen_fullscreen_)
+        return true;
+    const auto change_style = [&](LONG_PTR style) {
+        SetLastError(ERROR_SUCCESS);
+        return SetWindowLongPtrW(window_, GWL_STYLE, style) != 0 || GetLastError() == ERROR_SUCCESS;
+    };
+    if (!enabled) {
+        if (!change_style(zen_style_ & ~(WS_MINIMIZE | WS_MAXIMIZE)))
+            return false;
+        zen_fullscreen_ = false;
+        web_->set_fullscreen_layout(false);
+        const bool framed = SetWindowPos(window_, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED) != FALSE;
+        const bool restored = SetWindowPlacement(window_, &zen_placement_) != FALSE;
+        maximized_ = IsZoomed(window_) != FALSE;
+        return framed && restored;
+    }
+    MONITORINFO screen{};
+    screen.cbSize = sizeof(screen);
+    zen_placement_.length = sizeof(zen_placement_);
+    if (IsIconic(window_) || !GetWindowPlacement(window_, &zen_placement_) ||
+        !GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &screen))
+        return false;
+    zen_style_ = GetWindowLongPtrW(window_, GWL_STYLE);
+    zen_fullscreen_ = true;
+    if (IsZoomed(window_))
+        ShowWindow(window_, SW_RESTORE);
+    if (change_style((zen_style_ & ~(WS_OVERLAPPEDWINDOW | WS_MAXIMIZE)) | WS_POPUP)) {
+        web_->set_fullscreen_layout(true);
+        const auto &bounds = screen.rcMonitor;
+        if (SetWindowPos(window_, nullptr, bounds.left, bounds.top, bounds.right - bounds.left,
+                         bounds.bottom - bounds.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED))
+            return true;
+    }
+    set_zen_fullscreen(false);
+    return false;
+}
+void DesktopApplication::publish_zen_sample() {
+    if (zen_streaming_ && web_->ready() && IsWindowVisible(window_) && !IsIconic(window_))
+        web_->post({{"type", "zen_sample"}, {"data", core_->zen_sample()}});
 }
 void DesktopApplication::tray() {
     last_tray_attempt_=GetTickCount64();
@@ -160,7 +210,7 @@ void DesktopApplication::tray() {
 void DesktopApplication::open() {
     if (exiting_)
         return;
-    ShowWindow(window_, maximized_ ? SW_MAXIMIZE : SW_RESTORE);
+    ShowWindow(window_, !zen_fullscreen_ && maximized_ ? SW_MAXIMIZE : SW_RESTORE);
     SetForegroundWindow(window_);
     if (web_->closing()) {
         pending_open_ = true;
@@ -179,6 +229,9 @@ void DesktopApplication::hide() {
         diagnostic("Tray unavailable; keeping window visible");
         return;
     }
+    zen_streaming_ = false;
+    if (zen_fullscreen_)
+        set_zen_fullscreen(false);
     save_window();
     if(portal_)portal_->hide();
     web_->close();
@@ -316,6 +369,42 @@ void DesktopApplication::command(Json request) {
         return;
     validate_request(request);
     const auto kind=request["type"].get<std::string>();
+    if (kind == "set_zen_stream") {
+        zen_streaming_ = request["params"]["enabled"] == true && IsWindowVisible(window_) && !IsIconic(window_);
+        publish_zen_sample();
+        return;
+    }
+    if (kind == "set_zen_fullscreen") {
+        const bool enabled = request["params"]["enabled"] == true;
+        if ((enabled && !zen_streaming_) || !set_zen_fullscreen(enabled))
+            throw std::runtime_error("Pulse mode fullscreen failed");
+        web_->post({{"type", "response"}, {"request_id", request["request_id"]}, {"ok", true},
+                    {"data", {{"fullscreen", zen_fullscreen_}}}});
+        return;
+    }
+    if (kind == "selftest_zen") {
+        if (!selftest_)
+            throw std::runtime_error("Pulse mode self-test disabled");
+        const auto action = request["params"]["action"].get<std::string>();
+        if (action == "minimize") {
+            if (self_stage_ != 0 || minimize_test_done_ || !zen_streaming_)
+                throw std::runtime_error("Pulse mode minimize self-test unavailable");
+            zen_minimize_request_ = request["request_id"];
+            minimize_test_done_ = true;
+            self_stage_ = 2;
+            stage_tick_ = GetTickCount64();
+            SendMessageW(window_, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+            return;
+        }
+        const double zoom = action == "reset" ? 1.0 :
+            (action == "125" ? 120.0 : 144.0) / GetDpiForWindow(window_);
+        if (!web_->set_test_zoom(zoom))
+            throw std::runtime_error("Cannot change self-test rasterization scale");
+        web_->post({{"type", "response"}, {"request_id", request["request_id"]}, {"ok", true}});
+        return;
+    }
+    if (kind == "get_zen_day" && !zen_streaming_)
+        throw std::runtime_error("Pulse mode is hidden");
     if(kind=="save_summary_png"){
         const bool saved=save_summary_png(request["params"]["png"].get_ref<const std::string &>());
         web_->post({{"type","response"},{"request_id",request["request_id"]},{"ok",true},{"data",{{"saved",saved}}}});
@@ -428,13 +517,15 @@ void DesktopApplication::command(Json request) {
     const auto hwnd = window_;
     const bool status_request = request["type"] == "get_status";
     const bool test = selftest_, picker_test=picker_test_&&ready_count_==0;
+    const bool zen_minimize = selftest_ && !minimize_test_done_;
     const auto directory = narrow(data_.wstring()), test_page = test_page_;
     const bool installed=std::filesystem::exists(exe_/L"installed.ini");
     try {
-        core_->request(request, [hwnd, generation, status_request, test, picker_test, directory, test_page,installed](Json json) {
+        core_->request(request, [hwnd, generation, status_request, test, picker_test, zen_minimize, directory, test_page,installed](Json json) {
             if (status_request && json.value("ok", false)) {
                 json["data"]["self_test"] = test;
                 json["data"]["self_test_picker"] = test&&picker_test;
+                json["data"]["self_test_zen_minimize"] = zen_minimize;
                 json["data"]["self_test_page"] = test_page;
                 json["data"]["data_directory"] = directory;
                 json["data"]["installation_mode"]=installed?"installed":"portable";
@@ -483,11 +574,19 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     }
     switch (m) {
+    case WM_SHOWWINDOW:
+        if (!w)
+            zen_streaming_ = false;
+        if (web_)
+            web_->set_visible(w && !IsIconic(h));
+        return DefWindowProcW(h, m, w, l);
     case WM_SIZE:
-        if (window_ && w != SIZE_MINIMIZED)
+        if (window_ && w != SIZE_MINIMIZED && !zen_fullscreen_)
             maximized_ = w == SIZE_MAXIMIZED;
+        if (w == SIZE_MINIMIZED)
+            zen_streaming_ = false;
         if (web_) {
-            web_->set_visible(w != SIZE_MINIMIZED);
+            web_->set_visible(w != SIZE_MINIMIZED && IsWindowVisible(h));
             web_->resize();
         }
         return 0;
@@ -498,8 +597,12 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     }
     case WM_DPICHANGED: {
-        auto *r = reinterpret_cast<RECT *>(l);
-        SetWindowPos(h, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+        RECT bounds = *reinterpret_cast<RECT *>(l);
+        MONITORINFO screen{};
+        screen.cbSize = sizeof(screen);
+        if (zen_fullscreen_ && GetMonitorInfoW(MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST), &screen))
+            bounds = screen.rcMonitor;
+        SetWindowPos(h, nullptr, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
         if (web_)
             web_->resize();
@@ -570,6 +673,9 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     }
     case WM_APP + 30:
+        zen_streaming_ = false;
+        if (zen_fullscreen_)
+            set_zen_fullscreen(false);
         web_->close();
         if (IsWindowVisible(h) && recoveries_++ < 3)
             pending_open_ = true;
@@ -618,6 +724,7 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         if (exiting_)
             return 0;
+        publish_zen_sample();
         if (!tray_added_ && GetTickCount64()-last_tray_attempt_>=5000)
             tray();
         set_ui_language(core_->status()["config"].value("language","system"));
@@ -724,10 +831,19 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
                 stage_tick_ = now;
             } else if(self_stage_==2){
                 if(!hidden_check_started_&&now-stage_tick_>250){hidden_check_started_=true;
-                    web_->verify_hidden_ui([this](bool ok){hidden_ui_ok_=ok;hidden_check_done_=true;diagnostic(ok?"Minimized UI: native visibility false and refresh timer stopped":"SELFTEST FAIL: minimized UI refresh did not stop");});}
+                    const bool zen = !zen_minimize_request_.is_null();
+                    web_->verify_hidden_ui([this,zen](bool ok){
+                        hidden_ui_ok_=ok&&(!zen||!zen_streaming_);hidden_check_done_=true;
+                        diagnostic(hidden_ui_ok_?(zen?"Minimized Pulse mode: stream and frames stopped; canvas released":
+                            "Minimized UI: native visibility false and refresh timer stopped"):"SELFTEST FAIL: minimized UI work did not stop");
+                    },zen);}
                 if(hidden_check_done_&&now-stage_tick_>1000){
                     if(!hidden_ui_ok_){quit();return 0;}
                     SendMessageW(window_,WM_SYSCOMMAND,SC_RESTORE,0);self_stage_=0;
+                    if (!zen_minimize_request_.is_null()) {
+                        web_->post({{"type", "response"}, {"request_id", zen_minimize_request_}, {"ok", true}});
+                        zen_minimize_request_ = nullptr;
+                    }
                 }else if(now-stage_tick_>5000){diagnostic("SELFTEST FAIL: hidden UI verification timed out");quit();}
             } else if (self_stage_ == 1 && now - stage_tick_ > 1500 && !web_->closing()) {
                 diagnostic("Selftest: core heartbeat while UI closed=" +

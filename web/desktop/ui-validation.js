@@ -1,4 +1,49 @@
 'use strict';
+async function validateZenPulse(checkMinimize){
+ const stage=$('zen-stage'),canvas=$('zen-canvas'),screen=$('zen-fullscreen'),theme=document.documentElement.dataset.theme;
+ const check=(condition,message)=>{if(!condition)throw new Error('Zen Pulse: '+message);};
+ async function until(predicate,message){
+  const deadline=performance.now()+2500;
+  while(!predicate()&&performance.now()<deadline)
+   await new Promise(resolve=>requestAnimationFrame(resolve));
+  check(predicate(),message);
+ }
+ function escape(){document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}
+ try{
+  applyTheme('light');
+  $('zen-enter').click();
+  check(PulseZen.active&&!stage.hidden&&getComputedStyle(document.querySelector('body>main')).display==='none','entry failed');
+  const style=getComputedStyle(stage);
+  check(style.colorScheme==='dark'&&style.getPropertyValue('--series-primary').trim()==='#38bdf8'&&
+   style.getPropertyValue('--series-comparison').trim()==='#a78bfa','dark series change with main theme');
+  for(const [action,scale] of [['125',1.25],['150',1.5]]){
+   await rpc('selftest_zen',{action});
+   await until(()=>Math.abs(devicePixelRatio-scale)<.02&&canvas.width===Math.round(canvas.clientWidth*devicePixelRatio)&&
+    canvas.height===Math.round(canvas.clientHeight*devicePixelRatio),'backing pixels at '+action+'%');
+  }
+  await rpc('selftest_zen',{action:'reset'});
+  screen.click();
+  await until(()=>screen.getAttribute('aria-pressed')==='true','native fullscreen did not open');
+  screen.click();
+  await until(()=>screen.getAttribute('aria-pressed')==='false','native fullscreen did not restore');
+  canvas.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
+  check(!PulseZen.active&&!PulseZen.running&&stage.hidden&&canvas.width===1,'double-click did not stop mode');
+  $('zen-enter').click();
+  if(checkMinimize){
+   await until(()=>canvas.width>1,'no visible raster before minimization');
+   await rpc('selftest_zen',{action:'minimize'});
+   await until(()=>PulseZen.active&&nativeVisible&&canvas.width>1,'mode did not resume after native restore');
+  }
+  screen.click();
+  await until(()=>screen.getAttribute('aria-pressed')==='true','fullscreen did not reopen');
+  escape();
+  check(!PulseZen.active&&!PulseZen.running&&canvas.width===1&&document.activeElement===$('zen-enter'),'Esc did not exit and restore focus');
+ }finally{
+  PulseZen.exit();
+  await rpc('selftest_zen',{action:'reset'});
+  applyTheme(theme);
+ }
+}
 async function validateActivityHistory(host){
  const check=(condition,message)=>{if(!condition)throw new Error('Activity history: '+message);};
  await activityHistory.update();

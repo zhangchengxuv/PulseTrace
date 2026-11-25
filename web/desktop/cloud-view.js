@@ -29,10 +29,12 @@ function renderCloudSettings(group){
  const restoreHint=el('p',{class:'muted'}),restorePanel=el('div',{class:'cloud-restore'},el('p',{class:'muted'},tr('cloud.restore_hint')),files,el('div',{class:'actions'},prepare),restoreHint,confirmText,el('div',{class:'actions'},restore,cancelRestore));
  root.append(panel(tr('cloud.title'),form,el('p',{class:'cloud-encryption',title:tr('cloud.encrypted'),tabindex:0},tr('cloud.encrypted_short')),help(tr('ui.details'),el('p',{},tr('cloud.intro'))),el('p',{class:'muted'},tr('cloud.password_hint')),el('div',{class:'actions'},test,backup,list,cancel),result),disclosure('settings.cloud.restore',tr('cloud.restore'),null,restorePanel),disclosure('settings.cloud.history',tr('cloud.records'),null,records));
  group.append(root);group.onSettingsShown=()=>poll();
+ const visible=()=>root.isConnected&&page==='settings'&&!document.hidden&&nativeVisible&&
+  !globalThis.PulseZen?.active&&!root.closest('[hidden]');
  async function poll(){
-  clearTimeout(cloudPoll);if(!root.isConnected||page!=='settings'||document.hidden||!nativeVisible||root.closest('[hidden]'))return;
+  clearTimeout(cloudPoll);if(!visible())return;
   try{
-   status=await rpc('cloud_status');if(!root.isConnected)return;
+   status=await rpc('cloud_status');if(!visible())return;
    if(!initialized){for(const [key,n]of Object.entries(fields)){if(n.type==='password')continue;const value=key==='account'?status.account:status.config?.[key];if(n.type==='checkbox')n.checked=!!value;else if(value!=null)n.value=String(value);}initialized=true;}
    fields.app_password.placeholder=tr(status.credentials_saved?'cloud.stored':'cloud.app_password');fields.encryption_password.placeholder=tr(status.encryption_password_saved?'cloud.stored':'cloud.encryption_password');
    result.replaceChildren(...[el('p',{},tr('cloud.phase.'+(['idle','working','success','error','cancelled','restore_ready','restart_required'].includes(status.phase)?status.phase:'idle'))),status.error?el('p',{class:'capture-error'},cloudError(status.error)):null,status.last_backup_ms?el('p',{class:'muted'},tr('cloud.last_backup')+' '+new Date(status.last_backup_ms).toLocaleString(PulseI18n.locale)):null,status.pending_restore?el('p',{class:'cloud-pending'},tr('cloud.pending')):null,status.restore_result?.phase==='restore_error'?el('p',{class:'capture-error'},tr('cloud.restore_failed')):null,status.restore_result?.phase==='restored'?el('p',{class:'muted'},tr('cloud.restored')):null].filter(Boolean));
@@ -43,7 +45,7 @@ function renderCloudSettings(group){
    files.onchange=()=>{prepare.disabled=!!status.busy||!files.value||!!status.pending_restore;};
    records.replaceChildren(table([tr('cloud.time'),tr('cloud.operation'),tr('cloud.result'),tr('cloud.backups')],(status.history||[]).slice().reverse().map(item=>[new Date(item.time_ms).toLocaleString(PulseI18n.locale),tr('cloud.op.'+({cloud_test:'test',cloud_backup:'backup',cloud_list:'list',cloud_prepare_restore:'restore',cloud_confirm_restore:'restore'}[item.operation]||'backup')),item.result==='verified'?tr('cloud.verified'):item.result==='restart_required'?tr('cloud.phase.restart_required'):cloudError(item.result||''),item.name||'—'])));
   }catch(failure){result.textContent=cloudError(failure.code||'');}
-  if(root.isConnected&&page==='settings'&&!root.closest('[hidden]'))cloudPoll=setTimeout(poll,1500);
+  if(visible())cloudPoll=setTimeout(poll,1500);
  }
  queueMicrotask(poll);
 }

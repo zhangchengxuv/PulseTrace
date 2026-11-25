@@ -639,5 +639,15 @@ namespace pulsetrace {struct LocalizedText{const char *key;const wchar_t *zh,*en
 {"bgm.inspect",L"查看播放时段",L"Inspect playback time"},
 {"bgm.no_input",L"这个时段没有键盘观测记录。",L"No keyboard observations in this range."},
 {"bgm.no_track",L"没有播放记录",L"No recorded playback"},
-{"bgm.track_at",L"{time} · {track}",L"{time} · {track}"}
+{"bgm.track_at",L"{time} · {track}",L"{time} · {track}"},
+{"zen.title",L"脉冲模式",L"Zen Pulse"},
+{"zen.fullscreen",L"进入全屏",L"Enter fullscreen"},
+{"zen.restore",L"退出全屏",L"Leave fullscreen"},
+{"zen.exit",L"退出脉冲模式（Esc）",L"Exit Zen Pulse (Esc)"},
+{"zen.fullscreen_error",L"无法切换全屏。",L"Could not switch fullscreen."},
+{"zen.waveforms",L"实时键鼠与网络双轨波形",L"Live keyboard, mouse, and network waveforms"},
+{"zen.input",L"键鼠输入",L"Keyboard and mouse"},
+{"zen.network",L"网络速率",L"Network speed"},
+{"zen.keys",L"今日按键",L"Keys today"},
+{"zen.clicks",L"今日点击",L"Clicks today"}
 };}

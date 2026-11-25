@@ -63,6 +63,16 @@ void validate_request(const Json &r) {
     const auto &p = r["params"];
     std::set<std::string> allowed;
     if (type == "retry_persistence" || type == "ping" || type == "get_status" || type == "get_autostart" || type == "get_history_bounds" || type == "exit" || type == "hide" || type == "open_monthly_folder" || type=="backup_database" || type=="open_data_folder" || type=="get_update_status" || type=="check_updates" || type=="download_update" || type=="cancel_update" || type=="open_update_folder" || type=="open_release_page" || type=="install_update" || type=="get_campus_status" || type=="open_campus_portal" || type=="campus_rescan" || type=="delete_campus_rule") {
+    } else if (type == "get_zen_day") {
+    } else if (type == "set_zen_stream" || type == "set_zen_fullscreen") {
+        allowed = {"enabled"};
+        if (!p.contains("enabled") || !p["enabled"].is_boolean())
+            throw std::invalid_argument("Invalid pulse mode state");
+    } else if (type == "selftest_zen") {
+        allowed = {"action"};
+        const auto action = p.value("action", "");
+        if (action != "125" && action != "150" && action != "reset" && action != "minimize")
+            throw std::invalid_argument("Invalid pulse mode self-test");
     } else if(type=="save_summary_png"){
         allowed={"png"};
         if(!p.contains("png")||!p["png"].is_string())throw std::invalid_argument("Invalid summary image");

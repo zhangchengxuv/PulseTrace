@@ -3,6 +3,7 @@ function syncLanguage(){
  names=translatedNames();
  for(const node of document.querySelectorAll('[data-i18n]'))node.textContent=tr(node.dataset.i18n);
  for(const node of document.querySelectorAll('[data-i18n-aria]'))node.setAttribute('aria-label',tr(node.dataset.i18nAria));
+ PulseZen.relabel();
  for(const b of document.querySelectorAll('nav button')){b.title=names[b.dataset.page];b.setAttribute('aria-label',b.title);b.querySelector('.nav-text').textContent=b.title;}
  if(!PulseDatePicker.current&&rangeRoot){rangeRoot.remove();rangeRoot=null;}
  renderKey='';
