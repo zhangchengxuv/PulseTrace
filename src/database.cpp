@@ -312,7 +312,7 @@ void ActivityCounts::add(const std::string &module, const std::string &metric, s
 }
 std::map<std::int64_t, ActivityCounts> DatabaseManager::activity_counts(
     std::int64_t from, std::int64_t to, int bucket, bool local, const std::string &exclude, std::int64_t floor) const {
-    if (bucket != 0 && bucket != 60 && bucket != 1440)
+    if (bucket != 0 && bucket != 1 && bucket != 60 && bucket != 1440)
         throw std::invalid_argument("Invalid activity bucket");
     std::string sql = R"SQL(
         SELECT CASE WHEN ?1=0 THEN 0 WHEN ?2 THEN stats_local_bucket(minute,?1) ELSE (minute/?1)*?1 END,
@@ -329,7 +329,7 @@ std::map<std::int64_t, ActivityCounts> DatabaseManager::activity_counts(
         sql += " GROUP BY 1";
     Statement s(db_, sql.c_str());
     sqlite3_bind_int(s.p, 1, bucket);
-    sqlite3_bind_int(s.p, 2, local);
+    sqlite3_bind_int(s.p, 2, local && bucket > 1);
     sqlite3_bind_int64(s.p, 3, from);
     sqlite3_bind_int64(s.p, 4, to);
     bind_text(s.p, 5, exclude);

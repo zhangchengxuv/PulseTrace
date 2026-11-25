@@ -16,6 +16,104 @@ Json rpc(CoreService &core,const char *type,Json params=Json::object()){
  auto message=parse_message(Json{{"type",type},{"request_id",1},{"params",params}}.dump());
  core.request(message,[p](Json r){p->set_value(r);});if(future.wait_for(std::chrono::seconds(15))!=std::future_status::ready)throw std::runtime_error("Music RPC timeout");auto r=future.get();if(!r.value("ok",false))throw std::runtime_error(r["error"]["message"]);return r["data"];
 }
+void test_insights(const std::filesystem::path &root) {
+ const auto dir = root / "insights";
+ std::filesystem::create_directories(dir);
+ const auto first = (utc_now_ms() / 60000 / 1440 - 1) * 1440 + 60;
+ Json options = {{"from", first}, {"to", first + 12}, {"time_zone", "UTC"}, {"bucket", 1},
+                 {"player", "all"}, {"group", "songs"}, {"merge", false}};
+ const auto track = [](auto minute, int ms, bool short_track = false) {
+  return Json{{"minute", minute}, {"player", "qq"},
+              {"key", Json::array({short_track ? "short" : "long", "artist"}).dump()},
+              {"title", short_track ? "Short track" : "Long track"}, {"artist", short_track ? "artist" : "Artist"},
+              {"album", "Album"}, {"duration_ms", 180000}, {"played_ms", ms}, {"plays", 0}};
+ };
+ const auto count = [](auto minute, const char *module, const char *metric, int value) {
+  return Json{{"minute", minute}, {"module", module}, {"metric", metric}, {"value", value}};
+ };
+ const auto app = [](auto minute, const char *name, int ms) {
+  return Json{{"minute", minute}, {"key", name}, {"name", name}, {"path", "private-fixture.exe"},
+              {"foreground_ms", ms}, {"active_ms", 0}};
+ };
+ {
+  DatabaseManager db(dir / "monitor.db");
+  Json music = Json::array(), input = Json::array(), apps = Json::array();
+  for (int i = 0; i < 11; ++i) {
+   const auto minute = first + i;
+   music.push_back(track(minute, i == 5 ? 30000 : i == 10 ? 0 : 60000, i >= 6));
+   input.push_back(count(minute, "coverage", "observed_ms", 60000));
+   if (i != 10) {
+    input.push_back(count(minute, "keyboard", "30", i < 6 ? 120 : 900));
+    input.push_back(count(minute, "repeat", "30", 10000));
+    apps.push_back(app(minute, "Editor", 45000));
+    apps.push_back(app(minute, "Browser", 15000));
+   }
+  }
+  db.save_music("work", music);
+  db.save("work", input);
+  db.save_usage("work", apps);
+  db.save("other-session", Json::array({count(first, "keyboard", "30", 20000)}));
+  db.save_usage("other-session", Json::array({app(first, "Unrelated", 60000)}));
+  auto second_player = track(first, 60000);
+  second_player["player"] = "netease";
+  db.save_music("work", Json::array({second_player}));
+  MusicInsightLive live;
+  const auto report = db.music_insights(options, live);
+  const auto &leaders = report.at("leaderboard");
+  check(leaders.size() == 1 && leaders[0]["title"] == "Long track" &&
+        leaders[0]["kpm"] == 120.0 && leaders[0]["observed_ms"] == 330000,
+        "KPM uses weighted same-session coverage and excludes repeat and short plays");
+  const auto &pairs = report["soundtracks"][0]["apps"];
+  check(pairs.size() == 2 && pairs[0]["name"] == "Editor" && pairs[0]["overlap_ms"] == 247500.0 &&
+        pairs[1]["name"] == "Browser" && pairs[1]["overlap_ms"] == 82500.0 && report.dump().find("private-fixture") == std::string::npos,
+        "foreground overlap is proportional and returns names without paths");
+  options["merge"] = true;
+  auto merged = db.music_insights(options, live);
+  check(merged["leaderboard"][0]["played_ms"] == 330000 && merged["soundtracks"].size() == 2,
+        "merged player observations are capped to one minute per song");
+  options["group"] = "artists";
+  const auto artists = db.music_insights(options, live);
+  check(artists["leaderboard"].size() == 1 && artists["leaderboard"][0]["observed_ms"] == 570000,
+        "canonical artist combines its songs");
+  options["group"] = "songs"; options["merge"] = false;
+  options["player"] = "netease";
+  auto one_player = db.music_insights(options, live);
+  check(one_player["leaderboard"].empty() && one_player["soundtracks"].size() == 1 &&
+        one_player["soundtracks"][0]["player"] == "netease", "explicit player scope");
+  options["player"] = "qq";
+  live.session = "work";
+  live.input_floor = live.music_floor = live.usage_floor = first + 5;
+  live.music = Json::array({track(first + 5, 60000)});
+  live.input = Json::array({Json::array({first + 5, 240, 60000})});
+  live.usage = Json::array({app(first + 5, "Editor", 60000)});
+  const auto latest = db.music_insights(options, live);
+  check(latest["leaderboard"].size() == 1 && latest["leaderboard"][0]["observed_ms"] == 360000 &&
+        latest["leaderboard"][0]["kpm"] == 140.0 &&
+        latest["soundtracks"][0]["apps"][0]["overlap_ms"] == 285000.0,
+        "live snapshot replaces the persisted tail of every stream");
+  live.music = Json::array({track(first + 5, 30000)});
+  live.input = Json::array({Json::array({first + 5, 40, 20000})});
+  const auto partial = db.music_insights(options, live);
+  check(partial["leaderboard"][0]["observed_ms"] == 310000 &&
+        partial["leaderboard"][0]["kpm"] == 120.0, "partial playback and coverage are weighted within the minute");
+ }
+ CoreService core(dir);
+ core.start();
+ auto disabled = rpc(core, "get_music_insights", options);
+ check(disabled["leaderboard"].empty() && disabled["soundtracks"].empty() && disabled["trend"].empty(),
+       "disabled opt-in hides stored correlations");
+ rpc(core, "set_config", {{"music_enabled", true}});
+ const auto report = rpc(core, "get_music_insights", options);
+ check(report["leaderboard"][0]["kpm"] == 120.0 && report["trend"].size() == 11 &&
+       report["trend"][10]["presses"] == 0, "minute trend represents input and observed zero, excluding gaps");
+ options["bucket"] = 60;
+ check(rpc(core, "get_music_insights", options)["trend"].size() == 1, "single-day hourly trend");
+ options["to"] = first + 1440;
+ check(rpc(core, "get_music_insights", options)["trend"].empty(), "multi-day range has no marker trend");
+ options["player"] = "anything";
+ rejects([&] { rpc(core, "get_music_insights", options); }, "unknown insight filter rejected");
+ core.stop();
+}
 }
 int main(){try{
  check(music_player("QQMusic.exe")=="qq"&&music_player("cloudmusic.exe")=="netease","source identities");check(music_player("notqqmusic.exe").empty(),"unrelated players excluded");
@@ -54,5 +152,6 @@ int main(){try{
  {CoreService core(root/"config");check(!core.status()["config"]["music_enabled"].get<bool>(),"music opt-in default");core.start();rpc(core,"set_config",{{"music_threshold_seconds",45},{"music_qq",false}});rejects([&]{rpc(core,"set_config",{{"music_threshold_seconds",0}});},"threshold validation");auto result=rpc(core,"get_music",{{"from",0},{"to",4223371680LL}});check(result["rows"].empty()&&!result["status"]["active"].get<bool>(),"disabled music has empty state");auto file=rpc(core,"export_music",{{"from",0},{"to",4223371680LL}});check(std::filesystem::exists(root/"config"/file["file"].get<std::string>()),"CSV export created");core.stop();}
  std::filesystem::create_directories(root/"config");
  {CoreService core(root/"config");check(core.status()["config"]["music_threshold_seconds"]==45&&!core.status()["config"]["music_qq"].get<bool>(),"configuration survives restart");}
+ test_insights(root);
  std::cout<<checks<<" music timeline, database, recovery and bridge checks passed\n";return 0;
  }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

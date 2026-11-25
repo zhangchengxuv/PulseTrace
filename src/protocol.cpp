@@ -138,6 +138,21 @@ void validate_request(const Json &r) {
             if(p.contains("method")&&p["method"]!="run"&&p["method"]!="task")
                 throw std::invalid_argument("Invalid startup method");
         }
+    } else if (type == "get_music_insights") {
+        allowed = {"from", "to", "time_zone", "bucket", "player", "group", "merge"};
+        if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||
+            !p["to"].is_number_integer() || p["from"] < 0 || p["to"] <= p["from"] ||
+            p["to"].get<double>() > 4223371680.0 ||
+            (p["from"] != 0 && p["to"].get<std::int64_t>() - p["from"].get<std::int64_t>() > 527040))
+            throw std::invalid_argument("Invalid music insight range");
+        if (!p.contains("time_zone") || (p["time_zone"] != "UTC" && p["time_zone"] != "local") ||
+            !p.contains("bucket") || !p["bucket"].is_number_integer() ||
+            (p["bucket"] != 1 && p["bucket"] != 60 && p["bucket"] != 1440))
+            throw std::invalid_argument("Invalid music insight bucketing");
+        const auto player = p.value("player", ""), group = p.value("group", "");
+        if ((player != "all" && player != "qq" && player != "netease") ||
+            (group != "songs" && group != "artists") || !p.contains("merge") || !p["merge"].is_boolean())
+            throw std::invalid_argument("Invalid music insight filters");
     } else if (type == "get_activity") {
         allowed = {"from", "to", "time_zone", "view", "metric"};
         if (!p.contains("from") || !p.contains("to") || !p["from"].is_number_integer() ||

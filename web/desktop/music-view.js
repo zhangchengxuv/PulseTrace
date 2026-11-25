@@ -1,5 +1,5 @@
 'use strict';
-const musicView={result:{rows:[],status:{}},player:'all',merge:false,period:'day'};
+const musicView={result:{rows:[],status:{}},player:'all',merge:false,period:'day',generation:-1};
 const musicText=key=>tr('music.'+key);
 function musicRows(){return musicView.result.rows.filter(r=>musicView.player==='all'||r.player===musicView.player);}
 function musicGroups(values,artist=false,merge=false){
@@ -11,7 +11,7 @@ function musicBins(values,period,zone='local'){
  const bins=new Map();for(const r of values){const key=PulseDate.calendarStart(r.minute,period,zone);bins.set(key,(bins.get(key)||0)+r.played_ms);}
  return [...bins].sort((a,b)=>a[0]-b[0]);
 }
-async function refreshMusic(){const generation=viewGeneration;const result=await rpc('get_music',{from:range.from,to:range.to});if(generation===viewGeneration)musicView.result=result;}
+async function refreshMusic(){const generation=viewGeneration;const result=await rpc('get_music',{from:range.from,to:range.to});if(generation===viewGeneration){musicView.result=result;musicView.generation=generation;}}
 function musicPage(c){
  const root=el('div',{class:'music-page'});root.dataset.locale=PulseI18n.locale;
  const player=el('select',{'aria-label':musicText('player')},...['all','qq','netease'].map(v=>el('option',{value:v},musicText(v))));player.value=musicView.player;
@@ -30,7 +30,8 @@ function musicPage(c){
   points.forEach((r,i)=>ctx.fillRect(left+i*step+1,150-r[1]/maximum*120,Math.max(1,step-3),r[1]/maximum*120));ctx.fillStyle=css.getPropertyValue('--muted');ctx.fillText(PulseDate.format(points[0][0],{month:'short',day:'numeric'},range.time_zone),left,178);if(w>330&&points.length>1){ctx.textAlign='right';ctx.fillText(PulseDate.format(points.at(-1)[0],{month:'short',day:'numeric'},range.time_zone),right,178);}
  };
  const observer=PulseRender.observe(canvas,draw);chartObservers.push(observer);root.musicSchedule=()=>observer.schedule?.();period.onchange=()=>{musicView.period=period.value;draw();};
- root.append(panel(musicText('trend'),period,canvas,empty),help(tr('ui.details'),el('p',{},musicText('basis'))));c.append(root);updateMusic(root);
+ root.insights=musicInsights(root);
+ root.append(panel(musicText('trend'),period,canvas,empty),root.insights.details,help(tr('ui.details'),el('p',{},musicText('basis'))));c.append(root);updateMusic(root);
 }
 function updateMusic(root=document.querySelector('.music-page')){
  if(!root)return;const values=musicRows(),groups=musicGroups(values,false,musicView.merge),cfg=state.config||{},status=musicView.result.status||{};
@@ -41,6 +42,7 @@ function updateMusic(root=document.querySelector('.music-page')){
  for(const [key,artist]of [['songs_top',false],['artists_top',true]]){const host=root.querySelector('[data-music-rank="'+key+'"]'),list=musicGroups(values,artist,musicView.merge).slice(0,10),signature=JSON.stringify(list);if(host.dataset.key===signature)continue;host.dataset.key=signature;const max=list[0]?.played_ms||1;
   host.replaceChildren(...(list.length?list.map(r=>{const track=el('div',{class:'usage-track'},el('i'));track.firstChild.style.width=(r.played_ms/max*100)+'%';return el('div',{class:'usage-row'},el('div',{class:'usage-row-head'},el('span',{class:'music-track-title',title:artist?r.artist:[r.title,r.artist,r.album].filter(Boolean).join(' · ')},artist?r.artist||musicText('unknown'):r.title),el('span',{},usageDuration(r.played_ms)+' · '+fmt(r.plays)+' '+musicText('count'))),!musicView.merge?el('small',{class:'muted'},musicText(r.player)):null,track);}):[el('p',{class:'muted'},musicText('empty'))]));
  }
+ root.insights.update(values,cfg.music_enabled===true);
  root.musicSchedule?.();
 }
 function renderMusicSettings(c){
@@ -58,8 +60,29 @@ function validateMusicStates(host){
    musicView.result={rows,status:{active:true,sessions:[]}};const canvas=root.querySelector('canvas');updateMusic(root);
    if(root.querySelectorAll('.cards strong').length!==3||root.querySelector('canvas')!==canvas)throw Error('Music stable cards/chart failed');
    if(root.querySelectorAll('.cards strong')[2].textContent!==fmt(rows.length))throw Error('Music songs differ from aggregates');
+   if(root.insights.details.hidden===Boolean(rows.length))throw Error('Music insight eligibility differs from playback records');
   }
   musicView.merge=true;updateMusic(root);if(root.querySelectorAll('.cards strong')[2].textContent!==fmt(1))throw Error('Music merge failed');
   musicView.result.status={error:'SMTC_UNAVAILABLE',active:false};updateMusic(root);if(!root.textContent.includes(musicText('unavailable')))throw Error('Music error state missing');
  }finally{Object.assign(musicView,{result:saved.result,player:saved.player,merge:saved.merge});state.config.music_enabled=saved.enabled;updateMusic(root);}
+}
+async function validateMusicInsights(host){
+ const row=musicRows().find(r=>r.played_ms>0);
+ if(!row||!state.config.music_enabled)return;
+ const root=host.querySelector('.music-page'),details=root.insights.details,original=range;
+ const day=PulseDate.calendarStart(row.minute,'today','UTC');
+ range={from:day,to:day+1440,bucket:60,time_zone:'UTC'};
+ details.open=true;
+ try{
+  await root.insights.load();
+  const chart=details.querySelector('.bgm-timeline'),toggle=chart.querySelector('input[type=checkbox]');
+  if(chart.hidden||toggle.checked)throw Error('Music insight day chart or default marks state failed');
+  toggle.checked=true;toggle.onchange();
+  const slider=chart.querySelector('input[type=range]');
+  slider.value=row.minute;slider.oninput();
+  if(!chart.querySelector('.bgm-readout').textContent.includes(row.title))throw Error('Music insight playback marker label missing');
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(document.documentElement.scrollWidth>innerWidth+1)throw Error('Music insights overflow');
+  toggle.checked=false;toggle.onchange();
+ }finally{details.open=false;range=original;}
 }

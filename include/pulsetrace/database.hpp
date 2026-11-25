@@ -13,6 +13,11 @@ struct ActivityCounts {
     std::optional<std::int64_t> keyboard, mouse, wheel, coverage, network;
     void add(const std::string &module, const std::string &metric, std::int64_t value);
 };
+struct MusicInsightLive {
+    std::string session;
+    std::int64_t input_floor{}, music_floor{}, usage_floor{};
+    Json input = Json::array(), music = Json::array(), usage = Json::array();
+};
 class DatabaseManager {
   public:
     explicit DatabaseManager(const std::filesystem::path &file);
@@ -56,6 +61,7 @@ class DatabaseManager {
     Json campus_latest(const std::string &origin="") const;
     void save_music(const std::string &session,const Json &rows);
     Json music(std::int64_t from,std::int64_t to,const std::string &exclude_session="",std::int64_t floor=0)const;
+    Json music_insights(const Json &options, const MusicInsightLive &live) const;
     static constexpr int supported_schema=9;
     void backup(const std::filesystem::path &destination) const;
     static void backup_file(const std::filesystem::path &source,const std::filesystem::path &destination);

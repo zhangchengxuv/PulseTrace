@@ -502,6 +502,65 @@ Json CoreService::execute(const Json &request, DatabaseManager *connection) {
         return {{"saved",true},{"snapshot",snapshot},{"alerts",thresholds.flags()},{"notice",notice}};
     }
     if(type=="get_history_bounds")return database().history_bounds();
+    if (type == "get_music_insights") {
+        // Opt-out also guards direct requests from opening the database or reading live snapshots.
+        if (!config_.value("music_enabled", false))
+            return {{"leaderboard", Json::array()}, {"soundtracks", Json::array()}, {"trend", Json::array()}};
+        const auto from = p.at("from").get<std::int64_t>(), to = p.at("to").get<std::int64_t>();
+        const auto floor = utc_now_ms() / 60000 - 119;
+        MusicInsightLive live;
+        live.session = session_;
+        live.input_floor = live.music_floor = live.usage_floor = floor;
+        for (const auto &r : music_->rows()) {
+            const auto minute = r.at("minute").get<std::int64_t>();
+            live.music_floor = std::min(live.music_floor, minute);
+            if (minute >= from && minute < to)
+                live.music.push_back(r);
+        }
+        for (const auto &r : usage_->rows()) {
+            const auto minute = r.at("minute").get<std::int64_t>();
+            live.usage_floor = std::min(live.usage_floor, minute);
+            if (minute >= from && minute < to)
+                live.usage.push_back({{"minute", minute}, {"key", r.at("key")}, {"name", r.at("name")},
+                                      {"foreground_ms", r.at("foreground_ms")}});
+        }
+        std::map<std::int64_t, ActivityCounts> input;
+        {
+            std::lock_guard lock(mutex_);
+            for (const auto &r : input_rows_) {
+                const auto minute = r.at("minute").get<std::int64_t>();
+                if (minute >= floor && minute >= from && minute < to &&
+                    (r.at("module") == "keyboard" || r.at("module") == "coverage"))
+                    input[minute].add(r.at("module"), r.at("metric"), r.at("value").get<std::int64_t>());
+            }
+        }
+        for (const auto &[minute, bin] : input)
+            live.input.push_back(Json::array({minute, bin.keyboard.value_or(0),
+                                           std::clamp(bin.coverage.value_or(0), std::int64_t(0), std::int64_t(60000))}));
+        auto &db = database();
+        auto result = db.music_insights(p, live);
+        auto &trend = result["trend"] = Json::array();
+        const auto width = p.at("bucket").get<int>();
+        const bool local = p.at("time_zone") == "local";
+        if (from > 0 && width < 1440 && to - from <= 26 * 60 &&
+            (!result["leaderboard"].empty() || !result["soundtracks"].empty())) {
+            StatisticsBuckets days(1440, local), buckets(width, local);
+            if (days.start(from) == days.start(to - 1)) {
+                auto samples = db.activity_counts(from, to, width, local, session_, floor);
+                for (const auto &[minute, sample] : input) {
+                    auto &bin = samples[buckets.start(minute)];
+                    if (sample.keyboard)
+                        bin.add("keyboard", "", *sample.keyboard);
+                    if (sample.coverage)
+                        bin.add("coverage", "observed_ms", *sample.coverage);
+                }
+                for (const auto &[minute, bin] : samples)
+                    if (bin.keyboard || bin.coverage.value_or(0) > 0)
+                        trend.push_back({{"minute", minute}, {"presses", bin.keyboard.value_or(0)}});
+            }
+        }
+        return result;
+    }
     if(type=="get_music"||type=="export_music"){
         const auto from=p.at("from").get<std::int64_t>(),to=p.at("to").get<std::int64_t>();
         const auto live=music_->rows();auto floor=utc_now_ms()/60000-119;
