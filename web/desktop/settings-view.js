@@ -14,6 +14,7 @@ function renderAutostart(host,group){
   task.disabled=status.autostart_task_available===false&&!status.autostart_task_registered;
   notice.textContent=status.autostart_run_blocked?tr('startup.run_blocked'):
    status.autostart_task_registered&&!status.autostart_task_enabled?tr('startup.task_blocked'):
+   status.autostart?tr('startup.behavior'):
    status.autostart_task_available===false?tr('startup.task_unavailable'):'';
  };
  save.onclick=async()=>{

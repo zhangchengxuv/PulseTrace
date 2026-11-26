@@ -5,12 +5,12 @@ function protocolTrend(title=tr("ui.ed82077242cc")){
  const id=state.network?.selected||'',actual=PulseDashboard.protocolRows(protocolSamples,id);
  return trend('network_ip',null,title,[[id+'/ipv4_up',tr("ui.59a323e0fe04"),'--protocol-ipv4',[]],[id+'/ipv4_down',tr("ui.c0159992fdcc"),'--protocol-ipv4',[6,4]],[id+'/ipv6_up',tr("ui.31e3f3c697c3"),'--protocol-ipv6',[]],[id+'/ipv6_down',tr("ui.147a719fb501"),'--protocol-ipv6',[6,4]]],actual);
 }
-function networkTransferCard(name,values,rates,availability,scope,series=''){
+function networkTransferCard(name,values,rates,missingRate,scope,series=''){
  const [up,down]=values,total=up==null||down==null?null:up+down;
  const directions=[['↑','ui.9e07e3c0532d','primary'],['↓','ui.4673a2306165','comparison']];
  const format=value=>value==null?'—':bytes(value);
  const detail=el('div',{class:'network-directions'},...directions.map(([arrow,label,kind],index)=>{
-  const rate=availability|| (rates[index]==null?'—':bytes(rates[index])+'/s');
+  const rate=Number.isFinite(rates[index])?bytes(rates[index])+'/s':missingRate;
   return el('div',{'data-series':kind},
    el('span',{},arrow+' '+tr(label)),el('b',{},format(values[index])),el('small',{title:tr('network.current')},rate));
  }));
@@ -22,24 +22,32 @@ function networkTransferCard(name,values,rates,availability,scope,series=''){
   el('div',{class:'network-transfer-heading'},el('span',{},name),el('strong',{},format(total))),detail,track);
 }
 function renderProtocolNetwork(c){
- const n=state.network||{},p=n.protocol_capture||{},fault=state.network_error||p.error;
+ const n=state.network||{},p=n.protocol_capture||{},fault=state.network_error;
  const records=protocolSelection(),summary=PulseDashboard.protocol(records),chosen=(n.interfaces||[]).find(item=>item.id===n.selected);
  const valid=records.filter(item=>item.accepted>0);
  const interfaceValues=['interface_upload_bytes','interface_download_bytes'].map(metric=>
   rows.some(row=>row.module==='network'&&row.metric===metric)?sum('network',metric):null);
  const observed=(family,direction)=>summary.has?protocolTotal(valid,family+'_'+direction):null;
- const unavailable=fault?tr('ui.6aa27f14bff1'):state.monitoring?'':tr('ui.eb0c326b60ae');
+ const paused=!state.monitoring||state.suspended||state.quiescing;
+ const rateStatus=fault?tr('ui.6aa27f14bff1'):paused?tr('ui.eb0c326b60ae'):null;
+ const waiting=tr('network.rate_waiting');
+ const linkRates=!rateStatus&&n.interface_rates_ready?[n.upload_bps,n.download_bps]:[];
+ const ipRates=!rateStatus&&p.running&&!p.error&&p.interface_id===n.selected?p.rates||[]:[];
+ const permissionDenied=p.start_status===5||p.enable_status===5;
+ const protocolIssue=!rateStatus&&p.error?(permissionDenied?tr('network.ip_live_permission'):tr('network.ip_live_failed')):null;
+ const ipStatus=rateStatus||protocolIssue||(p.rates_incomplete?tr('network.ip_live_incomplete'):waiting);
  const ipScope=tr('network.ip_scope',{name:chosen?.name||'—'});
  c.classList.add('network-content');
  if(fault)c.append(el('div',{class:'capture-error',role:'alert'},tr('ui.ee0a3b2108eb')+fault));
+ if(protocolIssue)c.append(el('p',{class:'network-scope',role:'status',title:p.error},protocolIssue));
  const rangeText=range.from===0?tr('range.all'):formatTime(range.from)+' – '+formatTime(range.to);
  c.append(el('div',{class:'network-heading'},
   el('p',{class:'network-scope'},tr('network.range')+' · '+rangeText),
   el('p',{class:'network-scope',title:ipScope},tr('network.current')+' · '+(chosen?.name||'—'))));
  c.append(el('div',{class:'network-overview'},
-  networkTransferCard(tr('network.interface_total'),interfaceValues,[n.upload_bps,n.download_bps],unavailable,tr('calendar.octets')),
-  networkTransferCard('IPv4',['up','down'].map(direction=>observed('ipv4',direction)),(p.rates||[]).slice(0,2),unavailable,ipScope,'primary'),
-  networkTransferCard('IPv6',['up','down'].map(direction=>observed('ipv6',direction)),(p.rates||[]).slice(2,4),unavailable,ipScope,'comparison')));
+  networkTransferCard(tr('network.interface_total'),interfaceValues,linkRates,rateStatus||waiting,tr('calendar.octets')),
+  networkTransferCard('IPv4',['up','down'].map(direction=>observed('ipv4',direction)),ipRates.slice(0,2),ipStatus,ipScope,'primary'),
+  networkTransferCard('IPv6',['up','down'].map(direction=>observed('ipv6',direction)),ipRates.slice(2,4),ipStatus,ipScope,'comparison')));
  const share=el('div',{class:'network-ip-share'});
  if(summary.ratio){
   const track=el('div',{class:'network-share-track','aria-hidden':'true'},el('i'),el('i'));

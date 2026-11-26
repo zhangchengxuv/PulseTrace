@@ -94,8 +94,15 @@ int main() {
         gate.start.store(capture_clock());
         NetworkMonitor monitor(&gate);
         auto active = monitor.sample(utc_now_ms() / 60000, true, "");
+        const auto no_ip_rates = [](const NetworkSample &sample) {
+            const auto &rates = sample.status["protocol_capture"]["rates"];
+            return rates.size() == 4 && std::all_of(rates.begin(), rates.end(), [](const auto &value) { return value.is_null(); });
+        };
+        check(no_ip_rates(active) && !active.status["interface_rates_ready"].get<bool>());
         std::this_thread::sleep_for(std::chrono::milliseconds(2200));
         active = monitor.sample(utc_now_ms() / 60000, true, "");
+        if (!active.status["protocol_capture"]["available"].get<bool>())
+            check(no_ip_rates(active));
         gate.stop.store(capture_clock());
         auto paused = monitor.sample(utc_now_ms() / 60000, false, "");
         auto copy = paused.rows;
@@ -103,6 +110,7 @@ int main() {
         auto after = monitor.sample(utc_now_ms() / 60000, false, "");
         check(copy == after.rows);
         check(!after.status["protocol_capture"]["running"].get<bool>());
+        check(no_ip_rates(after) && !after.status["interface_rates_ready"].get<bool>());
         const auto invalid = monitor.sample(utc_now_ms() / 60000, false, "0");
         check(!invalid.status["protocol_capture"]["available"].get<bool>());
         std::cout << checks << " packet/physical capture lifecycle checks passed\n"

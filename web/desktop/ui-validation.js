@@ -138,6 +138,26 @@ function validateNetworkSummary(host){
  const trend=host.querySelector('.network-trends');
  if(innerWidth>=1500&&innerHeight>=830&&trend.getBoundingClientRect().top+scrollY+130>innerHeight)
   throw Error('Network trends are outside the first viewport');
+ const saved=state;
+ const capture={running:true,interface_id:'test-link',rates:[10,20,30,0]};
+ const network={selected:'test-link',interface_rates_ready:true,upload_bps:80,download_bps:90};
+ const reading=(protocol,options={})=>{
+  state={...saved,monitoring:true,suspended:false,quiescing:false,network_error:'',...options,
+   network:{...network,protocol_capture:protocol}};
+  const fixture=el('div');
+  networkPage(fixture);
+  return [...fixture.querySelectorAll('.network-directions small')].map(node=>node.textContent).join('|');
+ };
+ const rates=(...values)=>values.map(value=>typeof value==='number'?bytes(value)+'/s':tr(value)).join('|');
+ try{
+  if(reading(capture)!==rates(80,90,10,20,30,0))throw Error('IPv4 and IPv6 live rates or observed zero were lost');
+  if(reading({...capture,rates:[10,null,null,null],rates_incomplete:true})!==
+     rates(80,90,10,...Array(3).fill('network.ip_live_incomplete')))throw Error('Incomplete IP samples appeared as zero');
+  if(reading({...capture,enable_status:5,error:'EnableTraceEx2: 5'})!==
+     rates(80,90,...Array(4).fill('network.ip_live_permission')))throw Error('An IP capture fault hid the interface rates');
+  if(reading(capture,{monitoring:false})!==rates(...Array(6).fill('ui.eb0c326b60ae')))
+   throw Error('Paused network page retained old live rates');
+ }finally{state=saved;}
 }
 function validateKeyboardLayouts(host,theme){
  const layout=host.querySelector('.heat-toolbar select'),previous=layout.value;

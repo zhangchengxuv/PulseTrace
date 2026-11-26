@@ -105,7 +105,7 @@ class DesktopApplication {
     LONG_PTR zen_style_{};
     Json zen_minimize_request_;
     bool expect_failure_{}, failure_observed_{}, shutdown_verified_{true}, crash_test_{}, crash_done_{};
-    bool tray_added_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
+    bool tray_added_{}, background_tray_pending_{}, exiting_{}, finalizing_{}, selftest_{}, pending_open_{}, preview_started_{},
         preview_done_{}, preview_ok_{}, frame_captured_{};
     int self_stage_{}, ready_count_{}, ping_count_{}, cycles_{2}, recoveries_{}, core_seconds_{};
     std::uint64_t start_tick_{}, stage_tick_{}, final_tick_{}, last_tray_attempt_{};
@@ -205,6 +205,10 @@ void DesktopApplication::tray() {
     // An existing icon is success as well; a failed duplicate ADD must not erase that state.
     tray_added_ = Shell_NotifyIconW(NIM_MODIFY, &nid_) != FALSE ||
                   Shell_NotifyIconW(NIM_ADD, &nid_) != FALSE;
+    if (tray_added_ && background_tray_pending_) {
+        background_tray_pending_ = false;
+        diagnostic("Background startup: tray ready");
+    }
     last_tray_state_.clear();
 }
 void DesktopApplication::open() {
@@ -727,6 +731,11 @@ LRESULT DesktopApplication::message(HWND h, UINT m, WPARAM w, LPARAM l) {
         publish_zen_sample();
         if (!tray_added_ && GetTickCount64()-last_tray_attempt_>=5000)
             tray();
+        if (background_tray_pending_ && GetTickCount64()-start_tick_>=30000) {
+            background_tray_pending_ = false;
+            diagnostic("Background startup: tray unavailable; opening the main window");
+            open();
+        }
         set_ui_language(core_->status()["config"].value("language","system"));
         caption_.theme(core_->status()["config"].value("theme","system"));
         if(web_&&caption_.consume_changed()){
@@ -944,8 +953,10 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) t
     if (!instance_mutex_)
         throw std::runtime_error("Cannot create single-instance lock");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        if (auto existing = FindWindowW(L"PulseTrace.Desktop", nullptr))
-            PostMessageW(existing, WM_APP + 51, 0, 0);
+        if (!options.background) {
+            if (auto existing = FindWindowW(L"PulseTrace.Desktop", nullptr))
+                PostMessageW(existing, WM_APP + 51, 0, 0);
+        }
         return 0;
     }
     // Filesystem lock also covers other logon sessions and executable copies.
@@ -1065,6 +1076,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) t
     if(!selftest_){const auto context=core_->campus_portal_context();if(context.value("enabled",false)&&!context.value("rule",Json(nullptr)).is_null()){try{open_campus(true);}catch(const std::exception &e){diagnostic(std::string("Campus background restore failed: ")+e.what());}}}
     taskbar_message_ = RegisterWindowMessageW(L"TaskbarCreated");
     web_->set_background(web_->ready()?caption_.background():RGB(7,19,33));
+    background_tray_pending_ = options.background;
     tray();
     if(!selftest_&&options.data.empty()&&!options.core_seconds){
         try{if(calibrate_startup_run(exe_file_))diagnostic("Updated moved PulseTrace startup path");}
@@ -1072,7 +1084,7 @@ int DesktopApplication::run(HINSTANCE instance, const DesktopOptions &options) t
         startup_task_=read_startup_task();
     }
     SetTimer(window_, 1, selftest_ ? 250 : 1000, nullptr);
-    if (!options.background || !tray_added_)
+    if (!options.background)
         open();
     if (options.early_close) {
         hide();

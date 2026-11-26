@@ -7,10 +7,71 @@
 #include "pulsetrace/packet_accounting.hpp"
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <mutex>
+#include <string_view>
 #include <thread>
+#include <vector>
 namespace pulsetrace {
+namespace {
+DWORD pulse_trace_owner(std::wstring_view name) {
+    constexpr std::wstring_view prefix = L"PulseTrace.Ndis.";
+    if (!name.starts_with(prefix))
+        return 0;
+    name.remove_prefix(prefix.size());
+    const auto separator = name.find(L'.');
+    if (separator == name.npos || !separator || separator + 1 == name.size())
+        return 0;
+    DWORD owner{};
+    for (const auto digit : name.substr(0, separator)) {
+        if (digit < L'0' || digit > L'9' || owner > (std::numeric_limits<DWORD>::max() - (digit - L'0')) / 10)
+            return 0;
+        owner = owner * 10 + (digit - L'0');
+    }
+    return name.substr(separator + 1).find_first_not_of(L"0123456789") == name.npos ? owner : 0;
+}
+
+void stop_orphaned_pulse_traces() {
+    // An abandoned real-time consumer can cause event writes to fail in other sessions.
+    struct TraceDetails {
+        EVENT_TRACE_PROPERTIES properties{};
+        wchar_t name[1025]{};
+        wchar_t file[1025]{};
+    };
+    constexpr ULONG capacity = 256;
+    std::vector<TraceDetails> details(capacity);
+    std::array<EVENT_TRACE_PROPERTIES *, capacity> properties{};
+    for (ULONG i = 0; i < capacity; ++i) {
+        auto &trace = details[i].properties;
+        trace.Wnode.BufferSize = sizeof(TraceDetails);
+        trace.LoggerNameOffset = offsetof(TraceDetails, name);
+        trace.LogFileNameOffset = offsetof(TraceDetails, file);
+        properties[i] = &trace;
+    }
+    ULONG count{};
+    const auto status = QueryAllTracesW(properties.data(), capacity, &count);
+    if (status != ERROR_SUCCESS && status != ERROR_MORE_DATA)
+        return;
+    for (ULONG i = 0; i < std::min(count, capacity); ++i) {
+        auto &trace = details[i];
+        if (!(trace.properties.LogFileMode & EVENT_TRACE_REAL_TIME_MODE) || trace.file[0])
+            continue;
+        const auto owner = pulse_trace_owner(std::wstring_view(trace.name, wcsnlen(trace.name, std::size(trace.name))));
+        if (!owner || owner == GetCurrentProcessId())
+            continue;
+        const auto process = OpenProcess(SYNCHRONIZE, FALSE, owner);
+        // A terminated process may still be held by another handle. Inaccessible owners are left alone.
+        const bool exited = process ? WaitForSingleObject(process, 0) == WAIT_OBJECT_0
+                                    : GetLastError() == ERROR_INVALID_PARAMETER;
+        if (exited)
+            ControlTraceW(0, trace.name, &trace.properties, EVENT_TRACE_CONTROL_STOP);
+        if (process)
+            CloseHandle(process);
+    }
+}
+} // namespace
+
 std::int64_t capture_clock() noexcept {
     FILETIME f{};
     GetSystemTimeAsFileTime(&f);
@@ -41,9 +102,10 @@ struct NdisCapture::Impl {
     std::array<std::uint64_t, 4> cumulative{};
     std::array<std::uint64_t, 9> rejection_reasons{};
     ULONG start_status{ERROR_NOT_READY}, enable_status{ERROR_NOT_READY}, lost{}, buffers_lost{};
-    bool active{};
+    bool active{}, checked_orphans{};
     std::string error;
     std::array<std::uint64_t, 4> previous{};
+    ULONG previous_lost{}, previous_buffers_lost{};
     explicit Impl(CaptureWindow *w) : window(w) {
         CLSIDFromString(L"{2ED6006E-4729-4609-B423-3EE7BCD678EF}", &provider);
     }
@@ -175,6 +237,10 @@ struct NdisCapture::Impl {
         last_tick = 0;
     }
     void start() {
+        if (!checked_orphans) {
+            stop_orphaned_pulse_traces();
+            checked_orphans = true;
+        }
         last_attempt = GetTickCount64();
         buffer = {};
         auto &p = buffer.p;
@@ -182,7 +248,8 @@ struct NdisCapture::Impl {
         p.Wnode.Flags = WNODE_FLAG_TRACED_GUID;
         p.Wnode.ClientContext = 2;
         CoCreateGuid(&p.Wnode.Guid);
-        p.LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_NO_PER_PROCESSOR_BUFFERING;
+        p.LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_NO_PER_PROCESSOR_BUFFERING |
+                        EVENT_TRACE_INDEPENDENT_SESSION_MODE | EVENT_TRACE_STOP_ON_HYBRID_SHUTDOWN;
         p.BufferSize = 64;
         p.MinimumBuffers = 2;
         p.MaximumBuffers = 16;
@@ -199,8 +266,11 @@ struct NdisCapture::Impl {
         last_tick = 0;
         rejection_reasons = {};
         error.clear();
+        enable_status = ERROR_NOT_READY;
         lost = 0;
         buffers_lost = 0;
+        previous_lost = 0;
+        previous_buffers_lost = 0;
         start_status = StartTraceW(&session, buffer.name, &p);
         if (start_status) {
             session = 0;
@@ -322,24 +392,32 @@ Json NdisCapture::snapshot(std::int64_t minute, Json &rows) {
         reasons = p.rejection_reasons;
     }
     const auto tick = GetTickCount64();
+    const bool running = p.active && !p.consumer_done.load();
+    const bool sampled = running && p.error.empty() && p.last_tick;
+    const bool has_session_data = std::any_of(lifetime.begin(), lifetime.end(), [](auto count) { return count > 0; });
+    const bool recent_loss = sampled && (p.lost > p.previous_lost || p.buffers_lost > p.previous_buffers_lost);
     Json rates = Json::array();
     for (unsigned i = 0; i < 4; i++) {
-        rates.push_back(p.active && !p.consumer_done.load() && p.error.empty() && p.last_tick && lifetime[i] >= p.previous[i]
+        rates.push_back(sampled && has_session_data && lifetime[i] >= p.previous[i] &&
+                                (!recent_loss || lifetime[i] > p.previous[i])
                             ? Json(double(lifetime[i] - p.previous[i]) * 1000 /
                                    double(std::max<std::uint64_t>(1, tick - p.last_tick)))
                             : Json(nullptr));
         p.previous[i] = lifetime[i];
     }
     p.last_tick = tick;
+    p.previous_lost = p.lost;
+    p.previous_buffers_lost = p.buffers_lost;
     return {{"rejection_reasons", reasons},
             {"available", observed},
-            {"running", p.active},
+            {"running", running},
             {"reference_validated", false},
             {"interface_id", std::to_string(p.luid)},
             {"source", "ETW NDIS-PacketCapture"},
             {"basis", "IP 层长度；IPv4 Total Length / IPv6 40 + Payload Length"},
             {"quality", incomplete ? "incomplete_observation" : "observed_unverified_reference"},
             {"rates", rates},
+            {"rates_incomplete", recent_loss},
             {"bytes", sums},
             {"error", p.error},
             {"start_status", p.start_status},

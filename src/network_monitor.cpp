@@ -102,6 +102,7 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
     }
     const auto chosen = select_network_interface(candidates, selected, last_selected_);
     double in_rate = 0, out_rate = 0;
+    bool interface_rates_ready = false;
     const MIB_IF_ROW2 *physical_selected = nullptr;
     for (ULONG i = 0; i < raw->NumEntries; ++i) {
         const auto &r = raw->Table[i];
@@ -136,6 +137,7 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
         }
         if (id == chosen && up && enabled && old != previous_.end() && old->second.up &&
             id == last_selected_ && elapsed > 0) {
+            interface_rates_ready = true;
             const auto in = r.InOctets >= old->second.in ? r.InOctets - old->second.in : 0;
             const auto out = r.OutOctets >= old->second.out ? r.OutOctets - old->second.out : 0;
             in_rate = in / elapsed;
@@ -166,6 +168,7 @@ NetworkSample NetworkMonitor::sample(std::int64_t minute, bool enabled, const st
                      {"selected", chosen},
                      {"download_bps", in_rate},
                      {"upload_bps", out_rate},
+                     {"interface_rates_ready", interface_rates_ready},
                      {"protocol_split_supported", false},
                      {"protocol_split_reason", "当前普通权限后端仅提供所选接口总 octet。IPv4/IPv6 "
                                                "分项未知；不以总量推算。不等于应用净荷或校园网计费。"},
