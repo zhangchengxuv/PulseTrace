@@ -60,14 +60,14 @@ Program files listed by the installer used in that measurement total **11.07 MiB
 
 ## Download and Install
 
-[GitHub v0.9.0](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.9.0) · [Gitee releases](https://gitee.com/zhangchenxuv/pulse-trace/releases)
+[GitHub v0.9.1](https://github.com/zhangchengxuv/PulseTrace/releases/tag/v0.9.1) · [Gitee v0.9.1](https://gitee.com/zhangchenxuv/pulse-trace/releases/tag/v0.9.1)
 
 Windows 10/11 x64 with Microsoft Edge WebView2 Evergreen Runtime is required.
 
 - **Installer**: run `PulseTrace-Setup-*.exe`; data lives in the installation's `data` folder and is retained by default on uninstall.
 - **Portable**: extract the complete ZIP, retain Web assets, DLLs and helper, then run `PulseTrace.exe`.
 
-**v0.9.0** adds input insights, activity rhythms, BGM Buff and Zen Pulse. Upgrading from v0.8.0 keeps SQLite schema 9. [v0.9.0 release notes](docs/releases/v0.9.0.md) · [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
+**v0.9.1** fixes live IPv4 and IPv6 rates and Windows background startup. Upgrades keep SQLite schema 9. [v0.9.1 release notes](docs/releases/v0.9.1.md) · [v0.9.0 features](docs/releases/v0.9.0.md) · [User guide](docs/desktop-guide.md) · [Build from source](docs/build.md)
 
 ## Stack
 
